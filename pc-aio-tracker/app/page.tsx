@@ -235,7 +235,7 @@ export default function DashboardApp() {
            chData.push(chartRow);
         }
       } else if (granularity === 'weekly' && dates) {
-        if (rowDate >= dates.curStart && rowDate <= dates.curMtdEnd) { row.bucket = "W" + getWeekBucket(rowDate, dates.curStart); cData.push(row); chData.push(row); }
+        if (rowDate >= dates.curStart && rowDate <= dates.curMtdEnd) { row.bucket = "W" + getWeekBucket(rowDate, dates.curStart); cData.push(row); }
         if (rowDate >= dates.prevStart && rowDate <= dates.prevMtdEnd) { row.bucket = "W" + getWeekBucket(rowDate, dates.prevStart); pData.push(row); }
       } else if (granularity === 'daily' && dStart && dEnd) {
         if (rowDate >= dStart && rowDate <= dEnd) { 
@@ -248,6 +248,7 @@ export default function DashboardApp() {
     return { curData: cData, prevData: pData, chartData: chData, creativeData: [], globalDates: dates };
   }, [rawData, filters, activeEngine, granularity, dateMonth, dateWeekly, dateDailyStart, dateDailyEnd, getMediaDates]);
 
+  // Context filtering ONLY for Chart and Table
   const { ctxCurData, ctxPrevData, ctxChartData } = useMemo(() => {
     if (dashboardContext === 'Overall' || activeEngine === 'creative') return { ctxCurData: curData, ctxPrevData: prevData, ctxChartData: chartData };
     const match = dashboardContext.toLowerCase();
@@ -259,6 +260,7 @@ export default function DashboardApp() {
     return { ctxCurData: curData.filter(filterFn), ctxPrevData: prevData.filter(filterFn), ctxChartData: chartData.filter(filterFn) };
   }, [curData, prevData, chartData, dashboardContext, activeEngine]);
 
+  // SUMMARY CARDS: Stays visible across all platforms
   const mediaKPIs = useMemo(() => {
     let totals = { overall: { spend: 0, impr: 0, engage: 0, pSpend: 0, pImpr: 0, pEngage: 0 }, meta: { spend: 0, impr: 0, engage: 0, pSpend: 0, pImpr: 0, pEngage: 0 }, tiktok: { spend: 0, impr: 0, engage: 0, pSpend: 0, pImpr: 0, pEngage: 0 } };
     const calc = (data: any[], isPrev: boolean) => {
@@ -279,9 +281,9 @@ export default function DashboardApp() {
         }
       });
     };
-    calc(ctxCurData, false); calc(ctxPrevData, true);
+    calc(curData, false); calc(prevData, true);
     return totals;
-  }, [ctxCurData, ctxPrevData, activeEngine]);
+  }, [curData, prevData, activeEngine]);
 
   const commerceKPIs = useMemo(() => {
     let totals = { overall: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 }, tiktok: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 }, shopee: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 } };
@@ -302,58 +304,110 @@ export default function DashboardApp() {
         }
       });
     };
-    calc(ctxCurData, false); calc(ctxPrevData, true);
+    calc(curData, false); calc(prevData, true);
     const calcRoas = (g: number, e: number) => e > 0 ? (g / e).toFixed(2) + 'x' : '0.00x';
     return {
       overall: { ...totals.overall, roas: calcRoas(totals.overall.gmv, totals.overall.exp), pRoas: calcRoas(totals.overall.pGmv, totals.overall.pExp), roasNum: totals.overall.exp>0?totals.overall.gmv/totals.overall.exp:0, pRoasNum: totals.overall.pExp>0?totals.overall.pGmv/totals.overall.pExp:0 },
       tiktok: { ...totals.tiktok, roas: calcRoas(totals.tiktok.gmv, totals.tiktok.exp), pRoas: calcRoas(totals.tiktok.pGmv, totals.tiktok.pExp), roasNum: totals.tiktok.exp>0?totals.tiktok.gmv/totals.tiktok.exp:0, pRoasNum: totals.tiktok.pExp>0?totals.tiktok.pGmv/totals.tiktok.pExp:0 },
       shopee: { ...totals.shopee, roas: calcRoas(totals.shopee.gmv, totals.shopee.exp), pRoas: calcRoas(totals.shopee.pGmv, totals.shopee.pExp), roasNum: totals.shopee.exp>0?totals.shopee.gmv/totals.shopee.exp:0, pRoasNum: totals.shopee.pExp>0?totals.shopee.pGmv/totals.shopee.pExp:0 }
     };
-  }, [ctxCurData, ctxPrevData, activeEngine]);
+  }, [curData, prevData, activeEngine]);
 
   const renderGR = (cur: number, prev: number, isInv = false) => {
     if (granularity === 'daily' || prevData.length === 0) return null;
     const gr = getGr(cur, prev);
-    let color = isDarkMode ? "text-slate-400" : "text-slate-200/80"; let arrow = "";
-    if (gr > 0) { color = isInv ? "text-red-400" : "text-emerald-400"; arrow = "▲"; } 
-    else if (gr < 0) { color = isInv ? "text-emerald-400" : "text-red-400"; arrow = "▼"; } 
-    else return <span className={`text-[clamp(10px,1vw,12px)] ml-1.5 font-bold ${color}`}>-</span>;
-    return <span className={`text-[clamp(10px,1vw,12px)] ml-1.5 font-bold ${color}`}>{arrow} {formatPct(Math.abs(gr))}</span>;
+    let color = isDarkMode ? "text-slate-200 bg-slate-700/50" : "text-white bg-white/30"; let arrow = "";
+    if (gr > 0) { color = isInv ? "text-white bg-rose-500/60" : "text-white bg-emerald-500/60"; arrow = "▲"; } 
+    else if (gr < 0) { color = isInv ? "text-white bg-emerald-500/60" : "text-white bg-rose-500/60"; arrow = "▼"; } 
+    else return <span className={`text-[10px] ml-2 px-1.5 py-0.5 rounded font-bold ${color}`}>-</span>;
+    return <span className={`text-[11px] ml-2 px-1.5 py-0.5 rounded font-bold tracking-wide backdrop-blur-sm shadow-sm ${color}`}>{arrow} {formatPct(Math.abs(gr))}</span>;
   };
 
   // --- CHART RENDERING ---
   useEffect(() => {
-    if ((activeEngine !== 'media' && activeEngine !== 'commerce') || ctxChartData.length === 0 || !chartRef.current) return;
+    if ((activeEngine !== 'media' && activeEngine !== 'commerce') || !chartRef.current) return;
     if (chartInstance.current) chartInstance.current.destroy();
 
     const groupedData: Record<string, any> = {};
-    const cfg = CONFIG[activeEngine];
-    
-    const sortedData = [...ctxChartData].sort((a, b) => a.parsedDate.getTime() - b.parsedDate.getTime());
+    const isMedia = activeEngine === 'media';
 
-    sortedData.forEach(row => {
-      const d = row.parsedDate;
-      let label = "";
-      if (granularity === 'monthly') {
-         const mNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-         label = `${mNames[d.getMonth()]} ${d.getFullYear()}`;
-      } else if (granularity === 'weekly') {
-         label = `${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })}`;
-      } else {
-         label = `${d.getDate()}/${d.getMonth()+1}`;
-      }
+    if (granularity === 'weekly' && globalDates) {
+      let weeksFound = new Set<string>();
+      ctxCurData.forEach(r => { if (r.bucket && r.bucket.startsWith('W')) weeksFound.add(r.bucket); });
+      ctxPrevData.forEach(r => { if (r.bucket && r.bucket.startsWith('W')) weeksFound.add(r.bucket); });
+      let weeks = Array.from(weeksFound).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
 
-      if (!groupedData[label]) groupedData[label] = activeEngine === 'media' ? { spend: 0, imp: 0, clicks: 0, views: 0 } : { exp: 0, gmv: 0, orders: 0 };
-      
-      if (activeEngine === 'media') {
-        groupedData[label].spend += parseNum(row['Ad Spend']); groupedData[label].imp += parseNum(row['Impressions']);
-        groupedData[label].clicks += parseNum(row['Combined Clicks']); groupedData[label].views += parseNum(row['Views']) + parseNum(row['Views 6s']);
-      } else {
-        groupedData[label].exp += parseNum(row['Expense']); groupedData[label].gmv += parseNum(row['GMV']); groupedData[label].orders += parseNum(row['Orders']);
-      }
-    });
+      let curRunning = isMedia ? { spend: 0, imp: 0, clicks: 0, views: 0 } : { exp: 0, gmv: 0, orders: 0 };
+      let prevRunning = isMedia ? { spend: 0, imp: 0, clicks: 0, views: 0 } : { exp: 0, gmv: 0, orders: 0 };
+
+      weeks.forEach(w => {
+        const weekNum = parseInt(w.replace('W', ''));
+        let curD = new Date(globalDates.curStart);
+        curD.setDate(curD.getDate() + (weekNum * 7) - 1);
+        if (curD > globalDates.curMtdEnd) curD = new Date(globalDates.curMtdEnd);
+
+        let prevD = new Date(globalDates.prevStart);
+        prevD.setDate(prevD.getDate() + (weekNum * 7) - 1);
+        if (prevD > globalDates.prevMtdEnd) prevD = new Date(globalDates.prevMtdEnd);
+
+        const fmtStr = (d: Date) => `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
+        const curLabel = `MTD ${fmtStr(curD)}`;
+        const prevLabel = `MTD ${fmtStr(prevD)}`;
+
+        ctxCurData.filter(r => r.bucket === w).forEach(row => {
+          if (isMedia) {
+            curRunning.spend += parseNum(row['Ad Spend']);
+            curRunning.imp += parseNum(row['Impressions']);
+            curRunning.clicks += parseNum(row['Combined Clicks']);
+            curRunning.views += parseNum(row['Views']) + parseNum(row['Views 6s']);
+          } else {
+            curRunning.exp += parseNum(row['Expense']);
+            curRunning.gmv += parseNum(row['GMV']);
+            curRunning.orders += parseNum(row['Orders']);
+          }
+        });
+
+        ctxPrevData.filter(r => r.bucket === w).forEach(row => {
+          if (isMedia) {
+            prevRunning.spend += parseNum(row['Ad Spend']);
+            prevRunning.imp += parseNum(row['Impressions']);
+            prevRunning.clicks += parseNum(row['Combined Clicks']);
+            prevRunning.views += parseNum(row['Views']) + parseNum(row['Views 6s']);
+          } else {
+            prevRunning.exp += parseNum(row['Expense']);
+            prevRunning.gmv += parseNum(row['GMV']);
+            prevRunning.orders += parseNum(row['Orders']);
+          }
+        });
+
+        groupedData[curLabel] = { ...curRunning };
+        groupedData[prevLabel] = { ...prevRunning };
+      });
+    } else {
+      const sortedData = [...ctxChartData].sort((a, b) => a.parsedDate.getTime() - b.parsedDate.getTime());
+      sortedData.forEach(row => {
+        const d = row.parsedDate;
+        let label = "";
+        if (granularity === 'monthly') {
+          const mNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          label = `${mNames[d.getMonth()]} ${d.getFullYear()}`;
+        } else {
+          label = `${d.getDate()}/${d.getMonth()+1}`;
+        }
+
+        if (!groupedData[label]) groupedData[label] = isMedia ? { spend: 0, imp: 0, clicks: 0, views: 0 } : { exp: 0, gmv: 0, orders: 0 };
+        
+        if (isMedia) {
+          groupedData[label].spend += parseNum(row['Ad Spend']); groupedData[label].imp += parseNum(row['Impressions']);
+          groupedData[label].clicks += parseNum(row['Combined Clicks']); groupedData[label].views += parseNum(row['Views']) + parseNum(row['Views 6s']);
+        } else {
+          groupedData[label].exp += parseNum(row['Expense']); groupedData[label].gmv += parseNum(row['GMV']); groupedData[label].orders += parseNum(row['Orders']);
+        }
+      });
+    }
 
     const labels = Object.keys(groupedData);
+    if (labels.length === 0) return;
     let datasets: any[] = [];
     const ctx = chartRef.current.getContext('2d');
     if (!ctx) return;
@@ -411,7 +465,7 @@ export default function DashboardApp() {
     });
 
     return () => { if (chartInstance.current) chartInstance.current.destroy(); };
-  }, [ctxChartData, chartMetricsMedia, chartMetricsComm, activeEngine, granularity, isDarkMode]);
+  }, [ctxChartData, ctxCurData, ctxPrevData, globalDates, chartMetricsMedia, chartMetricsComm, activeEngine, granularity, isDarkMode]);
 
   // --- MANUAL TABLE RENDERER ---
   const generateTableHTML = useCallback(() => {
@@ -466,7 +520,7 @@ export default function DashboardApp() {
 
     const getGrHTML = (cur: number, prev: number, invertColors = false) => {
       const gr = getGr(cur, prev);
-      if (cur === 0 && prev === 0) return `<td class="px-4 py-3 text-right font-mono font-medium text-slate-400">0.00%</td>`;
+      if (cur === 0 && prev === 0) return `<td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">0.00%</td>`;
       let color = isDarkMode ? "text-slate-400" : "text-slate-500";
       if (gr > 0) color = invertColors ? "text-red-600 bg-red-50" : "text-emerald-700 bg-emerald-50";
       if (gr < 0) color = invertColors ? "text-emerald-700 bg-emerald-50" : "text-red-600 bg-red-50";
@@ -475,7 +529,7 @@ export default function DashboardApp() {
           if (gr > 0) color = invertColors ? "text-red-400 bg-red-500/10" : "text-emerald-400 bg-emerald-500/10";
           if (gr < 0) color = invertColors ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10";
       }
-      return `<td class="px-4 py-3 text-right font-mono font-bold"><span class="px-2.5 py-1 rounded-lg ${color}">${formatPct(Math.abs(gr))}</span></td>`;
+      return `<td class="px-4 py-3 text-right font-mono font-bold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}"><span class="px-2.5 py-1 rounded-lg ${color}">${formatPct(Math.abs(gr))}</span></td>`;
     };
 
     let dim1Set = new Set<string>(); let dim2Set = new Set<string>();
@@ -498,9 +552,9 @@ export default function DashboardApp() {
         <th class="sticky-col ${thClass}">${isMedia?'Ad Type':'Platform'}</th>
         <th class="sticky-col-2 ${thClass}">${isMedia?'Format':'Ad Type'}</th>
         <th class="sticky-col-3 ${thClass}">Metric</th>
-        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 z-30">This Month</th>
-        <th class="px-4 py-4 text-right font-bold text-slate-400 bg-[#0f172a] sticky top-0 z-30">Prev Month</th>
-        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 z-30">GR%</th>
+        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">This Month</th>
+        <th class="px-4 py-4 text-right font-bold text-slate-400 bg-[#0f172a] sticky top-0 border-b border-slate-700">Prev Month</th>
+        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">GR%</th>
       </tr>`;
       
       const grouped: any = {};
@@ -522,31 +576,40 @@ export default function DashboardApp() {
           const mp = mPrev[i]; 
           let rowCls = i%2===0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50'); 
           if(i===0) rowCls += ' group-start';
+          if(i===mCur.length - 1) rowCls += ' group-end';
           
           tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
           if(i===0){
             tbody += `<td rowspan="${mCur.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${g.dim1}</td>`;
             tbody += `<td rowspan="${mCur.length}" class="px-4 py-3 sticky-col-2 font-medium ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-white'} align-top whitespace-normal break-words">${g.dim2}</td>`;
           }
-          tbody += `<td class="px-4 py-3 sticky-col-3 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide">${mc.name}</td>`;
-          tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'}">${mc.fmt}</td>`;
-          tbody += `<td class="px-4 py-3 text-right font-mono font-medium text-slate-400">${mp.fmt}</td>`;
+          tbody += `<td class="px-4 py-3 sticky-col-3 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.name}</td>`;
+          tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.fmt}</td>`;
+          tbody += `<td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mp.fmt}</td>`;
           tbody += getGrHTML(mc.raw, mp.raw, mc.isInv);
           tbody += '</tr>';
         });
       });
     } else if (granularity === 'weekly') {
       let weeksFound = new Set<string>(); ctxCurData.forEach(r => weeksFound.add(r.bucket)); ctxPrevData.forEach(r => weeksFound.add(r.bucket));
-      let weeks = Array.from(weeksFound).sort(); 
-      thead = `<tr><th class="sticky-col ${thClass}">${isMedia?'Ad Type':'Platform'}</th><th class="sticky-col-2 ${thClass}">${isMedia?'Format':'Ad Type'}</th><th class="sticky-col-3 ${thClass}">Metric</th>`;
+      let weeks = Array.from(weeksFound).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W',''))); 
+      thead = `<tr>
+        <th class="sticky-col ${thClass}">${isMedia?'Ad Type':'Platform'}</th>
+        <th class="sticky-col-2 ${thClass}">${isMedia?'Format':'Ad Type'}</th>
+        <th class="sticky-col-3 ${thClass}">Metric</th>`;
       weeks.forEach(w => {
         const weekNum = parseInt(w.replace('W', ''));
         let curD = new Date(globalDates.curStart); curD.setDate(curD.getDate() + (weekNum * 7) - 1); if (curD > globalDates.curMtdEnd) curD = new Date(globalDates.curMtdEnd);
         let prevD = new Date(globalDates.prevStart); prevD.setDate(prevD.getDate() + (weekNum * 7) - 1); if (prevD > globalDates.prevMtdEnd) prevD = new Date(globalDates.prevMtdEnd);
         const fmtStr = (d: Date) => `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
-        thead += `<th class="px-4 py-4 text-right bg-[#0f172a] border-l border-slate-700 font-bold text-white sticky top-0 z-30">MTD ${fmtStr(curD)}</th><th class="px-4 py-4 text-right text-slate-400 bg-[#0f172a] font-bold sticky top-0 z-30">MTD ${fmtStr(prevD)}</th><th class="px-4 py-4 text-right bg-[#0f172a] font-bold text-white sticky top-0 z-30">GR%</th>`;
+        thead += `<th class="px-4 py-4 text-right bg-[#0f172a] border-l border-slate-700 font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(curD)}</th>
+                  <th class="px-4 py-4 text-right text-slate-400 bg-[#0f172a] font-bold sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(prevD)}</th>
+                  <th class="px-4 py-4 text-right bg-[#0f172a] font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">GR%</th>`;
       });
-      thead += `<th class="px-4 py-4 text-right border-l border-indigo-500 text-indigo-300 font-bold bg-[#020617] sticky top-0 z-30">MTD Total Cur</th><th class="px-4 py-4 text-right text-slate-400 font-bold bg-[#020617] sticky top-0 z-30">MTD Total Prev</th><th class="px-4 py-4 text-right text-indigo-300 font-bold bg-[#020617] sticky top-0 z-30">Total GR%</th></tr>`;
+      thead += `<th class="px-4 py-4 text-right border-l border-indigo-500 text-indigo-300 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Cur</th>
+                <th class="px-4 py-4 text-right text-slate-400 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Prev</th>
+                <th class="px-4 py-4 text-right text-indigo-300 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Total GR%</th>
+              </tr>`;
 
       const grouped: any = {};
       const process = (data: any[], keyName: string) => {
@@ -574,25 +637,36 @@ export default function DashboardApp() {
         curTotM.forEach((mc, i) => {
           let rowCls = i%2===0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50'); 
           if(i===0) rowCls += ' group-start';
+          if(i===curTotM.length - 1) rowCls += ' group-end';
           tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
           if(i===0){
             tbody += `<td rowspan="${curTotM.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${g.dim1}</td>`;
             tbody += `<td rowspan="${curTotM.length}" class="px-4 py-3 sticky-col-2 font-medium ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-white'} align-top whitespace-normal break-words">${g.dim2}</td>`;
           }
-          tbody += `<td class="px-4 py-3 sticky-col-3 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide">${mc.name}</td>`;
+          tbody += `<td class="px-4 py-3 sticky-col-3 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.name}</td>`;
           weeks.forEach(w => {
             const wc = weekM[w].cur[i], wp = weekM[w].prev[i];
-            tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-l ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}">${wc.fmt}</td><td class="px-4 py-3 text-right font-mono font-medium text-slate-400">${wp.fmt}</td>${getGrHTML(wc.raw, wp.raw, wc.isInv)}`;
+            tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-l ${isDarkMode ? 'border-slate-700' : 'border-slate-200'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${wc.fmt}</td>
+                      <td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${wp.fmt}</td>
+                      ${getGrHTML(wc.raw, wp.raw, wc.isInv)}`;
           });
           const mp = prevTotM[i];
-          tbody += `<td class="px-4 py-3 text-right font-mono border-l ${isDarkMode ? 'border-indigo-500 text-indigo-300 bg-indigo-950/50' : 'border-slate-200 text-indigo-700 bg-indigo-50/50'} font-bold">${mc.fmt}</td><td class="px-4 py-3 text-right font-mono font-medium text-slate-500 ${isDarkMode ? 'bg-indigo-950/50' : 'bg-indigo-50/50'}">${mp.fmt}</td>${getGrHTML(mc.raw, mp.raw, mc.isInv)}</tr>`;
+          tbody += `<td class="px-4 py-3 text-right font-mono border-l ${isDarkMode ? 'border-indigo-500 text-indigo-300 bg-indigo-950/50' : 'border-slate-200 text-indigo-700 bg-indigo-50/50'} font-bold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.fmt}</td>
+                    <td class="px-4 py-3 text-right font-mono font-medium text-slate-500 ${isDarkMode ? 'bg-indigo-950/50' : 'bg-indigo-50/50'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mp.fmt}</td>
+                    ${getGrHTML(mc.raw, mp.raw, mc.isInv)}</tr>`;
         });
       });
     } else if (granularity === 'daily') {
       let daysFound = new Set<string>(); ctxCurData.forEach(r => daysFound.add(r.bucket)); let days = Array.from(daysFound).sort(); 
-      thead = `<tr><th class="sticky-col ${thClass}">${isMedia?'Ad Type':'Platform'}</th><th class="sticky-col-2 ${thClass}">${isMedia?'Format':'Ad Type'}</th><th class="sticky-col-3 ${thClass}">Metric</th>`;
-      days.forEach(d => { const parts = d.split('-'); const dt = new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2])); thead += `<th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 z-30">${dt.getDate()} ${dt.toLocaleString('en-GB', { month: 'short' })}</th>`; });
-      thead += `<th class="px-4 py-4 text-right text-indigo-300 border-l border-slate-700 font-bold bg-[#020617] sticky top-0 z-30">Period Total</th></tr>`;
+      thead = `<tr>
+        <th class="sticky-col ${thClass}">${isMedia?'Ad Type':'Platform'}</th>
+        <th class="sticky-col-2 ${thClass}">${isMedia?'Format':'Ad Type'}</th>
+        <th class="sticky-col-3 ${thClass}">Metric</th>`;
+      days.forEach(d => { 
+        const parts = d.split('-'); const dt = new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2])); 
+        thead += `<th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700 whitespace-nowrap">${dt.getDate()} ${dt.toLocaleString('en-GB', { month: 'short' })}</th>`; 
+      });
+      thead += `<th class="px-4 py-4 text-right text-indigo-300 border-l border-slate-700 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Period Total</th></tr>`;
 
       const grouped: any = {};
       ctxCurData.forEach(r => {
@@ -611,14 +685,15 @@ export default function DashboardApp() {
         totM.forEach((mc, i) => {
           let rowCls = i%2===0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50'); 
           if(i===0) rowCls += ' group-start';
+          if(i===totM.length - 1) rowCls += ' group-end';
           tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
           if(i===0){
             tbody += `<td rowspan="${totM.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${g.dim1}</td>`;
             tbody += `<td rowspan="${totM.length}" class="px-4 py-3 sticky-col-2 font-medium ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-white'} align-top whitespace-normal break-words">${g.dim2}</td>`;
           }
-          tbody += `<td class="px-4 py-3 sticky-col-3 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide">${mc.name}</td>`;
-          days.forEach(d => { tbody += `<td class="px-4 py-3 text-right font-mono font-semibold">${dayM[d][i].fmt}</td>`; });
-          tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-indigo-300 bg-indigo-950/50 border-l border-indigo-800/50' : 'text-indigo-700 bg-indigo-50/50 border-l border-indigo-100'}">${mc.fmt}</td></tr>`;
+          tbody += `<td class="px-4 py-3 sticky-col-3 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.name}</td>`;
+          days.forEach(d => { tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${dayM[d][i].fmt}</td>`; });
+          tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-indigo-300 bg-indigo-950/50 border-l border-indigo-800/50' : 'text-indigo-700 bg-indigo-50/50 border-l border-indigo-100'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.fmt}</td></tr>`;
         });
       });
     }
@@ -626,7 +701,25 @@ export default function DashboardApp() {
     return { head: thead, body: tbody, uniqueDim1: Array.from(dim1Set).sort(), uniqueDim2: Array.from(dim2Set).sort() };
   }, [ctxCurData, ctxPrevData, granularity, activeEngine, globalDates, tableColFilter1, tableColFilter2, isDarkMode]);
 
-  // --- MODERN LOGIN 60/40 CONTEMPORARY GEOMETRIC ART (PURPLE/GREEN) ---
+  const getDrivePreviewLink = (url: string) => {
+    if (!url || typeof url !== 'string') return '';
+    if (url.includes('/preview')) return url;
+    if (url.includes('/view')) return url.replace('/view', '/preview');
+    let match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) return `https://drive.google.com/file/d/${match[1]}/preview`;
+    return url;
+  };
+  const getInstagramEmbedLink = (url: string) => {
+    if (!url || typeof url !== 'string') return '';
+    if (url.includes('instagram.com/p/') || url.includes('instagram.com/reel/')) {
+        let cleanUrl = url.split('?')[0];
+        if (cleanUrl.endsWith('/')) cleanUrl = cleanUrl.slice(0, -1);
+        return cleanUrl.endsWith('/embed') ? cleanUrl : cleanUrl + '/embed';
+    }
+    return '';
+  };
+
+  // --- LOGIN VIEW: BAUHAUS ABSTRACT ART (LINES, RANDOM CIRCLES, BLOCKS) ---
   if (currentView === 'login') {
     return (
       <div className="flex w-full h-screen font-sans overflow-hidden bg-white">
@@ -637,20 +730,47 @@ export default function DashboardApp() {
           .checkmark-path { stroke-dasharray: 100; stroke-dashoffset: 100; animation: checkmark 0.6s ease-in-out forwards; }
         `}} />
         
-        {/* LEFT 60%: Contemporary Geometric Art (Purple & Green Only) */}
-        <div className="hidden md:grid w-[60%] grid-cols-3 grid-rows-3 h-full bg-[#0f172a]">
-           <div className="bg-[#4f46e5] col-span-2 row-span-1 rounded-br-full"></div>
-           <div className="bg-[#10b981] col-span-1 row-span-2 rounded-bl-full flex items-center justify-center">
-               <div className="w-24 h-24 bg-[#0f172a] rounded-full"></div>
-           </div>
-           <div className="bg-[#312e81] col-span-1 row-span-2 rounded-tr-full"></div>
-           <div className="bg-[#059669] col-span-1 row-span-1 rounded-full m-8"></div>
-           <div className="bg-[#4338ca] col-span-2 row-span-1 rounded-tl-full flex items-end justify-end p-8">
-               <div className="w-16 h-16 bg-[#34d399] rounded-full"></div>
-           </div>
+        {/* LEFT 60%: Bauhaus Abstract Geometric Art (Reference Style) */}
+        <div className="hidden md:block w-[60%] h-full relative bg-[#1e1e24] overflow-hidden">
+           <svg viewBox="0 0 900 600" className="w-full h-full" preserveAspectRatio="none">
+              <rect width="900" height="600" fill="#1e1e24" />
+
+              {/* Large Beige Arch / Block */}
+              <path d="M 0 0 L 320 0 L 320 400 C 320 480 250 540 160 540 L 0 540 Z" fill="#f3ebd8" />
+
+              {/* Teal Rounded Block */}
+              <path d="M 320 200 L 580 200 C 630 200 670 240 670 290 C 670 340 630 380 580 380 L 320 380 Z" fill="#164e58" />
+
+              {/* Large Pale Circle Right */}
+              <circle cx="780" cy="350" r="220" fill="#f3ebd8" />
+
+              {/* Yellow Floating Circle Left */}
+              <circle cx="160" cy="320" r="90" fill="#f6b93b" />
+
+              {/* Top Right Pink Semi-Circle / Quarter */}
+              <path d="M 700 0 C 820 0 900 80 900 200 L 700 200 Z" fill="#f3b6c8" />
+
+              {/* Top Right Cyan Accent Corner */}
+              <polygon points="900,0 900,90 810,0" fill="#4ec5db" />
+
+              {/* Bottom Left Pink Wavy / Organic Shape */}
+              <path d="M 0 470 C 50 450 90 520 140 500 C 190 480 220 420 270 430 L 0 600 Z" fill="#f3b6c8" />
+
+              {/* Bottom Center Brown & Beige Segments */}
+              <rect x="450" y="380" width="130" height="220" fill="#b47b4e" />
+              <path d="M 450 470 C 450 430 580 430 580 470 Z" fill="#f3ebd8" />
+              <path d="M 450 560 C 450 520 580 520 580 560 Z" fill="#f3ebd8" />
+              <circle cx="515" cy="415" r="8" fill="#f3ebd8" />
+
+              {/* Top Center Solid Charcoal Block */}
+              <rect x="320" y="0" width="260" height="200" fill="#1e1e24" />
+
+              {/* Additional Brown Vertical Block */}
+              <rect x="580" y="0" width="120" height="200" fill="#b47b4e" />
+           </svg>
         </div>
 
-        {/* RIGHT 40%: Minimalist Form */}
+        {/* RIGHT 40%: Form */}
         <div className="w-full md:w-[40%] flex flex-col justify-center px-12 lg:px-20 bg-white relative z-20">
            {isLoginSuccess ? (
               <div className="flex flex-col items-center justify-center animate-enter text-center">
@@ -663,7 +783,7 @@ export default function DashboardApp() {
               </div>
            ) : (
               <div className="w-full max-w-sm animate-enter">
-                <h2 className="text-[clamp(1.75rem,2.5vw,2.5rem)] font-black text-slate-900 tracking-tight mb-2">Welcome Back</h2>
+                <h2 className="text-[clamp(2rem,3vw,3rem)] font-black text-slate-900 tracking-tight mb-2">Welcome Back</h2>
                 <p className="text-sm text-slate-500 font-medium mb-12">Enter your credentials to continue.</p>
                 
                 <form onSubmit={handleLogin} className="space-y-8">
@@ -678,7 +798,7 @@ export default function DashboardApp() {
                   
                   {loginError && <div className="text-rose-500 text-xs font-bold">{loginError}</div>}
                   
-                  <button type="submit" className="w-full bg-slate-900 hover:bg-indigo-600 text-white font-bold py-4 rounded-full transition-colors mt-8 text-sm">
+                  <button type="submit" className="w-full bg-[#111827] hover:bg-indigo-600 text-white font-bold py-4 rounded-full transition-colors mt-8 text-sm">
                     Continue
                   </button>
                 </form>
@@ -691,20 +811,20 @@ export default function DashboardApp() {
 
   if (currentView === 'welcome') {
     return (
-      <div className="fixed inset-0 z-[100] bg-slate-900 flex flex-col items-center justify-center p-6 font-sans">
+      <div className="fixed inset-0 z-[100] bg-[#0f172a] flex flex-col items-center justify-center p-6 font-sans">
         <div className="max-w-6xl w-full text-center">
-          <h1 className="text-[clamp(2rem,4vw,3.5rem)] font-black text-white mb-4 tracking-tight">Welcome to All in One Dashboard</h1>
+          <h1 className="text-[clamp(2.5rem,5vw,4rem)] font-black text-white mb-4 tracking-tight">Welcome to All in One Dashboard</h1>
           <p className="text-slate-400 mb-16 text-[clamp(1rem,1.5vw,1.25rem)] font-medium">Please select the first tracker you wish to launch. You can navigate between them at any time.</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-            <button onClick={() => selectEngine('media')} className="bg-[#1e293b] p-10 rounded-[2rem] hover:bg-[#27354f] transition-all group">
-              <div className="w-16 h-16 bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-8"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></div>
-              <h2 className="text-2xl font-bold text-white mb-2">Digital Tracker</h2><p className="text-sm text-slate-400">Analyze full-funnel digital media performance.</p>
+            <button onClick={() => selectEngine('media')} className="bg-[#1e293b] p-10 rounded-3xl hover:bg-[#27354f] transition-all group">
+              <div className="w-16 h-16 bg-indigo-500 text-white rounded-2xl flex items-center justify-center mb-8"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></div>
+              <h2 className="text-2xl font-bold text-white mb-2">Digital Media</h2><p className="text-sm text-slate-400">Analyze full-funnel media metrics.</p>
             </button>
-            <button onClick={() => selectEngine('commerce')} className="bg-[#1e293b] p-10 rounded-[2rem] hover:bg-[#27354f] transition-all group">
+            <button onClick={() => selectEngine('commerce')} className="bg-[#1e293b] p-10 rounded-3xl hover:bg-[#27354f] transition-all group">
               <div className="w-16 h-16 bg-emerald-500 text-white rounded-2xl flex items-center justify-center mb-8"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></div>
-              <h2 className="text-2xl font-bold text-white mb-2">Commerce Tracker</h2><p className="text-sm text-slate-400">Analyze revenue performance across commerce platforms.</p>
+              <h2 className="text-2xl font-bold text-white mb-2">Commerce Tracker</h2><p className="text-sm text-slate-400">Analyze revenue and ROAS.</p>
             </button>
-            <button onClick={() => selectEngine('creative')} className="bg-[#1e293b] p-10 rounded-[2rem] hover:bg-[#27354f] transition-all group">
+            <button onClick={() => selectEngine('creative')} className="bg-[#1e293b] p-10 rounded-3xl hover:bg-[#27354f] transition-all group">
               <div className="w-16 h-16 bg-lime-500 text-white rounded-2xl flex items-center justify-center mb-8"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
               <h2 className="text-2xl font-bold text-white mb-2">Top Creative</h2><p className="text-sm text-slate-400">Review winning creative assets, video metrics, and key insights.</p>
             </button>
@@ -727,16 +847,106 @@ export default function DashboardApp() {
         ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #64748b; }
         
-        .sticky-col { position: sticky; left: 0; z-index: 20; min-width: 180px; max-width: 180px; border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}; }
-        .sticky-col-2 { position: sticky; left: 180px; z-index: 20; min-width: 180px; max-width: 180px; border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}; }
-        .sticky-col-3 { position: sticky; left: 360px; z-index: 20; min-width: 120px; max-width: 120px; border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.05); }
-        
-        thead th { position: sticky; top: 0; z-index: 30; }
-        thead th.sticky-col, thead th.sticky-col-2, thead th.sticky-col-3 { z-index: 50 !important; border-right: 1px solid #334155; }
+        table {
+          border-collapse: separate !important;
+          border-spacing: 0 !important;
+        }
+
+        /* Default Header: Sticky Top */
+        thead th {
+          position: sticky !important;
+          top: 0 !important;
+          z-index: 30 !important;
+          background-color: #0f172a !important;
+        }
+
+        /* Locked Top-Left Headers: Column 1, 2, 3 (Sticky BOTH Top and Left) */
+        thead th.sticky-col {
+          position: sticky !important;
+          top: 0 !important;
+          left: 0px !important;
+          z-index: 60 !important;
+          background-color: #0f172a !important;
+          width: 180px !important;
+          min-width: 180px !important;
+          max-width: 180px !important;
+          border-right: 1px solid #334155 !important;
+          border-bottom: 2px solid #334155 !important;
+        }
+
+        thead th.sticky-col-2 {
+          position: sticky !important;
+          top: 0 !important;
+          left: 180px !important;
+          z-index: 60 !important;
+          background-color: #0f172a !important;
+          width: 180px !important;
+          min-width: 180px !important;
+          max-width: 180px !important;
+          border-right: 1px solid #334155 !important;
+          border-bottom: 2px solid #334155 !important;
+        }
+
+        thead th.sticky-col-3 {
+          position: sticky !important;
+          top: 0 !important;
+          left: 360px !important;
+          z-index: 60 !important;
+          background-color: #0f172a !important;
+          width: 120px !important;
+          min-width: 120px !important;
+          max-width: 120px !important;
+          border-right: 1px solid #334155 !important;
+          border-bottom: 2px solid #334155 !important;
+          box-shadow: 4px 0 10px -3px rgba(0,0,0,0.3) !important;
+        }
+
+        /* Sticky Body Columns: Columns 1, 2, 3 */
+        tbody td.sticky-col {
+          position: sticky !important;
+          left: 0px !important;
+          z-index: 20 !important;
+          width: 180px !important;
+          min-width: 180px !important;
+          max-width: 180px !important;
+          border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important;
+        }
+
+        tbody td.sticky-col-2 {
+          position: sticky !important;
+          left: 180px !important;
+          z-index: 20 !important;
+          width: 180px !important;
+          min-width: 180px !important;
+          max-width: 180px !important;
+          border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important;
+        }
+
+        tbody td.sticky-col-3 {
+          position: sticky !important;
+          left: 360px !important;
+          z-index: 20 !important;
+          width: 120px !important;
+          min-width: 120px !important;
+          max-width: 120px !important;
+          border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important;
+          box-shadow: 4px 0 10px -3px rgba(0,0,0,0.08) !important;
+        }
+
+        /* Clean Separator Line Between Data Groups (Ad Types/Formats) */
+        tr.group-start:not(:first-child) td {
+          border-top: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important;
+        }
+        tr.group-start td[rowspan] {
+          border-bottom: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important;
+        }
+        tr.group-end td {
+          border-bottom: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important;
+        }
         
         .dropdown-arrow {
           background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e");
-          background-position: right 1rem center;
+          background-position: right center;
           background-repeat: no-repeat;
           background-size: 1rem 1rem;
         }
@@ -749,23 +959,35 @@ export default function DashboardApp() {
           opacity: 1;
         }
 
-        .spinner-large { border: 4px solid rgba(79, 70, 229, 0.2); border-top: 4px solid #4f46e5; border-radius: 50%; width: 48px; height: 48px; animation: spin 1s linear infinite; }
+        .spinner-large {
+          border: 4px solid rgba(132, 224, 37, 0.2);
+          border-top: 4px solid #84e025;
+          border-radius: 50%;
+          width: 48px;
+          height: 48px;
+          animation: spin 1s linear infinite;
+        }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       `}} />
 
-      {isLoading && <div className="fixed inset-0 z-[300] bg-white/70 backdrop-blur-sm flex flex-col items-center justify-center"><div className="spinner-large mb-4"></div><h3 className="font-bold text-slate-900">Fetching Data...</h3></div>}
+      {isLoading && (
+        <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center">
+          <div className="spinner-large mb-4"></div>
+          <h3 className="font-bold text-white text-sm tracking-wide">Fetching Data...</h3>
+        </div>
+      )}
 
       {/* SIDEBAR */}
       <aside className={`${isSidebarOpen ? 'w-[300px] translate-x-0' : 'w-0 -translate-x-full lg:w-0'} bg-[#0f172a] border-r border-[#1e293b] h-screen fixed lg:static overflow-y-auto flex-shrink-0 transition-all duration-300 ease-in-out z-40 text-slate-300 flex flex-col`}>
         <div className="p-6 border-b border-[#1e293b] flex justify-between items-center bg-[#0f172a] sticky top-0 z-20">
-          <h1 className="text-xl font-extrabold text-white tracking-tight">PC Tracker Pro</h1>
+          <h1 className="text-lg font-extrabold text-white tracking-tight leading-tight">PC Brands<br/>All in One Tracker</h1>
           <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-slate-500 hover:text-white">✕</button>
         </div>
         
         <div className="pt-6 pb-4 px-5 space-y-1.5 border-b border-[#1e293b]">
           <p className="px-3 text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Workspaces</p>
           <button onClick={() => selectEngine('media')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'media' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>Digital Tracker
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>Digital Media
           </button>
           <button onClick={() => selectEngine('commerce')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'commerce' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>Commerce Tracker
@@ -782,7 +1004,7 @@ export default function DashboardApp() {
              <div className="bg-[#1e293b] p-4 rounded-2xl border border-[#334155] space-y-3 shadow-inner">
                 <div className="flex items-center justify-between mb-1">
                    <label className="text-xs font-bold text-slate-400">Date Range</label>
-                   <select value={granularity} onChange={(e) => setGranularity(e.target.value)} className="bg-transparent text-indigo-400 text-xs font-bold outline-none cursor-pointer appearance-none pr-4 text-right dropdown-arrow bg-[length:12px_12px] bg-[position:right_0_center]">
+                   <select value={granularity} onChange={(e) => setGranularity(e.target.value)} className="bg-transparent text-indigo-400 text-xs font-bold outline-none cursor-pointer appearance-none pr-8 text-right dropdown-arrow bg-[length:12px_12px] bg-[position:right_center]">
                      <option value="monthly">Monthly</option><option value="weekly">Weekly MTD</option><option value="daily">Daily</option>
                    </select>
                 </div>
@@ -790,10 +1012,10 @@ export default function DashboardApp() {
                 {granularity === 'monthly' && <input type="month" value={dateMonth} onChange={(e) => setDateMonth(e.target.value)} className={isDarkMode ? dateClassDark : dateClass} />}
                 {granularity === 'weekly' && <input type="date" value={dateWeekly} onChange={(e) => setDateWeekly(e.target.value)} className={isDarkMode ? dateClassDark : dateClass} />}
                 {granularity === 'daily' && (
-                  <div className="flex items-center gap-2">
-                     <input type="date" value={dateDailyStart} onChange={(e) => setDateDailyStart(e.target.value)} className={isDarkMode ? dateClassDark : dateClass} style={{paddingLeft:'8px', paddingRight:'8px'}} />
-                     <span className="text-slate-500 font-bold">-</span>
-                     <input type="date" value={dateDailyEnd} onChange={(e) => setDateDailyEnd(e.target.value)} className={isDarkMode ? dateClassDark : dateClass} style={{paddingLeft:'8px', paddingRight:'8px'}} />
+                  <div className="grid grid-cols-[1fr_auto_1fr] gap-1.5 items-center w-full">
+                     <input type="date" value={dateDailyStart} onChange={(e) => setDateDailyStart(e.target.value)} className={`${isDarkMode ? dateClassDark : dateClass} !px-1 !text-xs w-full min-w-0`} />
+                     <span className="text-slate-500 font-bold text-center">-</span>
+                     <input type="date" value={dateDailyEnd} onChange={(e) => setDateDailyEnd(e.target.value)} className={`${isDarkMode ? dateClassDark : dateClass} !px-1 !text-xs w-full min-w-0`} />
                   </div>
                 )}
              </div>
@@ -843,7 +1065,7 @@ export default function DashboardApp() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
             </button>
             <h1 className={`text-[clamp(1.5rem,3vw,2.25rem)] font-extrabold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-              {activeEngine === 'media' ? 'Digital Tracker' : activeEngine === 'commerce' ? 'Commerce Tracker' : 'Top Creative'}
+              {activeEngine === 'media' ? 'Digital Media' : activeEngine === 'commerce' ? 'Commerce Tracker' : 'Top Creative'}
             </h1>
           </div>
 
@@ -859,25 +1081,25 @@ export default function DashboardApp() {
                <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-6 lg:p-8 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Media</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg></div></div>
                   <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Spend</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatIDR(mediaKPIs.overall.spend)}</span>{renderGR(mediaKPIs.overall.spend, mediaKPIs.overall.pSpend, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Impr</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatNum(mediaKPIs.overall.impr)}</span>{renderGR(mediaKPIs.overall.impr, mediaKPIs.overall.pImpr, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">Engage</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatNum(mediaKPIs.overall.engage)}</span>{renderGR(mediaKPIs.overall.engage, mediaKPIs.overall.pEngage, false)}</div></div>
+                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.overall.spend)}</span>{renderGR(mediaKPIs.overall.spend, mediaKPIs.overall.pSpend, true)}</div></div>
+                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Impr</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.overall.impr)}</span>{renderGR(mediaKPIs.overall.impr, mediaKPIs.overall.pImpr, false)}</div></div>
+                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.overall.engage)}</span>{renderGR(mediaKPIs.overall.engage, mediaKPIs.overall.pEngage, false)}</div></div>
                   </div>
                </div>
                <div onClick={() => setDashboardContext('Meta')} className={`bg-blue-500 rounded-3xl p-6 lg:p-8 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Meta' ? 'ring-4 ring-blue-300 shadow-blue-500/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-blue-100 uppercase tracking-widest">Meta</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg></div></div>
                   <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-blue-400 pb-3"><span className="text-xs font-bold text-blue-100">Spend</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatIDR(mediaKPIs.meta.spend)}</span>{renderGR(mediaKPIs.meta.spend, mediaKPIs.meta.pSpend, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-blue-400 pb-3"><span className="text-xs font-bold text-blue-100">Impr</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatNum(mediaKPIs.meta.impr)}</span>{renderGR(mediaKPIs.meta.impr, mediaKPIs.meta.pImpr, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-blue-100">Engage</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatNum(mediaKPIs.meta.engage)}</span>{renderGR(mediaKPIs.meta.engage, mediaKPIs.meta.pEngage, false)}</div></div>
+                     <div className="flex justify-between items-end border-b border-blue-400 pb-3"><span className="text-xs font-bold text-blue-100">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.meta.spend)}</span>{renderGR(mediaKPIs.meta.spend, mediaKPIs.meta.pSpend, true)}</div></div>
+                     <div className="flex justify-between items-end border-b border-blue-400 pb-3"><span className="text-xs font-bold text-blue-100">Impr</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.meta.impr)}</span>{renderGR(mediaKPIs.meta.impr, mediaKPIs.meta.pImpr, false)}</div></div>
+                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-blue-100">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.meta.engage)}</span>{renderGR(mediaKPIs.meta.engage, mediaKPIs.meta.pEngage, false)}</div></div>
                   </div>
                </div>
                <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-6 lg:p-8 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
                   <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Spend</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatIDR(mediaKPIs.tiktok.spend)}</span>{renderGR(mediaKPIs.tiktok.spend, mediaKPIs.tiktok.pSpend, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Impr</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatNum(mediaKPIs.tiktok.impr)}</span>{renderGR(mediaKPIs.tiktok.impr, mediaKPIs.tiktok.pImpr, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">Engage</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatNum(mediaKPIs.tiktok.engage)}</span>{renderGR(mediaKPIs.tiktok.engage, mediaKPIs.tiktok.pEngage, false)}</div></div>
+                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.tiktok.spend)}</span>{renderGR(mediaKPIs.tiktok.spend, mediaKPIs.tiktok.pSpend, true)}</div></div>
+                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Impr</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.tiktok.impr)}</span>{renderGR(mediaKPIs.tiktok.impr, mediaKPIs.tiktok.pImpr, false)}</div></div>
+                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.tiktok.engage)}</span>{renderGR(mediaKPIs.tiktok.engage, mediaKPIs.tiktok.pEngage, false)}</div></div>
                   </div>
                </div>
             </div>
@@ -887,7 +1109,7 @@ export default function DashboardApp() {
                  <div>
                     <h2 className="text-[clamp(1.25rem,2vw,1.75rem)] font-black tracking-tight" id="chartTitleMedia">{dashboardContext} Historical Trend</h2>
                     <p className={`text-sm font-semibold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                       {granularity === 'monthly' ? 'Displaying data for the past 3 months' : 'Interactive Multi-Metric Analytics'}
+                       {granularity === 'monthly' ? 'Displaying data for the past 3 months' : granularity === 'weekly' ? 'MTD Comparison Analytics' : 'Interactive Multi-Metric Analytics'}
                     </p>
                  </div>
                  
@@ -921,8 +1143,11 @@ export default function DashboardApp() {
                    </select>
                  </div>
                </div>
-               <div className="overflow-x-auto max-h-[600px] relative w-full rounded-b-3xl">
-                  <table className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-collapse ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`} dangerouslySetInnerHTML={{ __html: generateTableHTML().head + generateTableHTML().body }} />
+               <div className="overflow-auto max-h-[600px] relative w-full rounded-b-3xl">
+                  <table className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-separate [border-spacing:0] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                    <thead dangerouslySetInnerHTML={{ __html: generateTableHTML().head }} />
+                    <tbody dangerouslySetInnerHTML={{ __html: generateTableHTML().body }} />
+                  </table>
                </div>
             </div>
           </div>
@@ -935,25 +1160,25 @@ export default function DashboardApp() {
                <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-6 lg:p-8 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Commerce</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg></div></div>
                   <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Expense</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.exp)}</span>{renderGR(commerceKPIs.overall.exp, commerceKPIs.overall.pExp, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">GMV</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.gmv)}</span>{renderGR(commerceKPIs.overall.gmv, commerceKPIs.overall.pGmv, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">ROAS</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-emerald-300 leading-none">{commerceKPIs.overall.roas}</span>{renderGR(commerceKPIs.overall.roasNum, commerceKPIs.overall.pRoasNum, false)}</div></div>
+                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.exp)}</span>{renderGR(commerceKPIs.overall.exp, commerceKPIs.overall.pExp, true)}</div></div>
+                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.gmv)}</span>{renderGR(commerceKPIs.overall.gmv, commerceKPIs.overall.pGmv, false)}</div></div>
+                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-300 leading-none">{commerceKPIs.overall.roas}</span>{renderGR(commerceKPIs.overall.roasNum, commerceKPIs.overall.pRoasNum, false)}</div></div>
                   </div>
                </div>
                <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-6 lg:p-8 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok Shop</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
                   <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Expense</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.exp)}</span>{renderGR(commerceKPIs.tiktok.exp, commerceKPIs.tiktok.pExp, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">GMV</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.gmv)}</span>{renderGR(commerceKPIs.tiktok.gmv, commerceKPIs.tiktok.pGmv, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">ROAS</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-emerald-400 leading-none">{commerceKPIs.tiktok.roas}</span>{renderGR(commerceKPIs.tiktok.roasNum, commerceKPIs.tiktok.pRoasNum, false)}</div></div>
+                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.exp)}</span>{renderGR(commerceKPIs.tiktok.exp, commerceKPIs.tiktok.pExp, true)}</div></div>
+                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.gmv)}</span>{renderGR(commerceKPIs.tiktok.gmv, commerceKPIs.tiktok.pGmv, false)}</div></div>
+                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-400 leading-none">{commerceKPIs.tiktok.roas}</span>{renderGR(commerceKPIs.tiktok.roasNum, commerceKPIs.tiktok.pRoasNum, false)}</div></div>
                   </div>
                </div>
                <div onClick={() => setDashboardContext('Shopee')} className={`bg-orange-500 rounded-3xl p-6 lg:p-8 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Shopee' ? 'ring-4 ring-orange-300 shadow-orange-500/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-orange-100 uppercase tracking-widest">Shopee</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 109.59 122.88" fill="currentColor"><path d="M74.98,91.98C76.15,82.36,69.96,76.22,53.6,71c-7.92-2.7-11.66-6.24-11.57-11.12 c0.33-5.4,5.36-9.34,12.04-9.47c4.63,0.09,9.77,1.22,14.76,4.56c0.59,0.37,1.01,0.32,1.35-0.2c0.46-0.74,1.61-2.53,2-3.17 c0.26-0.42,0.31-0.96-0.35-1.44c-0.95-0.7-3.6-2.13-5.03-2.72c-3.88-1.62-8.23-2.64-12.86-2.63c-9.77,0.04-17.47,6.22-18.12,14.47 c-0.42,5.95,2.53,10.79,8.86,14.47c1.34,0.78,8.6,3.67,11.49,4.57c9.08,2.83,13.8,7.9,12.69,13.81c-1.01,5.36-6.65,8.83-14.43,8.93 c-6.17-0.24-11.71-2.75-16.02-6.1c-0.11-0.08-0.65-0.5-0.72-0.56c-0.53-0.42-1.11-0.39-1.47,0.15c-0.26,0.4-1.92,2.8-2.34,3.43 c-0.39,0.55-0.18,0.86,0.23,1.2c1.8,1.5,4.18,3.14,5.81,3.97c4.47,2.28,9.32,3.53,14.48,3.72c3.32,0.22,7.5-0.49,10.63-1.81 C70.63,102.67,74.25,97.92,74.98,91.98L74.98,91.98z M54.79,7.18c-10.59,0-19.22,9.98-19.62,22.47h39.25 C74.01,17.16,65.38,7.18,54.79,7.18L54.79,7.18z M94.99,122.88l-0.41,0l-80.82-0.01h0c-5.5-0.21-9.54-4.66-10.09-10.19l-0.05-1 l-3.61-79.5v0C0,32.12,0,32.06,0,32c0-1.28,1.03-2.33,2.3-2.35l0,0h25.48C28.41,13.15,40.26,0,54.79,0s26.39,13.15,27.01,29.65 h25.4h0.04c1.3,0,2.35,1.05,2.35,2.35c0,0.04,0,0.08,0,0.12v0l-3.96,79.81l-0.04,0.68C105.12,118.21,100.59,122.73,94.99,122.88 L94.99,122.88z"/></svg></div></div>
                   <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">Expense</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.exp)}</span>{renderGR(commerceKPIs.shopee.exp, commerceKPIs.shopee.pExp, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">GMV</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.gmv)}</span>{renderGR(commerceKPIs.shopee.gmv, commerceKPIs.shopee.pGmv, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-orange-100">ROAS</span><div className="text-right"><span className="font-black text-[clamp(1.25rem,2.5vw,1.75rem)] text-emerald-200 leading-none">{commerceKPIs.shopee.roas}</span>{renderGR(commerceKPIs.shopee.roasNum, commerceKPIs.shopee.pRoasNum, false)}</div></div>
+                     <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.exp)}</span>{renderGR(commerceKPIs.shopee.exp, commerceKPIs.shopee.pExp, true)}</div></div>
+                     <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.gmv)}</span>{renderGR(commerceKPIs.shopee.gmv, commerceKPIs.shopee.pGmv, false)}</div></div>
+                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-orange-100">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-200 leading-none">{commerceKPIs.shopee.roas}</span>{renderGR(commerceKPIs.shopee.roasNum, commerceKPIs.shopee.pRoasNum, false)}</div></div>
                   </div>
                </div>
             </div>
@@ -963,7 +1188,7 @@ export default function DashboardApp() {
                  <div>
                     <h2 className="text-[clamp(1.25rem,2vw,1.75rem)] font-black tracking-tight" id="chartTitleCommerce">{dashboardContext} Historical Trend</h2>
                     <p className={`text-sm font-semibold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                       {granularity === 'monthly' ? 'Displaying data for the past 3 months' : 'Interactive Multi-Metric Analytics'}
+                       {granularity === 'monthly' ? 'Displaying data for the past 3 months' : granularity === 'weekly' ? 'MTD Comparison Analytics' : 'Interactive Multi-Metric Analytics'}
                     </p>
                  </div>
                  
@@ -996,8 +1221,11 @@ export default function DashboardApp() {
                    </select>
                  </div>
                </div>
-               <div className="overflow-x-auto max-h-[600px] relative w-full rounded-b-3xl">
-                  <table className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-collapse ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`} dangerouslySetInnerHTML={{ __html: generateTableHTML().head + generateTableHTML().body }} />
+               <div className="overflow-auto max-h-[600px] relative w-full rounded-b-3xl">
+                  <table className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-separate [border-spacing:0] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                    <thead dangerouslySetInnerHTML={{ __html: generateTableHTML().head }} />
+                    <tbody dangerouslySetInnerHTML={{ __html: generateTableHTML().body }} />
+                  </table>
                </div>
             </div>
           </div>
@@ -1018,15 +1246,33 @@ export default function DashboardApp() {
 
                   return (
                     <div key={index} className={`rounded-[2rem] border shadow-sm overflow-hidden flex flex-col xl:flex-row transition-all hover:shadow-lg ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-indigo-500/50' : 'bg-white border-slate-200 hover:border-indigo-400'}`}>
-                       <div className="w-full xl:w-3/12 border-b xl:border-b-0 xl:border-r border-slate-200 relative bg-slate-950">
-                         {iframeSrc ? <iframe src={iframeSrc} className="w-full h-full min-h-[280px]" frameBorder="0" allowFullScreen></iframe> : <div className="w-full h-full min-h-[280px] flex items-center justify-center text-xs text-slate-500 font-medium">No Preview Available</div>}
+                       <div className="w-full xl:w-3/12 border-b xl:border-b-0 xl:border-r border-slate-200 relative bg-[#0f172a]">
+                         {iframeSrc ? (
+                           <iframe src={iframeSrc} className="w-full h-full min-h-[280px]" frameBorder="0" allowFullScreen></iframe>
+                         ) : (
+                           <div className="w-full h-full min-h-[280px] flex items-center justify-center text-xs text-slate-500 font-medium">No Preview Available</div>
+                         )}
                        </div>
+                       
                        <div className="w-full xl:w-9/12 p-6 md:p-8 flex flex-col">
-                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                           <h3 className={`text-[clamp(1.1rem,1.5vw,1.25rem)] font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{row['Ad Name'] || 'Unknown Ad'}</h3>
+                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-4">
+                           <h3 className={`text-sm md:text-base font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'} line-clamp-2`}>
+                             {row['Ad Name'] || 'Unknown Ad'}
+                           </h3>
+                           
                            {row['Social Link'] && row['Social Link'] !== '-' && (
-                             <a href={row['Social Link']} target="_blank" className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-transform hover:-translate-y-0.5 ${isDarkMode ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-900 text-white hover:bg-indigo-600'}`}>
-                               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>Open Source Link
+                             <a
+                               href={row['Social Link']}
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               className={`shrink-0 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-transform hover:-translate-y-0.5 ${
+                                 isDarkMode ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-900 text-white hover:bg-indigo-600'
+                               }`}
+                             >
+                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                               </svg>
+                               Social Link
                              </a>
                            )}
                          </div>
@@ -1050,9 +1296,11 @@ export default function DashboardApp() {
                          </div>
 
                          <div className="mt-auto">
-                            <h4 className={`text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-1.5 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-500'}`}>
-                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Artificial Intelligence / Analyst Insights
-                            </h4>
+                            <div className="flex items-center justify-between mb-2">
+                               <h4 className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Creative Analysis
+                               </h4>
+                            </div>
                             <div className={`p-4 rounded-2xl text-sm leading-relaxed border font-medium ${isDarkMode ? 'bg-indigo-950/40 text-indigo-200 border-indigo-900/50' : 'bg-indigo-50/60 text-indigo-900 border-indigo-100'}`}>
                                {row['Insights'] || 'No insights available.'}
                             </div>
