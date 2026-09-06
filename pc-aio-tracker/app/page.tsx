@@ -118,8 +118,7 @@ export default function DashboardApp() {
     
     let curMonthEnd = new Date(nextFirstWeek); curMonthEnd.setDate(curMonthEnd.getDate() - 1);
     let prevMonthEnd = new Date(curFirstWeek); prevMonthEnd.setDate(prevMonthEnd.getDate() - 1);
-    let daysDiff = Math.floor((targetDate.getTime() - curFirstWeek.getTime()) / (1000 * 60 * 60 * 24));
-    let prevMtdEnd = new Date(prevFirstWeek); prevMtdEnd.setDate(prevFirstWeek.getDate() + daysDiff);
+    let prevMtdEnd = new Date(prevE5.getFullYear(), prevE5.getMonth(), Math.min(targetDate.getDate(), new Date(prevE5.getFullYear(), prevE5.getMonth() + 1, 0).getDate()));
     let chartStartMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() - 2, 1);
     
     return { curStart: curFirstWeek, curMtdEnd: targetDate, curMonthEnd: curMonthEnd, prevStart: prevFirstWeek, prevMtdEnd: prevMtdEnd, prevMonthEnd: prevMonthEnd, chartStart: chartStartMonth };
@@ -655,52 +654,34 @@ export default function DashboardApp() {
       ctxPrevData.forEach(r => { if (r.bucket && r.bucket.startsWith('W')) weeksFound.add(r.bucket); });
       let weeks = Array.from(weeksFound).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
 
-      let curRunning = isMedia ? { spend: 0, imp: 0, clicks: 0, views: 0 } : { exp: 0, gmv: 0, orders: 0 };
-      let prevRunning = isMedia ? { spend: 0, imp: 0, clicks: 0, views: 0 } : { exp: 0, gmv: 0, orders: 0 };
+      const appendMtdSeries = (data: any[], periodStart: Date, periodEnd: Date) => {
+        const running = isMedia ? { spend: 0, imp: 0, clicks: 0, views: 0 } : { exp: 0, gmv: 0, orders: 0 };
+        weeks.forEach(w => {
+          const weekNum = parseInt(w.replace('W', ''));
+          const periodDate = new Date(periodStart);
+          periodDate.setDate(periodDate.getDate() + (weekNum * 7) - 1);
+          if (periodDate > periodEnd) periodDate.setTime(periodEnd.getTime());
 
-      weeks.forEach(w => {
-        const weekNum = parseInt(w.replace('W', ''));
-        let curD = new Date(globalDates.curStart);
-        curD.setDate(curD.getDate() + (weekNum * 7) - 1);
-        if (curD > globalDates.curMtdEnd) curD = new Date(globalDates.curMtdEnd);
+          data.filter(r => r.bucket === w).forEach(row => {
+            if (isMedia) {
+              running.spend += parseNum(row['Ad Spend']);
+              running.imp += parseNum(row['Impressions']);
+              running.clicks += parseNum(row['Combined Clicks']);
+              running.views += parseNum(row['Views']) + parseNum(row['Views 6s']);
+            } else {
+              running.exp += parseNum(row['Expense']);
+              running.gmv += parseNum(row['GMV']);
+              running.orders += parseNum(row['Orders']);
+            }
+          });
 
-        let prevD = new Date(globalDates.prevStart);
-        prevD.setDate(prevD.getDate() + (weekNum * 7) - 1);
-        if (prevD > globalDates.prevMtdEnd) prevD = new Date(globalDates.prevMtdEnd);
-
-        const fmtStr = (d: Date) => `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
-        const curLabel = `MTD ${fmtStr(curD)}`;
-        const prevLabel = `MTD ${fmtStr(prevD)}`;
-
-        ctxCurData.filter(r => r.bucket === w).forEach(row => {
-          if (isMedia) {
-            curRunning.spend += parseNum(row['Ad Spend']);
-            curRunning.imp += parseNum(row['Impressions']);
-            curRunning.clicks += parseNum(row['Combined Clicks']);
-            curRunning.views += parseNum(row['Views']) + parseNum(row['Views 6s']);
-          } else {
-            curRunning.exp += parseNum(row['Expense']);
-            curRunning.gmv += parseNum(row['GMV']);
-            curRunning.orders += parseNum(row['Orders']);
-          }
+          const fmtStr = (d: Date) => `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
+          groupedData[`MTD ${fmtStr(periodDate)}`] = { ...running };
         });
+      };
 
-        ctxPrevData.filter(r => r.bucket === w).forEach(row => {
-          if (isMedia) {
-            prevRunning.spend += parseNum(row['Ad Spend']);
-            prevRunning.imp += parseNum(row['Impressions']);
-            prevRunning.clicks += parseNum(row['Combined Clicks']);
-            prevRunning.views += parseNum(row['Views']) + parseNum(row['Views 6s']);
-          } else {
-            prevRunning.exp += parseNum(row['Expense']);
-            prevRunning.gmv += parseNum(row['GMV']);
-            prevRunning.orders += parseNum(row['Orders']);
-          }
-        });
-
-        groupedData[curLabel] = { ...curRunning };
-        groupedData[prevLabel] = { ...prevRunning };
-      });
+      appendMtdSeries(ctxPrevData, globalDates.prevStart, globalDates.prevMtdEnd);
+      appendMtdSeries(ctxCurData, globalDates.curStart, globalDates.curMtdEnd);
     } else {
       const sortedData = [...ctxChartData].sort((a, b) => a.parsedDate.getTime() - b.parsedDate.getTime());
       sortedData.forEach(row => {
