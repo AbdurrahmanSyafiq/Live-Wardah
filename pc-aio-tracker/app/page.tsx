@@ -1,17 +1,23 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import Chart from 'chart.js/auto';
 
 const CONFIG = {
   media: { sheet: "Media API", colDate: "Date", colBrand: "Brand", colPlatform: "Platform", colFunnel: "Funnel", colAdType: "KPI", colFormat: "Format", colConsiSize: "Result" },
   commerce: { sheet: "Commerce", colDate: "Date", colBrand: "Brand fx", colPlatform: "Platform", colAdType: "Ad Type" },
-  creative: { sheet: "Creative Raw", colPeriod: "Period", colBrand: "Brand", colPlatform: "Platform", colAdType: "Ad Type", colFormat: "Format" }
+  creative: { sheet: "Creative Raw", colPeriod: "Period", colBrand: "Brand", colPlatform: "Platform", colAdType: "Ad Type", colFormat: "Format" },
+  signal: { sheet: "Media Signal", colBrand: "Brand", colStatus: "Status", colDateStart: "Start Date", colDateEnd: "End Date" }
 };
+
+// Global UI classes placed at module level to completely avoid ReferenceError / TDZ issues
+const selectClass = "w-full bg-[#1e293b] border border-[#334155] text-slate-100 py-3 px-4 rounded-xl text-sm font-semibold shadow-inner outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none dropdown-arrow hover:border-[#475569] transition-colors";
+const dateClass = "w-full bg-white border border-slate-200 text-slate-800 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-center";
+const dateClassDark = "w-full bg-[#1e293b] border border-indigo-500/50 text-indigo-300 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer text-center";
 
 export default function DashboardApp() {
   const [currentView, setCurrentView] = useState<'login' | 'welcome' | 'dashboard'>('login');
-  const [activeEngine, setActiveEngine] = useState<'media' | 'commerce' | 'creative' | null>(null);
+  const [activeEngine, setActiveEngine] = useState<'media' | 'commerce' | 'creative' | 'signal' | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
@@ -20,8 +26,10 @@ export default function DashboardApp() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const dataCache = useRef<Record<string, any[]>>({});
   const [rawData, setRawData] = useState<any[]>([]);
+  const [extraSheetsData, setExtraSheetsData] = useState<{ mediaApi: any[]; commerce: any[] }>({ mediaApi: [], commerce: [] });
   
   const [filters, setFilters] = useState({ brand: 'All', funnel: 'All', platform: 'All', adType: 'All', format: 'All', period: 'All' });
+  const [selectedSignalPeriod, setSelectedSignalPeriod] = useState<string>('');
   const [granularity, setGranularity] = useState('monthly');
   const [dateMonth, setDateMonth] = useState('');
   const [dateWeekly, setDateWeekly] = useState('');
@@ -57,8 +65,10 @@ export default function DashboardApp() {
   const parseNum = (val: any) => {
     if (typeof val === 'number') return val;
     if (!val) return 0;
-    return parseFloat(String(val).replace(/,/g, '').replace(/ /g, '').trim()) || 0;
+    let parsed = Number(String(val).replace(/[^0-9.-]+/g, ""));
+    return isNaN(parsed) ? 0 : parsed;
   };
+
   const formatIDR = (num: number) => (Number(num)||0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
   const formatNum = (num: number) => (Number(num)||0).toLocaleString('en-US', { maximumFractionDigits: 0 });
   const formatPct = (num: number) => ((Number(num)||0) * 100).toFixed(2) + "%";
@@ -83,6 +93,12 @@ export default function DashboardApp() {
       if (!isNaN(d.getTime())) return d;
     }
     return new Date(str);
+  };
+
+  const toYMD = (val: any) => {
+    const d = parseSheetDate(val);
+    if (!d || isNaN(d.getTime())) return String(val || '').trim();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
   const getMediaDates = useCallback((targetDate: Date, gran: string) => {
@@ -132,24 +148,52 @@ export default function DashboardApp() {
     } catch (err) { setLoginError('Server communication failed.'); }
   };
 
-  const loadData = async (engine: 'media' | 'commerce' | 'creative', forceSync = false) => {
+  const loadData = async (engine: 'media' | 'commerce' | 'creative' | 'signal', forceSync = false) => {
     setFilters({ brand: 'All', funnel: 'All', platform: 'All', adType: 'All', format: 'All', period: 'All' });
     setDashboardContext('Overall'); setCreativePage(1); setTableColFilter1('All'); setTableColFilter2('All');
     
-    if (forceSync) dataCache.current[engine] = undefined as any;
-    if (dataCache.current[engine]) { setRawData(dataCache.current[engine]); return; }
+    if (forceSync) {
+      dataCache.current[CONFIG[engine].sheet] = undefined as any;
+      if (engine === 'signal') {
+        dataCache.current['Media API'] = undefined as any;
+        dataCache.current['Commerce'] = undefined as any;
+      }
+    }
 
     setIsLoading(true);
     try {
-      const res = await fetch('/api/sheets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'getData', sheetName: CONFIG[engine].sheet }) });
-      const result = await res.json();
-      if (result.success) { dataCache.current[engine] = result.data; setRawData(result.data); } 
-      else alert("Error: " + result.error);
-    } catch (err) { alert("Network error."); }
+      const fetchSheet = async (sheetName: string) => {
+        if (!forceSync && dataCache.current[sheetName]) return dataCache.current[sheetName];
+        const res = await fetch('/api/sheets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getData', sheetName })
+        });
+        const result = await res.json();
+        if (result.success) {
+          dataCache.current[sheetName] = result.data;
+          return result.data;
+        }
+        return [];
+      };
+
+      if (engine === 'signal') {
+        const [signalData, mediaApiData, commerceData] = await Promise.all([
+          fetchSheet("Media Signal"),
+          fetchSheet("Media API"),
+          fetchSheet("Commerce")
+        ]);
+        setRawData(signalData);
+        setExtraSheetsData({ mediaApi: mediaApiData, commerce: commerceData });
+      } else {
+        const data = await fetchSheet(CONFIG[engine].sheet);
+        setRawData(data);
+      }
+    } catch (err) { alert("Network error loading sheet data."); }
     setIsLoading(false);
   };
 
-  const selectEngine = (engine: 'media' | 'commerce' | 'creative') => {
+  const selectEngine = (engine: 'media' | 'commerce' | 'creative' | 'signal') => {
     setActiveEngine(engine); setCurrentView('dashboard'); loadData(engine);
   };
 
@@ -189,8 +233,284 @@ export default function DashboardApp() {
     }
   };
 
+  const signalPeriods = useMemo(() => {
+    if (activeEngine !== 'signal' || rawData.length === 0) return [];
+    const unique = new Map<string, { start: string; end: string }>();
+    rawData.forEach(r => {
+      const s = toYMD(r['Start Date'] || r['start_date']);
+      const e = toYMD(r['End Date'] || r['end_date']);
+      if (s && e) {
+        const key = `${s}_to_${e}`;
+        if (!unique.has(key)) unique.set(key, { start: s, end: e });
+      }
+    });
+
+    const list = Array.from(unique.entries()).map(([key, val]) => ({
+      key,
+      start: val.start,
+      end: val.end,
+      label: `${val.start} to ${val.end}`
+    }));
+
+    return list.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
+  }, [rawData, activeEngine]);
+
+  useEffect(() => {
+    if (activeEngine === 'signal' && signalPeriods.length > 0 && !selectedSignalPeriod) {
+      setSelectedSignalPeriod(signalPeriods[0].key);
+    }
+  }, [activeEngine, signalPeriods, selectedSignalPeriod]);
+
+  // --- MEDIA SIGNAL DATA COMPILER (ACTUAL VS PLAN + PREVIOUS PERIOD COMPARISON) ---
+  const signalCompiled = useMemo(() => {
+    if (activeEngine !== 'signal' || rawData.length === 0 || !selectedSignalPeriod) return null;
+
+    const currentPeriodObj = signalPeriods.find(p => p.key === selectedSignalPeriod);
+    if (!currentPeriodObj) return null;
+
+    const currentIndex = signalPeriods.findIndex(p => p.key === selectedSignalPeriod);
+    const prevPeriodObj = currentIndex !== -1 && currentIndex + 1 < signalPeriods.length ? signalPeriods[currentIndex + 1] : null;
+
+    const cleanStr = (s: any) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const targetBrand = cleanStr(filters.brand);
+
+    const findVal = (row: any, candidates: string[]) => {
+      for (const cand of candidates) {
+        const found = Object.keys(row).find(k => k.toLowerCase().trim() === cand.toLowerCase().trim());
+        if (found !== undefined && row[found] !== undefined && row[found] !== '') {
+          return row[found];
+        }
+      }
+      return '';
+    };
+    const compilePeriod = (periodObj: { start: string; end: string } | null, isPlanOnly = false) => {
+      if (!periodObj) return null;
+
+      const pStart = parseSheetDate(periodObj.start); if (pStart) pStart.setHours(0,0,0,0);
+      const pEnd = parseSheetDate(periodObj.end); if (pEnd) pEnd.setHours(23,59,59,999);
+
+      const signalSubset = rawData.filter(row => {
+        const b = cleanStr(row['Brand']);
+        if (targetBrand !== 'all' && b !== targetBrand) return false;
+        const s = toYMD(row['Start Date'] || row['start_date']);
+        const e = toYMD(row['End Date'] || row['end_date']);
+        if (s !== periodObj.start || e !== periodObj.end) return false;
+
+        const statusVal = String(findVal(row, ['Status', 'status', 'Type'])).toLowerCase().trim();
+        return isPlanOnly ? statusVal.includes('plan') : statusVal.includes('actual') || (!statusVal.includes('plan') && statusVal !== '');
+      });
+
+      const sumSignal = (keys: string[]) => {
+        return signalSubset.reduce((acc, row) => {
+          const val = findVal(row, keys);
+          return acc + parseNum(val);
+        }, 0);
+      };
+
+      const impressions = sumSignal(['Impressions', 'Total Impressions']);
+      const paidImpressions = sumSignal(['Paid Impressions']);
+      const organicImpressions = sumSignal(['Organic Impressions']);
+      const engagements = sumSignal(['Engagements', 'Total Engagements']);
+      const paidEngagements = sumSignal(['Paid Engagements']);
+      const organicEngagements = sumSignal(['Organic Engagements']);
+      const views100 = sumSignal(['Video Views At 100', 'Video Views At 100%', 'video_views_at_100']);
+      const views6s = sumSignal(['6 Sec Video Views', '6-sec Video Views', '6_sec_video_views']);
+      const shares = sumSignal(['Shares']);
+      const comments = sumSignal(['Comments']);
+      const likes = sumSignal(['Likes']);
+      const clicks = sumSignal(['Clicks']);
+      const searchVolume = sumSignal(['Search Volume', 'Search Volumes', 'search_volume']);
+      const productCardClicks = sumSignal(['Product Card Clicks', 'product_card_clicks']);
+      const newAwareness = sumSignal(['New Awareness Audience', 'new_awareness_audience']);
+      const newConsideration = sumSignal(['New Consideration Audience', 'new_consideration_audience']);
+      const newConversion = sumSignal(['New Conversion Audience', 'new_conversion_audience']);
+
+      // 1. Rollup External Media API Sheet (Spend & Impressions)
+      let spendAwareness = 0; let spendConsideration = 0; let spendConversionMedia = 0; let totalMediaSpend = 0;
+      let impAwareness = 0; let impConsideration = 0;
+
+      if (!isPlanOnly && extraSheetsData.mediaApi && extraSheetsData.mediaApi.length > 0 && pStart && pEnd) {
+        extraSheetsData.mediaApi.forEach(row => {
+          const plat = String(row['Platform'] || '').toLowerCase().trim();
+          const b = cleanStr(row['Brand'] || row['Brand fx']);
+          if (!plat.includes('tiktok')) return;
+          if (targetBrand !== 'all' && b !== targetBrand) return;
+          const rDate = parseSheetDate(row['Date']);
+          if (!rDate || rDate < pStart || rDate > pEnd) return;
+
+          const f = String(row['Funnel'] || row['KPI'] || '').toLowerCase().trim();
+          const s = parseNum(row['Ad Spend'] || row['Spend'] || row['Expense']);
+          const i = parseNum(row['Impressions'] || row['Impression']);
+
+          totalMediaSpend += s;
+          if (f.includes('awareness')) { spendAwareness += s; impAwareness += i; }
+          else if (f.includes('consideration')) { spendConsideration += s; impConsideration += i; }
+          else if (f.includes('conversion')) { spendConversionMedia += s; }
+        });
+      }
+
+      // 2. Rollup External Commerce Sheet (GMV, Items Sold, Spend)
+      let gmvCommerce = 0; let itemsSold = 0; let spendConversionComm = 0;
+
+      if (!isPlanOnly && extraSheetsData.commerce && extraSheetsData.commerce.length > 0 && pStart && pEnd) {
+        extraSheetsData.commerce.forEach(row => {
+          const plat = String(row['Platform'] || '').toLowerCase().trim();
+          const b = cleanStr(row['Brand fx'] || row['Brand']);
+          if (!plat.includes('tiktok')) return;
+          if (targetBrand !== 'all' && b !== targetBrand) return;
+          const rDate = parseSheetDate(row['Date']);
+          if (!rDate || rDate < pStart || rDate > pEnd) return;
+
+          gmvCommerce += parseNum(row['GMV']);
+          itemsSold += parseNum(row['Orders']) || parseNum(row['Item sold']) || parseNum(row['Items Sold']);
+          spendConversionComm += parseNum(row['Expense']);
+        });
+      }
+
+      const signalSpend = sumSignal(['Total TikTok Spend', 'Total TikTok', 'Ad Spend', 'Spend', 'total_spend']);
+      const spendConversion = spendConversionComm || spendConversionMedia || sumSignal(['Spend Conversion', 'spend_conversion']);
+      const totalSpend = isPlanOnly
+        ? signalSpend || sumSignal(['Spend Awareness', 'Spend Consideration', 'Spend Conversion'])
+        : Math.max(spendAwareness + spendConsideration + spendConversion, totalMediaSpend) || signalSpend;
+
+      const impConversion = Math.max(0, paidImpressions - impAwareness - impConsideration);
+      const gmvAds = gmvCommerce || sumSignal(['GMV Ads', 'gmv_ads', 'GMV']);
+      const finalItemsSold = itemsSold || sumSignal(['Item sold', 'Items Sold', 'items_sold']);
+
+      return {
+        impressions, paidImpressions, organicImpressions,
+        pctOrganicImp: impressions > 0 ? organicImpressions / impressions : 0,
+        engagements, paidEngagements, organicEngagements,
+        pctOrganicEng: engagements > 0 ? organicEngagements / engagements : 0,
+        views100, views6s, shares, comments, likes,
+        clicks, searchVolume, productCardClicks,
+        gmvAds, itemsSold: finalItemsSold,
+        aov: finalItemsSold > 0 ? gmvAds / finalItemsSold : 0,
+        cr: clicks > 0 ? finalItemsSold / clicks : 0,
+        ctr: impressions > 0 ? clicks / impressions : 0,
+        vtr: impressions > 0 ? views100 / impressions : 0,
+        er: impressions > 0 ? engagements / impressions : 0,
+        newAwareness, newConsideration, newConversion,
+        costPerConsi: newConsideration > 0 ? spendConsideration / newConsideration : 0,
+        costPerConv: newConversion > 0 ? spendConversion / newConversion : 0,
+        impAwareness, impConsideration, impConversion,
+        cpmAwareness: impAwareness > 0 ? (spendAwareness / impAwareness) * 1000 : 0,
+        cpmConsideration: impConsideration > 0 ? (spendConsideration / impConsideration) * 1000 : 0,
+        cpmConversion: impConversion > 0 ? (spendConversion / impConversion) * 1000 : 0,
+        spendAwareness, spendConsideration, spendConversion, totalSpend
+      };
+    };
+
+    const actual = compilePeriod(currentPeriodObj, false);
+    const plan = compilePeriod(currentPeriodObj, true);
+    const prev = compilePeriod(prevPeriodObj, false);
+
+    const computeAch = (act: number, pln: number) => {
+      if (pln <= 0) return act > 0 ? 1 : 0;
+      return act / pln;
+    };
+
+    return {
+      actual,
+      plan,
+      prev,
+      computeAch,
+      currentPeriod: currentPeriodObj,
+      prevPeriod: prevPeriodObj
+    };
+  }, [rawData, extraSheetsData, filters.brand, activeEngine, selectedSignalPeriod, signalPeriods]);
+
+  const signalHierarchyGroups = useMemo(() => {
+    if (!signalCompiled) return [];
+
+    const metric = (name: string, key: string, fmt: (value: number) => string, isInv = false) => ({
+      name,
+      act: signalCompiled.actual?.[key],
+      pln: signalCompiled.plan?.[key],
+      prv: signalCompiled.prev?.[key],
+      fmt,
+      isInv
+    });
+
+    return [
+      {
+        category: "Scale Signal",
+        rows: [
+          metric("Total Impressions", "impressions", formatNum),
+          metric("Paid Impressions", "paidImpressions", formatNum),
+          metric("Organic Impressions", "organicImpressions", formatNum),
+          metric("% Organic Impressions", "pctOrganicImp", formatPct)
+        ]
+      },
+      {
+        category: "Engagement Signal & Performance",
+        rows: [
+          metric("Total Engagements", "engagements", formatNum),
+          metric("Paid Engagements", "paidEngagements", formatNum),
+          metric("Organic Engagements", "organicEngagements", formatNum),
+          metric("% Organic Engagements", "pctOrganicEng", formatPct),
+          metric("CTR", "ctr", formatPct),
+          metric("VTR", "vtr", formatPct),
+          metric("ER %", "er", formatPct)
+        ]
+      },
+      {
+        category: "Attention Signal",
+        rows: [
+          metric("Video Views at 100%", "views100", formatNum),
+          metric("6-sec Video Views", "views6s", formatNum),
+          metric("Shares", "shares", formatNum),
+          metric("Comments", "comments", formatNum),
+          metric("Likes", "likes", formatNum)
+        ]
+      },
+      {
+        category: "Intent Signal",
+        rows: [
+          metric("Clicks", "clicks", formatNum),
+          metric("Search Volumes", "searchVolume", formatNum)
+        ]
+      },
+      {
+        category: "Commerce Signal & Performance",
+        rows: [
+          metric("Product Card Clicks", "productCardClicks", formatNum),
+          metric("GMV Ads", "gmvAds", formatIDR),
+          metric("Items Sold", "itemsSold", formatNum),
+          metric("AOV", "aov", formatIDR),
+          metric("CR %", "cr", formatPct)
+        ]
+      },
+      {
+        category: "Audience Acquisition & Efficiency",
+        rows: [
+          metric("New Awareness Audience", "newAwareness", formatNum),
+          metric("New Consideration Audience", "newConsideration", formatNum),
+          metric("New Conversion Audience", "newConversion", formatNum),
+          metric("Cost per new Consi", "costPerConsi", formatIDR, true),
+          metric("Cost per new Conversion", "costPerConv", formatIDR, true)
+        ]
+      },
+      {
+        category: "Funnel Delivery & Spend Breakdown",
+        rows: [
+          metric("Impression Awareness", "impAwareness", formatNum),
+          metric("CPM Awareness", "cpmAwareness", formatIDR, true),
+          metric("Impression Consideration", "impConsideration", formatNum),
+          metric("CPM Consideration", "cpmConsideration", formatIDR, true),
+          metric("Impression Conversion", "impConversion", formatNum),
+          metric("CPM Conversion", "cpmConversion", formatIDR, true),
+          metric("Spend Awareness", "spendAwareness", formatIDR, true),
+          metric("Spend Consideration", "spendConsideration", formatIDR, true),
+          metric("Spend Conversion", "spendConversion", formatIDR, true),
+          metric("Total TikTok Spend", "totalSpend", formatIDR, true)
+        ]
+      }
+    ];
+  }, [signalCompiled]);
+
   const { curData, prevData, chartData, creativeData, globalDates } = useMemo(() => {
-    if (!activeEngine || rawData.length === 0) return { curData: [], prevData: [], chartData: [], creativeData: [], globalDates: null };
+    if (!activeEngine || activeEngine === 'signal' || rawData.length === 0) return { curData: [], prevData: [], chartData: [], creativeData: [], globalDates: null };
     const cfg = CONFIG[activeEngine];
 
     const filteredBase = rawData.filter(row => {
@@ -248,9 +568,8 @@ export default function DashboardApp() {
     return { curData: cData, prevData: pData, chartData: chData, creativeData: [], globalDates: dates };
   }, [rawData, filters, activeEngine, granularity, dateMonth, dateWeekly, dateDailyStart, dateDailyEnd, getMediaDates]);
 
-  // Context filtering ONLY for Chart and Table
   const { ctxCurData, ctxPrevData, ctxChartData } = useMemo(() => {
-    if (dashboardContext === 'Overall' || activeEngine === 'creative') return { ctxCurData: curData, ctxPrevData: prevData, ctxChartData: chartData };
+    if (dashboardContext === 'Overall' || activeEngine === 'creative' || activeEngine === 'signal') return { ctxCurData: curData, ctxPrevData: prevData, ctxChartData: chartData };
     const match = dashboardContext.toLowerCase();
     const filterFn = (row: any) => {
       const p = String(row[CONFIG[activeEngine as 'media'|'commerce'].colPlatform] || "").toLowerCase();
@@ -260,7 +579,6 @@ export default function DashboardApp() {
     return { ctxCurData: curData.filter(filterFn), ctxPrevData: prevData.filter(filterFn), ctxChartData: chartData.filter(filterFn) };
   }, [curData, prevData, chartData, dashboardContext, activeEngine]);
 
-  // SUMMARY CARDS: Stays visible across all platforms
   const mediaKPIs = useMemo(() => {
     let totals = { overall: { spend: 0, impr: 0, engage: 0, pSpend: 0, pImpr: 0, pEngage: 0 }, meta: { spend: 0, impr: 0, engage: 0, pSpend: 0, pImpr: 0, pEngage: 0 }, tiktok: { spend: 0, impr: 0, engage: 0, pSpend: 0, pImpr: 0, pEngage: 0 } };
     const calc = (data: any[], isPrev: boolean) => {
@@ -314,7 +632,7 @@ export default function DashboardApp() {
   }, [curData, prevData, activeEngine]);
 
   const renderGR = (cur: number, prev: number, isInv = false) => {
-    if (granularity === 'daily' || prevData.length === 0) return null;
+    if (prev === 0 && cur === 0) return <span className="text-[10px] ml-2 font-bold opacity-40">-</span>;
     const gr = getGr(cur, prev);
     let color = isDarkMode ? "text-slate-200 bg-slate-700/50" : "text-white bg-white/30"; let arrow = "";
     if (gr > 0) { color = isInv ? "text-white bg-rose-500/60" : "text-white bg-emerald-500/60"; arrow = "▲"; } 
@@ -467,9 +785,9 @@ export default function DashboardApp() {
     return () => { if (chartInstance.current) chartInstance.current.destroy(); };
   }, [ctxChartData, ctxCurData, ctxPrevData, globalDates, chartMetricsMedia, chartMetricsComm, activeEngine, granularity, isDarkMode]);
 
-  // --- MANUAL TABLE RENDERER ---
+  // --- MANUAL TABLE RENDERER FOR MEDIA & COMMERCE ---
   const generateTableHTML = useCallback(() => {
-    if (activeEngine === 'creative') return { head: '', body: '', uniqueDim1: [], uniqueDim2: [] };
+    if (activeEngine === 'creative' || activeEngine === 'signal') return { head: '', body: '', uniqueDim1: [], uniqueDim2: [] };
     const isMedia = activeEngine === 'media';
     const cnf = CONFIG[activeEngine as 'media'|'commerce'];
     
@@ -719,58 +1037,31 @@ export default function DashboardApp() {
     return '';
   };
 
-  // --- LOGIN VIEW: BAUHAUS ABSTRACT ART (LINES, RANDOM CIRCLES, BLOCKS) ---
+  // --- LOGIN VIEW: FLUID AURORA MESH GRADIENT ---
   if (currentView === 'login') {
     return (
       <div className="flex w-full h-screen font-sans overflow-hidden bg-white">
         <style dangerouslySetInnerHTML={{__html: `
           @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
           @keyframes checkmark { 0% { stroke-dashoffset: 100; opacity: 0; } 100% { stroke-dashoffset: 0; opacity: 1; } }
+          @keyframes fluidMove1 { 0% { transform: translate(0px, 0px) scale(1); } 50% { transform: translate(80px, 60px) scale(1.15); } 100% { transform: translate(0px, 0px) scale(1); } }
+          @keyframes fluidMove2 { 0% { transform: translate(0px, 0px) scale(1.1); } 50% { transform: translate(-70px, -50px) scale(0.95); } 100% { transform: translate(0px, 0px) scale(1.1); } }
+          @keyframes fluidMove3 { 0% { transform: translate(0px, 0px) scale(1); } 50% { transform: translate(60px, -70px) scale(1.2); } 100% { transform: translate(0px, 0px) scale(1); } }
           .animate-enter { animation: slideUp 0.5s ease-out forwards; }
           .checkmark-path { stroke-dasharray: 100; stroke-dashoffset: 100; animation: checkmark 0.6s ease-in-out forwards; }
+          .fluid-blob-1 { animation: fluidMove1 14s ease-in-out infinite; }
+          .fluid-blob-2 { animation: fluidMove2 18s ease-in-out infinite; }
+          .fluid-blob-3 { animation: fluidMove3 16s ease-in-out infinite; }
         `}} />
         
-        {/* LEFT 60%: Bauhaus Abstract Geometric Art (Reference Style) */}
-        <div className="hidden md:block w-[60%] h-full relative bg-[#1e1e24] overflow-hidden">
-           <svg viewBox="0 0 900 600" className="w-full h-full" preserveAspectRatio="none">
-              <rect width="900" height="600" fill="#1e1e24" />
-
-              {/* Large Beige Arch / Block */}
-              <path d="M 0 0 L 320 0 L 320 400 C 320 480 250 540 160 540 L 0 540 Z" fill="#f3ebd8" />
-
-              {/* Teal Rounded Block */}
-              <path d="M 320 200 L 580 200 C 630 200 670 240 670 290 C 670 340 630 380 580 380 L 320 380 Z" fill="#164e58" />
-
-              {/* Large Pale Circle Right */}
-              <circle cx="780" cy="350" r="220" fill="#f3ebd8" />
-
-              {/* Yellow Floating Circle Left */}
-              <circle cx="160" cy="320" r="90" fill="#f6b93b" />
-
-              {/* Top Right Pink Semi-Circle / Quarter */}
-              <path d="M 700 0 C 820 0 900 80 900 200 L 700 200 Z" fill="#f3b6c8" />
-
-              {/* Top Right Cyan Accent Corner */}
-              <polygon points="900,0 900,90 810,0" fill="#4ec5db" />
-
-              {/* Bottom Left Pink Wavy / Organic Shape */}
-              <path d="M 0 470 C 50 450 90 520 140 500 C 190 480 220 420 270 430 L 0 600 Z" fill="#f3b6c8" />
-
-              {/* Bottom Center Brown & Beige Segments */}
-              <rect x="450" y="380" width="130" height="220" fill="#b47b4e" />
-              <path d="M 450 470 C 450 430 580 430 580 470 Z" fill="#f3ebd8" />
-              <path d="M 450 560 C 450 520 580 520 580 560 Z" fill="#f3ebd8" />
-              <circle cx="515" cy="415" r="8" fill="#f3ebd8" />
-
-              {/* Top Center Solid Charcoal Block */}
-              <rect x="320" y="0" width="260" height="200" fill="#1e1e24" />
-
-              {/* Additional Brown Vertical Block */}
-              <rect x="580" y="0" width="120" height="200" fill="#b47b4e" />
-           </svg>
+        <div className="hidden md:block w-[60%] h-full relative bg-[#180b3d] overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#12082b] via-[#210e4a] to-[#0a1f24]" />
+          <div className="fluid-blob-1 absolute -top-24 -left-24 w-[520px] h-[520px] rounded-full opacity-90 mix-blend-screen pointer-events-none" style={{ background: 'radial-gradient(circle, #8beb3a 0%, #43ca55 45%, transparent 70%)', filter: 'blur(75px)' }} />
+          <div className="fluid-blob-2 absolute -bottom-32 -right-20 w-[600px] h-[600px] rounded-full opacity-95 mix-blend-screen pointer-events-none" style={{ background: 'radial-gradient(circle, #7a22cf 0%, #48118d 50%, transparent 75%)', filter: 'blur(80px)' }} />
+          <div className="fluid-blob-3 absolute top-1/3 left-1/4 w-[480px] h-[480px] rounded-full opacity-70 mix-blend-screen pointer-events-none" style={{ background: 'radial-gradient(circle, #299e74 0%, #1f5068 55%, transparent 75%)', filter: 'blur(90px)' }} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/30 pointer-events-none" />
         </div>
 
-        {/* RIGHT 40%: Form */}
         <div className="w-full md:w-[40%] flex flex-col justify-center px-12 lg:px-20 bg-white relative z-20">
            {isLoginSuccess ? (
               <div className="flex flex-col items-center justify-center animate-enter text-center">
@@ -814,30 +1105,29 @@ export default function DashboardApp() {
       <div className="fixed inset-0 z-[100] bg-[#0f172a] flex flex-col items-center justify-center p-6 font-sans">
         <div className="max-w-6xl w-full text-center">
           <h1 className="text-[clamp(2.5rem,5vw,4rem)] font-black text-white mb-4 tracking-tight">Welcome to All in One Dashboard</h1>
-          <p className="text-slate-400 mb-16 text-[clamp(1rem,1.5vw,1.25rem)] font-medium">Please select the first tracker you wish to launch. You can navigate between them at any time.</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
-            <button onClick={() => selectEngine('media')} className="bg-[#1e293b] p-10 rounded-3xl hover:bg-[#27354f] transition-all group">
-              <div className="w-16 h-16 bg-indigo-500 text-white rounded-2xl flex items-center justify-center mb-8"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></div>
-              <h2 className="text-2xl font-bold text-white mb-2">Digital Media</h2><p className="text-sm text-slate-400">Analyze full-funnel media metrics.</p>
+          <p className="text-slate-400 mb-16 text-[clamp(1rem,1.5vw,1.25rem)] font-medium">Please select the tracker you wish to launch. You can navigate between them at any time.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
+            <button onClick={() => selectEngine('media')} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group">
+              <div className="w-14 h-14 bg-indigo-500 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></div>
+              <h2 className="text-xl font-bold text-white mb-1">Digital Media</h2><p className="text-xs text-slate-400">Full-funnel media metrics.</p>
             </button>
-            <button onClick={() => selectEngine('commerce')} className="bg-[#1e293b] p-10 rounded-3xl hover:bg-[#27354f] transition-all group">
-              <div className="w-16 h-16 bg-emerald-500 text-white rounded-2xl flex items-center justify-center mb-8"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></div>
-              <h2 className="text-2xl font-bold text-white mb-2">Commerce Tracker</h2><p className="text-sm text-slate-400">Analyze revenue and ROAS.</p>
+            <button onClick={() => selectEngine('commerce')} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group">
+              <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></div>
+              <h2 className="text-xl font-bold text-white mb-1">Commerce Tracker</h2><p className="text-xs text-slate-400">Revenue and ROAS metrics.</p>
             </button>
-            <button onClick={() => selectEngine('creative')} className="bg-[#1e293b] p-10 rounded-3xl hover:bg-[#27354f] transition-all group">
-              <div className="w-16 h-16 bg-lime-500 text-white rounded-2xl flex items-center justify-center mb-8"><svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
-              <h2 className="text-2xl font-bold text-white mb-2">Top Creative</h2><p className="text-sm text-slate-400">Review winning creative assets, video metrics, and key insights.</p>
+            <button onClick={() => selectEngine('creative')} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group">
+              <div className="w-14 h-14 bg-lime-500 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
+              <h2 className="text-xl font-bold text-white mb-1">Top Creative</h2><p className="text-xs text-slate-400">Winning creative assets.</p>
+            </button>
+            <button onClick={() => selectEngine('signal')} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group border border-emerald-500/20">
+              <div className="w-14 h-14 bg-emerald-600 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg></div>
+              <h2 className="text-xl font-bold text-white mb-1">Media Signal</h2><p className="text-xs text-slate-400">TikTok Actual vs Plan.</p>
             </button>
           </div>
         </div>
       </div>
     );
   }
-
-  // --- DASHBOARD UI ---
-  const selectClass = "w-full bg-[#1e293b] border border-[#334155] text-slate-100 py-3 px-4 rounded-xl text-sm font-semibold shadow-inner outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none dropdown-arrow hover:border-[#475569] transition-colors";
-  const dateClass = "w-full bg-white border border-slate-200 text-slate-800 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-center";
-  const dateClassDark = "w-full bg-[#1e293b] border border-indigo-500/50 text-indigo-300 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer text-center";
 
   return (
     <div className={`w-full min-h-screen flex font-sans transition-colors duration-300 ${isDarkMode ? 'bg-[#0f172a] text-slate-100' : 'bg-[#f8fafc] text-slate-800'}`}>
@@ -847,132 +1137,25 @@ export default function DashboardApp() {
         ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #64748b; }
         
-        table {
-          border-collapse: separate !important;
-          border-spacing: 0 !important;
-        }
+        table { border-collapse: separate !important; border-spacing: 0 !important; }
+        thead th { position: sticky !important; top: 0 !important; z-index: 30 !important; background-color: #0f172a !important; }
+        thead th.sticky-col { position: sticky !important; top: 0 !important; left: 0px !important; z-index: 60 !important; background-color: #0f172a !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid #334155 !important; border-bottom: 2px solid #334155 !important; }
+        thead th.sticky-col-2 { position: sticky !important; top: 0 !important; left: 180px !important; z-index: 60 !important; background-color: #0f172a !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid #334155 !important; border-bottom: 2px solid #334155 !important; }
+        thead th.sticky-col-3 { position: sticky !important; top: 0 !important; left: 360px !important; z-index: 60 !important; background-color: #0f172a !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; border-right: 1px solid #334155 !important; border-bottom: 2px solid #334155 !important; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.3) !important; }
+        tbody td.sticky-col { position: sticky !important; left: 0px !important; z-index: 20 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important; }
+        tbody td.sticky-col-2 { position: sticky !important; left: 180px !important; z-index: 20 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important; }
+        tbody td.sticky-col-3 { position: sticky !important; left: 360px !important; z-index: 20 !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.08) !important; }
+        tr.group-start:not(:first-child) td { border-top: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important; }
+        tr.group-start td[rowspan] { border-bottom: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important; }
+        tr.group-end td { border-bottom: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important; }
 
-        /* Default Header: Sticky Top */
-        thead th {
-          position: sticky !important;
-          top: 0 !important;
-          z-index: 30 !important;
-          background-color: #0f172a !important;
-        }
-
-        /* Locked Top-Left Headers: Column 1, 2, 3 (Sticky BOTH Top and Left) */
-        thead th.sticky-col {
-          position: sticky !important;
-          top: 0 !important;
-          left: 0px !important;
-          z-index: 60 !important;
-          background-color: #0f172a !important;
-          width: 180px !important;
-          min-width: 180px !important;
-          max-width: 180px !important;
-          border-right: 1px solid #334155 !important;
-          border-bottom: 2px solid #334155 !important;
-        }
-
-        thead th.sticky-col-2 {
-          position: sticky !important;
-          top: 0 !important;
-          left: 180px !important;
-          z-index: 60 !important;
-          background-color: #0f172a !important;
-          width: 180px !important;
-          min-width: 180px !important;
-          max-width: 180px !important;
-          border-right: 1px solid #334155 !important;
-          border-bottom: 2px solid #334155 !important;
-        }
-
-        thead th.sticky-col-3 {
-          position: sticky !important;
-          top: 0 !important;
-          left: 360px !important;
-          z-index: 60 !important;
-          background-color: #0f172a !important;
-          width: 120px !important;
-          min-width: 120px !important;
-          max-width: 120px !important;
-          border-right: 1px solid #334155 !important;
-          border-bottom: 2px solid #334155 !important;
-          box-shadow: 4px 0 10px -3px rgba(0,0,0,0.3) !important;
-        }
-
-        /* Sticky Body Columns: Columns 1, 2, 3 */
-        tbody td.sticky-col {
-          position: sticky !important;
-          left: 0px !important;
-          z-index: 20 !important;
-          width: 180px !important;
-          min-width: 180px !important;
-          max-width: 180px !important;
-          border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important;
-        }
-
-        tbody td.sticky-col-2 {
-          position: sticky !important;
-          left: 180px !important;
-          z-index: 20 !important;
-          width: 180px !important;
-          min-width: 180px !important;
-          max-width: 180px !important;
-          border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important;
-        }
-
-        tbody td.sticky-col-3 {
-          position: sticky !important;
-          left: 360px !important;
-          z-index: 20 !important;
-          width: 120px !important;
-          min-width: 120px !important;
-          max-width: 120px !important;
-          border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important;
-          box-shadow: 4px 0 10px -3px rgba(0,0,0,0.08) !important;
-        }
-
-        /* Clean Separator Line Between Data Groups (Ad Types/Formats) */
-        tr.group-start:not(:first-child) td {
-          border-top: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important;
-        }
-        tr.group-start td[rowspan] {
-          border-bottom: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important;
-        }
-        tr.group-end td {
-          border-bottom: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important;
-        }
-        
-        .dropdown-arrow {
-          background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e");
-          background-position: right center;
-          background-repeat: no-repeat;
-          background-size: 1rem 1rem;
-        }
+        .dropdown-arrow { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e"); background-position: right center; background-repeat: no-repeat; background-size: 1rem 1rem; }
         select option { background-color: #0f172a; color: #f1f5f9; padding: 10px; }
-
-        input[type="date"]::-webkit-calendar-picker-indicator, input[type="month"]::-webkit-calendar-picker-indicator {
-          cursor: pointer; opacity: 0.6; transition: 0.2s;
-        }
-        input[type="date"]::-webkit-calendar-picker-indicator:hover, input[type="month"]::-webkit-calendar-picker-indicator:hover {
-          opacity: 1;
-        }
-
-        .spinner-large {
-          border: 4px solid rgba(132, 224, 37, 0.2);
-          border-top: 4px solid #84e025;
-          border-radius: 50%;
-          width: 48px;
-          height: 48px;
-          animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       `}} />
 
       {isLoading && (
         <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center">
-          <div className="spinner-large mb-4"></div>
+          <div className="w-12 h-12 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin mb-4"></div>
           <h3 className="font-bold text-white text-sm tracking-wide">Fetching Data...</h3>
         </div>
       )}
@@ -995,12 +1178,16 @@ export default function DashboardApp() {
           <button onClick={() => selectEngine('creative')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'creative' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Top Creative
           </button>
+          <button onClick={() => selectEngine('signal')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'signal' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>Media Signal
+          </button>
         </div>
 
         <div className="p-5 space-y-5 flex-1">
           <p className="px-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Global Filters</p>
           
-          {activeEngine !== 'creative' && (
+          {/* STANDARD DATE PICKER */}
+          {activeEngine !== 'creative' && activeEngine !== 'signal' && (
              <div className="bg-[#1e293b] p-4 rounded-2xl border border-[#334155] space-y-3 shadow-inner">
                 <div className="flex items-center justify-between mb-1">
                    <label className="text-xs font-bold text-slate-400">Date Range</label>
@@ -1019,6 +1206,18 @@ export default function DashboardApp() {
                   </div>
                 )}
              </div>
+          )}
+
+          {/* PERIOD FILTER FOR MEDIA SIGNAL */}
+          {activeEngine === 'signal' && (
+            <div className="space-y-4 px-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-2">Period Range</label>
+                <select value={selectedSignalPeriod} onChange={(e) => setSelectedSignalPeriod(e.target.value)} className={selectClass}>
+                  {signalPeriods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                </select>
+              </div>
+            </div>
           )}
 
           <div className="space-y-4 px-2">
@@ -1040,7 +1239,7 @@ export default function DashboardApp() {
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-2">Ad Type</label>
                 <select value={filters.adType} onChange={(e) => handleFilterChange('adType', e.target.value)} className={selectClass}>
-                  {getDependentOptions(activeEngine === 'commerce' ? CONFIG.commerce.colAdType : CONFIG.creative.colAdType, 'adType').map(o => <option key={o} value={o}>{o}</option>)}
+                  {getDependentOptions(CONFIG[activeEngine === 'commerce' ? 'commerce' : 'creative'].colAdType, 'adType').map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
             )}
@@ -1065,7 +1264,7 @@ export default function DashboardApp() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
             </button>
             <h1 className={`text-[clamp(1.5rem,3vw,2.25rem)] font-extrabold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-              {activeEngine === 'media' ? 'Digital Media' : activeEngine === 'commerce' ? 'Commerce Tracker' : 'Top Creative'}
+              {activeEngine === 'signal' ? 'TikTok Media Signal Tracker' : activeEngine === 'media' ? 'Digital Media' : activeEngine === 'commerce' ? 'Commerce Tracker' : 'Top Creative'}
             </h1>
           </div>
 
@@ -1319,6 +1518,148 @@ export default function DashboardApp() {
                  <button disabled={creativePage === Math.ceil(creativeData.length / CREATIVES_PER_PAGE)} onClick={() => { setCreativePage(p => p + 1); window.scrollTo(0, 0); }} className={`px-6 py-3 border rounded-xl font-bold text-sm shadow-sm transition-all disabled:opacity-40 ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>Next Page</button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* --- VIEW 4: MEDIA SIGNAL TRACKER --- */}
+        {activeEngine === 'signal' && signalCompiled && (
+          <div className="max-w-[1600px] mx-auto space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="bg-indigo-600 p-6 rounded-3xl text-white shadow-lg">
+                <p className="text-xs font-bold uppercase tracking-wider text-indigo-200 mb-1">Total Ad Spend</p>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-2xl font-black">{formatIDR(signalCompiled.actual?.totalSpend || 0)}</h3>
+                  {signalCompiled.prev && renderGR(signalCompiled.actual?.totalSpend || 0, signalCompiled.prev.totalSpend, true)}
+                </div>
+                <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
+                  <span>Plan: {formatIDR(signalCompiled.plan?.totalSpend || 0)}</span>
+                  <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.totalSpend || 0, signalCompiled.plan?.totalSpend || 0))}</span>
+                </div>
+                <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                  <div className="bg-emerald-300 h-full rounded-full transition-all" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.totalSpend || 0, signalCompiled.plan?.totalSpend || 0) * 100)}%` }}></div>
+                </div>
+              </div>
+
+              <div className="bg-slate-800 p-6 rounded-3xl text-white shadow-lg">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Total Impressions</p>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-2xl font-black">{formatNum(signalCompiled.actual?.impressions || 0)}</h3>
+                  {signalCompiled.prev && renderGR(signalCompiled.actual?.impressions || 0, signalCompiled.prev.impressions, false)}
+                </div>
+                <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
+                  <span>Plan: {formatNum(signalCompiled.plan?.impressions || 0)}</span>
+                  <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.impressions || 0, signalCompiled.plan?.impressions || 0))}</span>
+                </div>
+                <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                  <div className="bg-emerald-400 h-full rounded-full transition-all" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.impressions || 0, signalCompiled.plan?.impressions || 0) * 100)}%` }}></div>
+                </div>
+              </div>
+
+              <div className="bg-teal-700 p-6 rounded-3xl text-white shadow-lg">
+                <p className="text-xs font-bold uppercase tracking-wider text-teal-200 mb-1">Total Engagements</p>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-2xl font-black">{formatNum(signalCompiled.actual?.engagements || 0)}</h3>
+                  {signalCompiled.prev && renderGR(signalCompiled.actual?.engagements || 0, signalCompiled.prev.engagements, false)}
+                </div>
+                <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
+                  <span>Plan: {formatNum(signalCompiled.plan?.engagements || 0)}</span>
+                  <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.engagements || 0, signalCompiled.plan?.engagements || 0))}</span>
+                </div>
+                <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                  <div className="bg-emerald-300 h-full rounded-full transition-all" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.engagements || 0, signalCompiled.plan?.engagements || 0) * 100)}%` }}></div>
+                </div>
+              </div>
+
+              <div className="bg-emerald-600 p-6 rounded-3xl text-white shadow-lg">
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-200 mb-1">GMV Ads</p>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-2xl font-black">{formatIDR(signalCompiled.actual?.gmvAds || 0)}</h3>
+                  {signalCompiled.prev && renderGR(signalCompiled.actual?.gmvAds || 0, signalCompiled.prev.gmvAds, false)}
+                </div>
+                <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
+                  <span>Plan: {formatIDR(signalCompiled.plan?.gmvAds || 0)}</span>
+                  <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.gmvAds || 0, signalCompiled.plan?.gmvAds || 0))}</span>
+                </div>
+                <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                  <div className="bg-white h-full rounded-full transition-all" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.gmvAds || 0, signalCompiled.plan?.gmvAds || 0) * 100)}%` }}></div>
+                </div>
+              </div>
+            </div>
+
+            {/* PROGRESS & ACHIEVEMENT HIERARCHY TABLE */}
+            <div className={`p-8 rounded-3xl border shadow-sm ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-2">
+                <div>
+                  <h2 className="text-lg font-black tracking-tight">TikTok Media Signal Matrix (MTD Achievement & Growth)</h2>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">
+                    Viewing: {signalCompiled.currentPeriod.start} to {signalCompiled.currentPeriod.end} 
+                    {signalCompiled.prevPeriod ? ` (compared with ${signalCompiled.prevPeriod.start} to ${signalCompiled.prevPeriod.end})` : ''}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left text-sm whitespace-nowrap border-collapse">
+                  <thead>
+                    <tr className={`border-b text-xs font-black uppercase tracking-wider ${isDarkMode ? 'border-slate-700 text-slate-400 bg-slate-900/60' : 'border-slate-200 text-slate-500 bg-slate-100/60'}`}>
+                      <th className="py-3.5 px-4 text-left w-1/4 min-w-[220px]">Metrics</th>
+                      <th className="py-3.5 px-4 text-right w-36 min-w-[120px]">Actual (MTD)</th>
+                      <th className="py-3.5 px-4 text-right w-36 min-w-[120px]">Plan Target</th>
+                      <th className="py-3.5 px-6 text-center w-48 min-w-[160px]">Target Progress</th>
+                      <th className="py-3.5 px-4 text-right w-24 min-w-[90px]">% Ach</th>
+                      <th className="py-3.5 px-4 text-right w-36 min-w-[120px]">Prev Period</th>
+                      <th className="py-3.5 px-4 text-right w-32 min-w-[110px]">MoM Growth</th>
+                    </tr>
+                  </thead>
+                  <tbody className={`divide-y ${isDarkMode ? 'divide-slate-700/50' : 'divide-slate-100'}`}>
+                    {signalHierarchyGroups.map((group, gIdx) => (
+                      <React.Fragment key={gIdx}>
+                        <tr className={isDarkMode ? 'bg-slate-900/90' : 'bg-slate-100/80'}>
+                          <td colSpan={7} className="py-2.5 px-4 font-black uppercase text-xs tracking-wider text-indigo-400 border-t-2 border-slate-700/60">
+                            {group.category}
+                          </td>
+                        </tr>
+                        {group.rows.map((row, rIdx) => {
+                          const actVal = Number(row.act) || 0;
+                          const plnVal = Number(row.pln) || 0;
+                          const prvVal = Number(row.prv) || 0;
+                          const ach = signalCompiled.computeAch(actVal, plnVal);
+                          const pctWidth = Math.min(100, Math.max(0, ach * 100));
+
+                          return (
+                            <tr key={rIdx} className={`transition-colors ${isDarkMode ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'}`}>
+                              <td className="py-3 px-4 font-medium text-left">{row.name}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-emerald-400">{row.fmt(actVal)}</td>
+                              <td className="py-3 px-4 text-right font-mono text-slate-400">{plnVal > 0 ? row.fmt(plnVal) : '-'}</td>
+                              <td className="py-3 px-6 text-center">
+                                {plnVal > 0 ? (
+                                  <div className={`w-full h-2 rounded-full overflow-hidden p-0.5 ${isDarkMode ? 'bg-slate-700/60' : 'bg-slate-200'}`}>
+                                    <div className={`h-full rounded-full transition-all ${ach >= 1 ? 'bg-emerald-400' : 'bg-indigo-500'}`} style={{ width: `${pctWidth}%` }}></div>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] text-slate-500 italic block text-center">No Target</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-right font-mono font-bold">
+                                {plnVal > 0 ? (
+                                  <span className={`px-2 py-0.5 rounded text-xs ${ach >= 1 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-700/40 text-slate-300'}`}>
+                                    {formatPct(ach)}
+                                  </span>
+                                ) : '-'}
+                              </td>
+                              <td className="py-3 px-4 text-right font-mono text-slate-400">{signalCompiled.prevPeriod ? row.fmt(prvVal) : '-'}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold">
+                                {signalCompiled.prevPeriod ? renderGR(actVal, prvVal, row.isInv) : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
 
