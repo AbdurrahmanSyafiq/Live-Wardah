@@ -6,11 +6,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { action, sheetName, username, password } = body;
 
-    // --- 1. SECURE BACKEND LOGIN (Menggantikan verifyLogin) ---
+    // --- 1. SECURE BACKEND LOGIN (Menggunakan Environment Variables) ---
     if (action === 'login') {
-      const validUser = "admin";
-      const validPass = "admin123";
-      
+      const validUser = process.env.ADMIN_USERNAME || "admin";
+      const validPass = process.env.ADMIN_PASSWORD || "admin123";
+      console.log("DEBUG LOGIN - Masuk:", { username, sentPassLength: password?.length });
+      console.log("DEBUG LOGIN - Target Env:", { validUser, hasPass: !!process.env.ADMIN_PASSWORD });
       if (username === validUser && password === validPass) {
         return NextResponse.json({ success: true });
       } else {
@@ -18,8 +19,14 @@ export async function POST(request: Request) {
       }
     }
 
-    // --- 2. DATA ENGINE (Menggantikan getDashboardData) ---
+    // --- 2. DATA ENGINE ---
     if (action === 'getData') {
+      const allowedSheets = ["Media API", "Commerce", "Creative Raw", "Media Signal"];
+      
+      if (!allowedSheets.includes(sheetName)) {
+        return NextResponse.json({ error: `Unauthorized or invalid sheet name: ${sheetName}` }, { status: 400 });
+      }
+
       const auth = new google.auth.GoogleAuth({
         credentials: {
           client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -30,9 +37,8 @@ export async function POST(request: Request) {
 
       const sheets = google.sheets({ version: 'v4', auth });
       const response = await sheets.spreadsheets.values.get({
-        // Pastikan SPREADSHEET_ID Anda ('1SmrFm...') ada di dalam file .env.local
         spreadsheetId: process.env.SPREADSHEET_ID, 
-        range: `${sheetName}!A1:Z`,
+        range: `${sheetName}!A1:ZZ`, // Membaca sampai kolom ZZ agar tidak terpotong
       });
 
       const data = response.data.values;
@@ -40,12 +46,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: `Not enough data in sheet: ${sheetName}` }, { status: 400 });
       }
 
-      // Mengubah format Array menjadi Array of Objects (seperti di code.gs)
+      // Mengubah format Array menjadi Array of Objects
       const headers = data[0].map(h => String(h).trim());
       const formattedData = data.slice(1).map(row => {
-        let obj: any = {};
+        let obj: Record<string, any> = {};
         headers.forEach((header, index) => {
-          obj[header] = row[index] || "";
+          obj[header] = row[index] !== undefined ? row[index] : "";
         });
         return obj;
       });
