@@ -16,9 +16,10 @@ const dateClass = "w-full bg-white border border-slate-200 text-slate-800 py-2.5
 const dateClassDark = "w-full bg-[#1e293b] border border-indigo-500/50 text-indigo-300 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer text-center";
 
 export default function DashboardApp() {
-  const [currentView, setCurrentView] = useState<'login' | 'welcome' | 'dashboard'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'welcome' | 'home' | 'dashboard'>('login');
   const [activeEngine, setActiveEngine] = useState<'media' | 'commerce' | 'creative' | 'signal' | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isLoginSuccess, setIsLoginSuccess] = useState(false);
@@ -27,6 +28,8 @@ export default function DashboardApp() {
   const dataCache = useRef<Record<string, any[]>>({});
   const [rawData, setRawData] = useState<any[]>([]);
   const [extraSheetsData, setExtraSheetsData] = useState<{ mediaApi: any[]; commerce: any[] }>({ mediaApi: [], commerce: [] });
+  const [homeMediaData, setHomeMediaData] = useState<any[]>([]);
+  const [homeCommerceData, setHomeCommerceData] = useState<any[]>([]);
   
   const [filters, setFilters] = useState({ brand: 'All', funnel: 'All', platform: 'All', adType: 'All', format: 'All', period: 'All' });
   const [selectedSignalPeriod, setSelectedSignalPeriod] = useState<string>('');
@@ -35,6 +38,8 @@ export default function DashboardApp() {
   const [dateWeekly, setDateWeekly] = useState('');
   const [dateDailyStart, setDateDailyStart] = useState('');
   const [dateDailyEnd, setDateDailyEnd] = useState('');
+  const [homeBrand, setHomeBrand] = useState('All');
+  const [homePeriod, setHomePeriod] = useState('');
 
   const [tableColFilter1, setTableColFilter1] = useState('All');
   const [tableColFilter2, setTableColFilter2] = useState('All');
@@ -49,7 +54,13 @@ export default function DashboardApp() {
   const chartInstance = useRef<Chart | null>(null);
 
   useEffect(() => {
-    Chart.defaults.font.family = "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+    Chart.defaults.font.family = "'Nunito Sans', sans-serif";
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   useEffect(() => {
@@ -60,6 +71,7 @@ export default function DashboardApp() {
     const start_yyyy_mm_dd = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
     
     setDateMonth(yyyy_mm); setDateWeekly(yyyy_mm_dd); setDateDailyStart(start_yyyy_mm_dd); setDateDailyEnd(yyyy_mm_dd);
+    setHomePeriod(yyyy_mm);
   }, []);
 
   const parseNum = (val: any) => {
@@ -196,7 +208,53 @@ export default function DashboardApp() {
     setActiveEngine(engine); setCurrentView('dashboard'); loadData(engine);
   };
 
+  const loadHomeData = async (forceSync = false) => {
+    setIsLoading(true);
+    try {
+      if (forceSync) {
+        dataCache.current['Media API'] = undefined as any;
+        dataCache.current['Commerce'] = undefined as any;
+      }
+
+      const fetchSheet = async (sheetName: string) => {
+        if (!forceSync && dataCache.current[sheetName]) return dataCache.current[sheetName];
+        const res = await fetch('/api/sheets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'getData', sheetName })
+        });
+        const result = await res.json();
+        if (result.success) {
+          dataCache.current[sheetName] = result.data;
+          return result.data;
+        }
+        return [];
+      };
+
+      const [mediaData, commerceData] = await Promise.all([fetchSheet('Media API'), fetchSheet('Commerce')]);
+      setHomeMediaData(mediaData);
+      setHomeCommerceData(commerceData);
+    } catch (err) {
+      alert('Network error loading Home data.');
+    }
+    setIsLoading(false);
+  };
+
+  const selectHome = (forceSync = false) => {
+    setActiveEngine(null);
+    setCurrentView('home');
+    loadHomeData(forceSync);
+  };
+
   const handleFilterChange = (key: string, value: string) => { setFilters(prev => ({ ...prev, [key]: value })); setCreativePage(1); };
+
+  const toggleFullscreen = async () => {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await document.documentElement.requestFullscreen();
+    }
+  };
 
   const getDependentOptions = (colName: string, filterKeyToExclude: string) => {
     if (!rawData || rawData.length === 0) return ['All'];
@@ -630,6 +688,89 @@ export default function DashboardApp() {
     };
   }, [curData, prevData, activeEngine]);
 
+  const homeBrandOptions = useMemo(() => {
+    const brands = new Set<string>();
+    homeMediaData.forEach(row => { const brand = String(row['Brand'] || '').trim(); if (brand) brands.add(brand); });
+    homeCommerceData.forEach(row => { const brand = String(row['Brand fx'] || '').trim(); if (brand) brands.add(brand); });
+    return ['All', ...Array.from(brands).sort()];
+  }, [homeMediaData, homeCommerceData]);
+
+  const homeSummary = useMemo(() => {
+    const [year, month] = (homePeriod || '').split('-').map(Number);
+    if (!year || !month) return null;
+
+    const periodStart = new Date(year, month - 1, 1);
+    const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
+    const previousStart = new Date(year, month - 2, 1);
+    const previousEnd = new Date(year, month - 1, 0, 23, 59, 59, 999);
+    const normalizeDate = (value: any) => {
+      const date = parseSheetDate(value);
+      if (!date || isNaN(date.getTime())) return null;
+      date.setHours(0, 0, 0, 0);
+      return date;
+    };
+    const inPeriod = (date: Date | null, start: Date, end: Date) => Boolean(date && date >= start && date <= end);
+    const matchesBrand = (value: any) => homeBrand === 'All' || String(value || '').trim() === homeBrand;
+    const mediaRows = homeMediaData.filter(row => matchesBrand(row['Brand']));
+    const commerceRows = homeCommerceData.filter(row => matchesBrand(row['Brand fx']));
+    const currentMedia = mediaRows.filter(row => inPeriod(normalizeDate(row['Date']), periodStart, periodEnd));
+    const previousMedia = mediaRows.filter(row => inPeriod(normalizeDate(row['Date']), previousStart, previousEnd));
+    const currentCommerce = commerceRows.filter(row => inPeriod(normalizeDate(row['Date']), periodStart, periodEnd));
+    const previousCommerce = commerceRows.filter(row => inPeriod(normalizeDate(row['Date']), previousStart, previousEnd));
+
+    const sum = (rows: any[], field: string) => rows.reduce((total, row) => total + parseNum(row[field]), 0);
+    const mediaMetrics = (rows: any[]) => {
+      const spend = sum(rows, 'Ad Spend');
+      const impressions = sum(rows, 'Impressions');
+      const clicks = sum(rows, 'Combined Clicks');
+      const views = sum(rows, 'Views') + sum(rows, 'Views 6s');
+      return { spend, impressions, clicks, views, ctr: impressions ? clicks / impressions : 0, vtr: impressions ? views / impressions : 0 };
+    };
+    const commerceMetrics = (rows: any[]) => {
+      const expense = sum(rows, 'Expense');
+      const gmv = sum(rows, 'GMV');
+      const orders = sum(rows, 'Orders');
+      return { expense, gmv, orders, roas: expense ? gmv / expense : 0 };
+    };
+    const groupSum = (rows: any[], key: string, value: string) => {
+      const grouped = new Map<string, number>();
+      rows.forEach(row => {
+        const label = String(row[key] || 'Unspecified').trim() || 'Unspecified';
+        grouped.set(label, (grouped.get(label) || 0) + parseNum(row[value]));
+      });
+      return Array.from(grouped, ([label, total]) => ({ label, total })).sort((a, b) => b.total - a.total);
+    };
+    const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const trend = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(year, month - 1 - (5 - index), 1);
+      const start = new Date(date.getFullYear(), date.getMonth(), 1);
+      const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+      const media = mediaMetrics(mediaRows.filter(row => inPeriod(normalizeDate(row['Date']), start, end)));
+      const commerce = commerceMetrics(commerceRows.filter(row => inPeriod(normalizeDate(row['Date']), start, end)));
+      return { key: monthKey(date), label: date.toLocaleString('en-GB', { month: 'short' }), mediaSpend: media.spend, commerceGmv: commerce.gmv };
+    });
+    const current = { media: mediaMetrics(currentMedia), commerce: commerceMetrics(currentCommerce) };
+    const previous = { media: mediaMetrics(previousMedia), commerce: commerceMetrics(previousCommerce) };
+    const maxOf = (items: { total: number }[]) => Math.max(...items.map(item => item.total), 1);
+    const platformMix = groupSum(currentMedia, 'Platform', 'Ad Spend').concat(groupSum(currentCommerce, 'Platform', 'Expense'));
+    const platformTotals = Array.from(platformMix.reduce((map, item) => map.set(item.label, (map.get(item.label) || 0) + item.total), new Map<string, number>()), ([label, total]) => ({ label, total })).sort((a, b) => b.total - a.total);
+    return {
+      current,
+      previous,
+      trend,
+      funnelMix: groupSum(currentMedia, 'Funnel', 'Ad Spend').slice(0, 6),
+      formatMix: groupSum(currentMedia, 'Format', 'Ad Spend').slice(0, 6),
+      platformMix: platformTotals.slice(0, 6),
+      channelMix: [
+        { label: 'Media spend', total: current.media.spend },
+        { label: 'Commerce expense', total: current.commerce.expense },
+        { label: 'Commerce GMV', total: current.commerce.gmv }
+      ],
+      maxOf,
+      periodLabel: periodStart.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+    };
+  }, [homeMediaData, homeCommerceData, homeBrand, homePeriod]);
+
   const renderGR = (cur: number, prev: number, isInv = false) => {
     if (prev === 0 && cur === 0) return <span className="text-[10px] ml-2 font-bold opacity-40">-</span>;
     const gr = getGr(cur, prev);
@@ -1054,7 +1195,7 @@ export default function DashboardApp() {
                  <p className="text-slate-500 font-medium">Loading workspace...</p>
               </div>
            ) : (
-              <div className="w-full max-w-sm animate-enter">
+              <div className="w-full max-w-sm mx-auto animate-enter">
                 <h2 className="text-[clamp(2rem,3vw,3rem)] font-black text-slate-900 tracking-tight mb-2">Welcome Back</h2>
                 <p className="text-sm text-slate-500 font-medium mb-12">Enter your credentials to continue.</p>
                 
@@ -1083,11 +1224,15 @@ export default function DashboardApp() {
 
   if (currentView === 'welcome') {
     return (
-      <div className="fixed inset-0 z-[100] bg-[#0f172a] flex flex-col items-center justify-center p-6 font-sans">
+      <div className="welcome-screen fixed inset-0 z-[100] bg-[#0f172a] flex flex-col items-center justify-center p-6 font-sans">
         <div className="max-w-6xl w-full text-center">
           <h1 className="text-[clamp(2.5rem,5vw,4rem)] font-black text-white mb-4 tracking-tight">Welcome to All in One Dashboard</h1>
           <p className="text-slate-400 mb-16 text-[clamp(1rem,1.5vw,1.25rem)] font-medium">Please select the tracker you wish to launch. You can navigate between them at any time.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
+            <button onClick={() => selectHome()} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group border border-indigo-500/20">
+              <div className="w-14 h-14 mx-auto bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12h18M3 6h18M3 18h18"></path></svg></div>
+              <h2 className="text-xl font-bold text-white mb-1">General Overview</h2><p className="text-xs text-slate-400">Cross-channel performance summary.</p>
+            </button>
             <button onClick={() => selectEngine('media')} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group">
               <div className="w-14 h-14 bg-indigo-500 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></div>
               <h2 className="text-xl font-bold text-white mb-1">Digital Media</h2><p className="text-xs text-slate-400">Full-funnel media metrics.</p>
@@ -1111,7 +1256,7 @@ export default function DashboardApp() {
   }
 
   return (
-    <div className={`w-full min-h-screen flex font-sans transition-colors duration-300 ${isDarkMode ? 'bg-[#0f172a] text-slate-100' : 'bg-[#f8fafc] text-slate-800'}`}>
+    <div className={`dashboard-shell dashboard-enter w-full min-h-screen flex font-sans transition-colors duration-300 ${isDarkMode ? 'bg-[#0f172a] text-slate-100' : 'bg-[#e7e7ef] text-slate-800'}`}>
       <style dangerouslySetInnerHTML={{__html: `
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -1129,6 +1274,11 @@ export default function DashboardApp() {
         tr.group-start:not(:first-child) td { border-top: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important; }
         tr.group-start td[rowspan] { border-bottom: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important; }
         tr.group-end td { border-bottom: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important; }
+
+        .dashboard-shell .rounded-3xl { border-radius: 0.75rem !important; }
+        .dashboard-shell .rounded-\[2rem\] { border-radius: 0.75rem !important; }
+        @keyframes dashboardEnter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .dashboard-enter { animation: dashboardEnter 0.35s ease-out both; }
 
         .dropdown-arrow { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e"); background-position: right center; background-repeat: no-repeat; background-size: 1rem 1rem; }
         select option { background-color: #0f172a; color: #f1f5f9; padding: 10px; }
@@ -1150,6 +1300,9 @@ export default function DashboardApp() {
         
         <div className="pt-6 pb-4 px-5 space-y-1.5 border-b border-[#1e293b]">
           <p className="px-3 text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Workspaces</p>
+          <button onClick={() => selectHome()} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${currentView === 'home' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l9-9 9 9M5 10v10h14V10M9 20v-6h6v6"></path></svg>General Overview
+          </button>
           <button onClick={() => selectEngine('media')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'media' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>Digital Media
           </button>
@@ -1168,7 +1321,7 @@ export default function DashboardApp() {
           <p className="px-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Global Filters</p>
           
           {/* STANDARD DATE PICKER */}
-          {activeEngine !== 'creative' && activeEngine !== 'signal' && (
+          {currentView !== 'home' && activeEngine !== 'creative' && activeEngine !== 'signal' && (
              <div className="bg-[#1e293b] p-4 rounded-2xl border border-[#334155] space-y-3 shadow-inner">
                 <div className="flex items-center justify-between mb-1">
                    <label className="text-xs font-bold text-slate-400">Date Range</label>
@@ -1187,6 +1340,17 @@ export default function DashboardApp() {
                   </div>
                 )}
              </div>
+          )}
+
+          {currentView === 'home' && (
+            <div className="bg-[#1e293b] p-4 rounded-2xl border border-[#334155] space-y-3 shadow-inner">
+              <label className="block text-xs font-bold text-slate-400">Home Filters</label>
+              <select value={homeBrand} onChange={(e) => setHomeBrand(e.target.value)} className={selectClass}>
+                {homeBrandOptions.map(brand => <option key={brand} value={brand}>{brand}</option>)}
+              </select>
+              <input type="month" value={homePeriod} onChange={(e) => setHomePeriod(e.target.value)} className={isDarkMode ? dateClassDark : dateClass} />
+              <button onClick={() => loadHomeData(true)} className="w-full bg-slate-800 hover:bg-indigo-600 text-white font-bold py-2.5 rounded-xl border border-slate-700 hover:border-indigo-500 transition-all text-xs">Sync Home Data</button>
+            </div>
           )}
 
           {/* PERIOD FILTER FOR MEDIA SIGNAL */}
@@ -1238,27 +1402,76 @@ export default function DashboardApp() {
         </div>
       </aside>
 
-      <main className="flex-1 p-4 sm:p-6 lg:p-10 h-screen overflow-y-auto w-full transition-all duration-300 relative">
-        <div className="flex items-center justify-between mb-8 sm:mb-10">
-          <div className="flex items-center">
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className={`mr-4 p-2.5 rounded-xl shadow-sm border transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-600'}`}>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-            </button>
-            <h1 className={`text-[clamp(1.5rem,3vw,2.25rem)] font-extrabold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-              {activeEngine === 'signal' ? 'TikTok Media Signal Tracker' : activeEngine === 'media' ? 'Digital Media' : activeEngine === 'commerce' ? 'Commerce Tracker' : 'Top Creative'}
+      <main className="flex-1 p-3 sm:p-4 lg:p-6 h-screen overflow-y-auto w-full transition-all duration-300 relative">
+        <div className="flex items-start justify-between mb-5 sm:mb-6">
+          <div className="flex flex-col items-start gap-3">
+            <div className="flex items-center gap-3">
+              <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} aria-label="Toggle sidebar" className={`p-2.5 rounded-xl shadow-sm border transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-600'}`}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+              </button>
+            </div>
+            <h1 className={`text-[clamp(1.25rem,2.5vw,1.875rem)] font-extrabold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+              {currentView === 'home' ? 'General Overview' : activeEngine === 'signal' ? 'TikTok Media Signal Tracker' : activeEngine === 'media' ? 'Digital Media' : activeEngine === 'commerce' ? 'Commerce Tracker' : 'Top Creative'}
             </h1>
           </div>
 
-          <button onClick={() => setIsDarkMode(!isDarkMode)} className={`px-4 py-2.5 rounded-full text-xs font-black uppercase tracking-widest border transition-all shadow-sm flex items-center gap-2 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
-            {isDarkMode ? '☀️ Light' : '🌙 Dark'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className={`p-2.5 rounded-xl shadow-sm border transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-600'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={isFullscreen ? 'M9 3v6H3m12-6v6h6M9 21v-6H3m12 6v-6h6' : 'M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 15v3a2 2 0 0 0 2 2h3'}></path></svg>
+            </button>
+            <button onClick={() => setIsDarkMode(!isDarkMode)} aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'} className={`px-4 py-2.5 rounded-full text-xs font-black uppercase tracking-widest border transition-all shadow-sm flex items-center gap-2 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
+              {isDarkMode ? '☀️ Light' : '🌙 Dark'}
+            </button>
+          </div>
         </div>
+
+        {currentView === 'home' && homeSummary && (() => {
+          const platformTotal = homeSummary.platformMix.reduce((total, item) => total + item.total, 0) || 1;
+          let offset = 0;
+          const platformGradient = homeSummary.platformMix.map((item, index) => {
+            const colors = ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16'];
+            const start = offset;
+            offset += (item.total / platformTotal) * 100;
+            return `${colors[index % colors.length]} ${start}% ${offset}%`;
+          }).join(', ');
+          const growth = (current: number, previous: number) => previous === 0 ? '-' : `${getGr(current, previous) >= 0 ? '+' : ''}${formatPct(getGr(current, previous))}`;
+          const metricCard = (label: string, value: string, change: string, accent: string) => (
+            <div className={`bg-white border border-slate-200 p-5 shadow-sm rounded-2xl`}>
+              <div className="flex items-center justify-between mb-4"><span className="text-xs font-bold uppercase tracking-widest text-slate-500">{label}</span><span className={`w-2.5 h-2.5 rounded-full ${accent}`}></span></div>
+              <div className="flex items-end justify-between gap-3"><strong className="text-2xl font-black text-slate-900 tracking-tight">{value}</strong><span className={`text-xs font-bold ${change.startsWith('+') ? 'text-emerald-600' : change === '-' ? 'text-slate-400' : 'text-rose-500'}`}>{change}</span></div>
+            </div>
+          );
+          const mixBars = (items: { label: string; total: number }[], colors: string[]) => (
+            <div className="space-y-3">{items.length === 0 ? <p className="text-sm text-slate-400">No data for this period.</p> : items.map((item, index) => (
+              <div key={item.label}>
+                <div className="flex justify-between text-xs font-bold text-slate-600 mb-1"><span className="truncate pr-3">{item.label}</span><span>{formatIDR(item.total)}</span></div>
+                <div className="h-2 rounded-full bg-slate-100 overflow-hidden"><div className={`h-full rounded-full ${colors[index % colors.length]}`} style={{ width: `${Math.max(3, (item.total / homeSummary.maxOf(items)) * 100)}%` }}></div></div>
+              </div>
+            ))}</div>
+          );
+          return (
+            <div className="max-w-[1600px] mx-auto space-y-5">
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-widest text-indigo-600 mb-1">Performance snapshot</p><p className="text-sm text-slate-500 font-medium">{homeSummary.periodLabel} across paid media and commerce channels</p></div></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                {metricCard('Media spend', formatIDR(homeSummary.current.media.spend), growth(homeSummary.current.media.spend, homeSummary.previous.media.spend), 'bg-indigo-500')}
+                {metricCard('Impressions', formatNum(homeSummary.current.media.impressions), growth(homeSummary.current.media.impressions, homeSummary.previous.media.impressions), 'bg-cyan-500')}
+                {metricCard('Commerce GMV', formatIDR(homeSummary.current.commerce.gmv), growth(homeSummary.current.commerce.gmv, homeSummary.previous.commerce.gmv), 'bg-emerald-500')}
+                {metricCard('Orders', formatNum(homeSummary.current.commerce.orders), growth(homeSummary.current.commerce.orders, homeSummary.previous.commerce.orders), 'bg-amber-500')}
+              </div>
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+                <div className="xl:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><div className="flex items-center justify-between mb-5"><div><h2 className="text-base font-black text-slate-900">Six-month momentum</h2><p className="text-xs text-slate-500 mt-1">Media spend and commerce GMV</p></div><span className="text-xs font-bold text-slate-400">Monthly</span></div><div className="h-52 flex items-end gap-3 sm:gap-5 border-b border-slate-100 px-2">{homeSummary.trend.map(item => { const max = Math.max(...homeSummary.trend.map(point => Math.max(point.mediaSpend, point.commerceGmv)), 1); return <div key={item.key} className="flex-1 h-full flex items-end justify-center gap-1.5" title={`${item.label}: Media ${formatIDR(item.mediaSpend)} | GMV ${formatIDR(item.commerceGmv)}`}><div className="w-1/2 bg-indigo-500 rounded-t-md" style={{ height: `${Math.max(4, item.mediaSpend / max * 100)}%` }}></div><div className="w-1/2 bg-emerald-400 rounded-t-md" style={{ height: `${Math.max(4, item.commerceGmv / max * 100)}%` }}></div></div>; })}</div><div className="flex justify-between px-2 pt-2 text-[10px] font-bold text-slate-400">{homeSummary.trend.map(item => <span key={item.key}>{item.label}</span>)}</div><div className="flex gap-4 mt-4 text-[10px] font-bold text-slate-500"><span><i className="inline-block w-2 h-2 rounded-full bg-indigo-500 mr-1"></i>Media spend</span><span><i className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1"></i>Commerce GMV</span></div></div>
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><h2 className="text-base font-black text-slate-900 mb-1">Platform mix</h2><p className="text-xs text-slate-500 mb-4">Investment and commerce activity</p><div className="flex items-center gap-5"><div className="w-40 h-40 rounded-full shrink-0" style={{ background: `conic-gradient(${platformGradient || '#e2e8f0 0 100%'})` }}><div className="w-24 h-24 mt-8 ml-8 rounded-full bg-white flex items-center justify-center text-center"><span className="text-[10px] font-black text-slate-500">MIX</span></div></div><div className="space-y-2 min-w-0">{homeSummary.platformMix.map((item, index) => { const colors = ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16']; return <div key={item.label} className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[index % colors.length] }}></span><span className="truncate text-slate-600">{item.label}</span><strong className="ml-auto text-slate-900">{formatIDR(item.total)}</strong></div>; })}</div></div></div>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><h2 className="text-base font-black text-slate-900 mb-1">Funnel mix</h2><p className="text-xs text-slate-500 mb-4">Media spend by funnel stage</p>{mixBars(homeSummary.funnelMix, ['bg-indigo-500','bg-cyan-500','bg-emerald-500','bg-amber-400'])}</div><div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><h2 className="text-base font-black text-slate-900 mb-1">Format mix</h2><p className="text-xs text-slate-500 mb-4">Creative investment by format</p>{mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}</div><div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><h2 className="text-base font-black text-slate-900 mb-1">Channel health</h2><p className="text-xs text-slate-500 mb-4">Core media efficiency metrics</p><div className="grid grid-cols-2 gap-3"><div className="bg-slate-50 rounded-xl p-3"><span className="text-[10px] font-bold text-slate-500">CTR</span><strong className="block text-lg text-slate-900 mt-1">{formatPct(homeSummary.current.media.ctr)}</strong></div><div className="bg-slate-50 rounded-xl p-3"><span className="text-[10px] font-bold text-slate-500">VTR</span><strong className="block text-lg text-slate-900 mt-1">{formatPct(homeSummary.current.media.vtr)}</strong></div><div className="bg-slate-50 rounded-xl p-3"><span className="text-[10px] font-bold text-slate-500">ROAS</span><strong className="block text-lg text-slate-900 mt-1">{homeSummary.current.commerce.roas.toFixed(2)}x</strong></div><div className="bg-slate-50 rounded-xl p-3"><span className="text-[10px] font-bold text-slate-500">Clicks</span><strong className="block text-lg text-slate-900 mt-1">{formatNum(homeSummary.current.media.clicks)}</strong></div></div></div></div>
+            </div>
+          );
+        })()}
 
         {/* --- VIEW 1: MEDIA TRACKER --- */}
         {activeEngine === 'media' && (
           <div className="max-w-[1600px] mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-8 mb-10">
-               <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-6 lg:p-8 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
+              <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Media</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg></div></div>
                   <div className="space-y-4">
                      <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.overall.spend)}</span>{renderGR(mediaKPIs.overall.spend, mediaKPIs.overall.pSpend, true)}</div></div>
@@ -1266,7 +1479,7 @@ export default function DashboardApp() {
                      <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.overall.engage)}</span>{renderGR(mediaKPIs.overall.engage, mediaKPIs.overall.pEngage, false)}</div></div>
                   </div>
                </div>
-               <div onClick={() => setDashboardContext('Meta')} className={`bg-blue-500 rounded-3xl p-6 lg:p-8 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Meta' ? 'ring-4 ring-blue-300 shadow-blue-500/40' : ''}`}>
+               <div onClick={() => setDashboardContext('Meta')} className={`bg-blue-500 rounded-3xl p-5 lg:p-6 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Meta' ? 'ring-4 ring-blue-300 shadow-blue-500/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-blue-100 uppercase tracking-widest">Meta</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg></div></div>
                   <div className="space-y-4">
                      <div className="flex justify-between items-end border-b border-blue-400 pb-3"><span className="text-xs font-bold text-blue-100">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.meta.spend)}</span>{renderGR(mediaKPIs.meta.spend, mediaKPIs.meta.pSpend, true)}</div></div>
@@ -1274,7 +1487,7 @@ export default function DashboardApp() {
                      <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-blue-100">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.meta.engage)}</span>{renderGR(mediaKPIs.meta.engage, mediaKPIs.meta.pEngage, false)}</div></div>
                   </div>
                </div>
-               <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-6 lg:p-8 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
+               <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
                   <div className="space-y-4">
                      <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.tiktok.spend)}</span>{renderGR(mediaKPIs.tiktok.spend, mediaKPIs.tiktok.pSpend, true)}</div></div>
@@ -1284,10 +1497,10 @@ export default function DashboardApp() {
                </div>
             </div>
             
-            <div className={`p-6 sm:p-8 lg:p-10 rounded-3xl border shadow-sm mb-10 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}>
-               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-10 gap-6">
+            <div className={`p-5 sm:p-6 lg:p-7 rounded-3xl border shadow-sm mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}>
+              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-7 gap-4">
                  <div>
-                    <h2 className="text-[clamp(1.25rem,2vw,1.75rem)] font-black tracking-tight" id="chartTitleMedia">{dashboardContext} Historical Trend</h2>
+                    <h2 className="text-[clamp(1.1rem,1.8vw,1.5rem)] font-black tracking-tight" id="chartTitleMedia">{dashboardContext} Historical Trend</h2>
                     <p className={`text-sm font-semibold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                        {granularity === 'monthly' ? 'Displaying data for the past 3 months' : granularity === 'weekly' ? 'MTD Comparison Analytics' : 'Interactive Multi-Metric Analytics'}
                     </p>
@@ -1308,8 +1521,8 @@ export default function DashboardApp() {
                <div className="w-full h-[380px]"><canvas ref={chartRef}></canvas></div>
             </div>
 
-            <div className={`rounded-3xl border shadow-sm overflow-hidden mb-10 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
-               <div className={`p-6 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
+            <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+              <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
                  <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Pivot Analysis Table</h2>
                  
                  <div className="flex flex-wrap gap-3 w-full md:w-auto">
@@ -1336,8 +1549,8 @@ export default function DashboardApp() {
         {/* --- VIEW 2: COMMERCE TRACKER --- */}
         {activeEngine === 'commerce' && (
           <div className="max-w-[1600px] mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 lg:gap-8 mb-10">
-               <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-6 lg:p-8 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
+              <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Commerce</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg></div></div>
                   <div className="space-y-4">
                      <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.exp)}</span>{renderGR(commerceKPIs.overall.exp, commerceKPIs.overall.pExp, true)}</div></div>
@@ -1345,7 +1558,7 @@ export default function DashboardApp() {
                      <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-300 leading-none">{commerceKPIs.overall.roas}</span>{renderGR(commerceKPIs.overall.roasNum, commerceKPIs.overall.pRoasNum, false)}</div></div>
                   </div>
                </div>
-               <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-6 lg:p-8 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
+               <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok Shop</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
                   <div className="space-y-4">
                      <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.exp)}</span>{renderGR(commerceKPIs.tiktok.exp, commerceKPIs.tiktok.pExp, true)}</div></div>
@@ -1353,7 +1566,7 @@ export default function DashboardApp() {
                      <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-400 leading-none">{commerceKPIs.tiktok.roas}</span>{renderGR(commerceKPIs.tiktok.roasNum, commerceKPIs.tiktok.pRoasNum, false)}</div></div>
                   </div>
                </div>
-               <div onClick={() => setDashboardContext('Shopee')} className={`bg-orange-500 rounded-3xl p-6 lg:p-8 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Shopee' ? 'ring-4 ring-orange-300 shadow-orange-500/40' : ''}`}>
+               <div onClick={() => setDashboardContext('Shopee')} className={`bg-orange-500 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Shopee' ? 'ring-4 ring-orange-300 shadow-orange-500/40' : ''}`}>
                   <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-orange-100 uppercase tracking-widest">Shopee</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 109.59 122.88" fill="currentColor"><path d="M74.98,91.98C76.15,82.36,69.96,76.22,53.6,71c-7.92-2.7-11.66-6.24-11.57-11.12 c0.33-5.4,5.36-9.34,12.04-9.47c4.63,0.09,9.77,1.22,14.76,4.56c0.59,0.37,1.01,0.32,1.35-0.2c0.46-0.74,1.61-2.53,2-3.17 c0.26-0.42,0.31-0.96-0.35-1.44c-0.95-0.7-3.6-2.13-5.03-2.72c-3.88-1.62-8.23-2.64-12.86-2.63c-9.77,0.04-17.47,6.22-18.12,14.47 c-0.42,5.95,2.53,10.79,8.86,14.47c1.34,0.78,8.6,3.67,11.49,4.57c9.08,2.83,13.8,7.9,12.69,13.81c-1.01,5.36-6.65,8.83-14.43,8.93 c-6.17-0.24-11.71-2.75-16.02-6.1c-0.11-0.08-0.65-0.5-0.72-0.56c-0.53-0.42-1.11-0.39-1.47,0.15c-0.26,0.4-1.92,2.8-2.34,3.43 c-0.39,0.55-0.18,0.86,0.23,1.2c1.8,1.5,4.18,3.14,5.81,3.97c4.47,2.28,9.32,3.53,14.48,3.72c3.32,0.22,7.5-0.49,10.63-1.81 C70.63,102.67,74.25,97.92,74.98,91.98L74.98,91.98z M54.79,7.18c-10.59,0-19.22,9.98-19.62,22.47h39.25 C74.01,17.16,65.38,7.18,54.79,7.18L54.79,7.18z M94.99,122.88l-0.41,0l-80.82-0.01h0c-5.5-0.21-9.54-4.66-10.09-10.19l-0.05-1 l-3.61-79.5v0C0,32.12,0,32.06,0,32c0-1.28,1.03-2.33,2.3-2.35l0,0h25.48C28.41,13.15,40.26,0,54.79,0s26.39,13.15,27.01,29.65 h25.4h0.04c1.3,0,2.35,1.05,2.35,2.35c0,0.04,0,0.08,0,0.12v0l-3.96,79.81l-0.04,0.68C105.12,118.21,100.59,122.73,94.99,122.88 L94.99,122.88z"/></svg></div></div>
                   <div className="space-y-4">
                      <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.exp)}</span>{renderGR(commerceKPIs.shopee.exp, commerceKPIs.shopee.pExp, true)}</div></div>
@@ -1363,10 +1576,10 @@ export default function DashboardApp() {
                </div>
             </div>
             
-            <div className={`p-6 sm:p-8 lg:p-10 rounded-3xl border shadow-sm mb-10 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}>
-               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-10 gap-6">
+            <div className={`p-5 sm:p-6 lg:p-7 rounded-3xl border shadow-sm mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}>
+              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-7 gap-4">
                  <div>
-                    <h2 className="text-[clamp(1.25rem,2vw,1.75rem)] font-black tracking-tight" id="chartTitleCommerce">{dashboardContext} Historical Trend</h2>
+                    <h2 className="text-[clamp(1.1rem,1.8vw,1.5rem)] font-black tracking-tight" id="chartTitleCommerce">{dashboardContext} Historical Trend</h2>
                     <p className={`text-sm font-semibold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                        {granularity === 'monthly' ? 'Displaying data for the past 3 months' : granularity === 'weekly' ? 'MTD Comparison Analytics' : 'Interactive Multi-Metric Analytics'}
                     </p>
@@ -1387,8 +1600,8 @@ export default function DashboardApp() {
                <div className="w-full h-[380px]"><canvas ref={chartRef}></canvas></div>
             </div>
 
-            <div className={`rounded-3xl border shadow-sm overflow-hidden mb-10 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
-               <div className={`p-6 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
+            <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+              <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
                  <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform & Ad Type Pivot</h2>
                  <div className="flex flex-wrap gap-3 w-full md:w-auto">
                    <select value={tableColFilter1} onChange={(e) => setTableColFilter1(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-indigo-300 hover:border-indigo-500' : 'border-slate-300 text-indigo-700 hover:border-indigo-500 bg-slate-50'}`}>
@@ -1414,7 +1627,7 @@ export default function DashboardApp() {
         {/* --- VIEW 3: TOP CREATIVE TRACKER --- */}
         {activeEngine === 'creative' && (
           <div className="max-w-[1600px] mx-auto">
-            <div className="space-y-6">
+            <div className="space-y-4">
               {creativeData.length === 0 ? (
                 <div className="bg-white p-12 rounded-3xl border border-slate-200 shadow-sm text-center"><p className="text-slate-500 font-bold">No creative data found for the selected filters.</p></div>
               ) : (
@@ -1434,7 +1647,7 @@ export default function DashboardApp() {
                          )}
                        </div>
                        
-                       <div className="w-full xl:w-9/12 p-6 md:p-8 flex flex-col">
+                       <div className="w-full xl:w-9/12 p-5 md:p-6 flex flex-col">
                          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-4">
                            <h3 className={`text-sm md:text-base font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'} line-clamp-2`}>
                              {row['Ad Name'] || 'Unknown Ad'}
@@ -1457,7 +1670,7 @@ export default function DashboardApp() {
                            )}
                          </div>
 
-                         <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-5 rounded-2xl border ${isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                         <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
                             <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Spend</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatIDR(parseNum(row['Spend']))}</p></div>
                             <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Impressions</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatNum(parseNum(row['Impressions']))}</p></div>
                             <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>CTR</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{row['CTR'] || '-'}</p></div>
@@ -1481,7 +1694,7 @@ export default function DashboardApp() {
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Creative Analysis
                                </h4>
                             </div>
-                            <div className={`p-4 rounded-2xl text-sm leading-relaxed border font-medium ${isDarkMode ? 'bg-indigo-950/40 text-indigo-200 border-indigo-900/50' : 'bg-indigo-50/60 text-indigo-900 border-indigo-100'}`}>
+                            <div className={`p-3 rounded-2xl text-sm leading-relaxed border font-medium ${isDarkMode ? 'bg-indigo-950/40 text-indigo-200 border-indigo-900/50' : 'bg-indigo-50/60 text-indigo-900 border-indigo-100'}`}>
                                {row['Insights'] || 'No insights available.'}
                             </div>
                          </div>
@@ -1504,9 +1717,9 @@ export default function DashboardApp() {
 
         {/* --- VIEW 4: MEDIA SIGNAL TRACKER --- */}
         {activeEngine === 'signal' && signalCompiled && (
-          <div className="max-w-[1600px] mx-auto space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="bg-indigo-600 p-6 rounded-3xl text-white shadow-lg">
+          <div className="max-w-[1600px] mx-auto space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-indigo-600 p-5 rounded-3xl text-white shadow-lg">
                 <p className="text-xs font-bold uppercase tracking-wider text-indigo-200 mb-1">Total Ad Spend</p>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-2xl font-black">{formatIDR(signalCompiled.actual?.totalSpend || 0)}</h3>
@@ -1521,7 +1734,7 @@ export default function DashboardApp() {
                 </div>
               </div>
 
-              <div className="bg-slate-800 p-6 rounded-3xl text-white shadow-lg">
+              <div className="bg-slate-800 p-5 rounded-3xl text-white shadow-lg">
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Total Impressions</p>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-2xl font-black">{formatNum(signalCompiled.actual?.impressions || 0)}</h3>
@@ -1536,7 +1749,7 @@ export default function DashboardApp() {
                 </div>
               </div>
 
-              <div className="bg-teal-700 p-6 rounded-3xl text-white shadow-lg">
+              <div className="bg-teal-700 p-5 rounded-3xl text-white shadow-lg">
                 <p className="text-xs font-bold uppercase tracking-wider text-teal-200 mb-1">Total Engagements</p>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-2xl font-black">{formatNum(signalCompiled.actual?.engagements || 0)}</h3>
@@ -1551,7 +1764,7 @@ export default function DashboardApp() {
                 </div>
               </div>
 
-              <div className="bg-emerald-600 p-6 rounded-3xl text-white shadow-lg">
+              <div className="bg-emerald-600 p-5 rounded-3xl text-white shadow-lg">
                 <p className="text-xs font-bold uppercase tracking-wider text-emerald-200 mb-1">GMV Ads</p>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-2xl font-black">{formatIDR(signalCompiled.actual?.gmvAds || 0)}</h3>
@@ -1568,8 +1781,8 @@ export default function DashboardApp() {
             </div>
 
             {/* PROGRESS & ACHIEVEMENT HIERARCHY TABLE */}
-            <div className={`p-8 rounded-3xl border shadow-sm ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-2">
+            <div className={`p-6 rounded-3xl border shadow-sm ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-2">
                 <div>
                   <h2 className="text-lg font-black tracking-tight">TikTok Media Signal Matrix (MTD Achievement & Growth)</h2>
                   <p className="text-xs text-slate-400 font-medium mt-0.5">
