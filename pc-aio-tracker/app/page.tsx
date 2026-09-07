@@ -14,6 +14,7 @@ const CONFIG = {
 const selectClass = "w-full bg-[#1e293b] border border-[#334155] text-slate-100 py-3 px-4 rounded-xl text-sm font-semibold shadow-inner outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none dropdown-arrow hover:border-[#475569] transition-colors";
 const dateClass = "w-full bg-white border border-slate-200 text-slate-800 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-center";
 const dateClassDark = "w-full bg-[#1e293b] border border-indigo-500/50 text-indigo-300 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer text-center";
+const defaultFilters = { brand: 'All', funnel: 'All', platform: 'All', adType: 'All', format: 'All', period: 'All' };
 
 export default function DashboardApp() {
   const [currentView, setCurrentView] = useState<'login' | 'welcome' | 'home' | 'dashboard'>('login');
@@ -31,7 +32,7 @@ export default function DashboardApp() {
   const [homeMediaData, setHomeMediaData] = useState<any[]>([]);
   const [homeCommerceData, setHomeCommerceData] = useState<any[]>([]);
   
-  const [filters, setFilters] = useState({ brand: 'All', funnel: 'All', platform: 'All', adType: 'All', format: 'All', period: 'All' });
+  const [filters, setFilters] = useState(defaultFilters);
   const [selectedSignalPeriod, setSelectedSignalPeriod] = useState<string>('');
   const [granularity, setGranularity] = useState('monthly');
   const [dateMonth, setDateMonth] = useState('');
@@ -160,7 +161,6 @@ export default function DashboardApp() {
   };
 
   const loadData = async (engine: 'media' | 'commerce' | 'creative' | 'signal', forceSync = false) => {
-    setFilters({ brand: 'All', funnel: 'All', platform: 'All', adType: 'All', format: 'All', period: 'All' });
     setDashboardContext('Overall'); setCreativePage(1); setTableColFilter1('All'); setTableColFilter2('All');
     
     if (forceSync) {
@@ -247,6 +247,13 @@ export default function DashboardApp() {
   };
 
   const handleFilterChange = (key: string, value: string) => { setFilters(prev => ({ ...prev, [key]: value })); setCreativePage(1); };
+
+  const resetFilters = () => {
+    setFilters(defaultFilters);
+    setTableColFilter1('All');
+    setTableColFilter2('All');
+    setCreativePage(1);
+  };
 
   const toggleFullscreen = async () => {
     if (document.fullscreenElement) {
@@ -747,7 +754,14 @@ export default function DashboardApp() {
       const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
       const media = mediaMetrics(mediaRows.filter(row => inPeriod(normalizeDate(row['Date']), start, end)));
       const commerce = commerceMetrics(commerceRows.filter(row => inPeriod(normalizeDate(row['Date']), start, end)));
-      return { key: monthKey(date), label: date.toLocaleString('en-GB', { month: 'short' }), mediaSpend: media.spend, commerceGmv: commerce.gmv };
+      return { key: monthKey(date), label: date.toLocaleString('en-GB', { month: 'short' }), mediaSpend: media.spend, mediaImpressions: media.impressions, mediaClicks: media.clicks, commerceGmv: commerce.gmv, commerceOrders: commerce.orders };
+    });
+    const funnelTrend = trend.map(item => {
+      const date = new Date(`${item.key}-01T00:00:00`);
+      const start = new Date(date.getFullYear(), date.getMonth(), 1);
+      const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+      const rows = mediaRows.filter(row => inPeriod(normalizeDate(row['Date']), start, end));
+      return { ...item, mix: groupSum(rows, 'Funnel', 'Ad Spend').slice(0, 3) };
     });
     const current = { media: mediaMetrics(currentMedia), commerce: commerceMetrics(currentCommerce) };
     const previous = { media: mediaMetrics(previousMedia), commerce: commerceMetrics(previousCommerce) };
@@ -758,6 +772,7 @@ export default function DashboardApp() {
       current,
       previous,
       trend,
+      funnelTrend,
       funnelMix: groupSum(currentMedia, 'Funnel', 'Ad Spend').slice(0, 6),
       formatMix: groupSum(currentMedia, 'Format', 'Ad Spend').slice(0, 6),
       platformMix: platformTotals.slice(0, 6),
@@ -1395,6 +1410,9 @@ export default function DashboardApp() {
                 <div><label className="block text-xs font-bold text-slate-400 mb-2">Format</label><select value={filters.format} onChange={(e) => handleFilterChange('format', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colFormat, 'format').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
               </>
             )}
+            {currentView !== 'home' && (
+              <button onClick={resetFilters} className="w-full border border-slate-600 text-slate-300 hover:border-indigo-500 hover:bg-indigo-600 hover:text-white font-bold py-2.5 rounded-xl transition-all text-xs">Reset Filters</button>
+            )}
           </div>
         </div>
         <div className="p-6 bg-[#0f172a] border-t border-[#1e293b]">
@@ -1426,43 +1444,59 @@ export default function DashboardApp() {
         </div>
 
         {currentView === 'home' && homeSummary && (() => {
-          const platformTotal = homeSummary.platformMix.reduce((total, item) => total + item.total, 0) || 1;
+          const funnelTotal = homeSummary.funnelMix.reduce((total, item) => total + item.total, 0) || 1;
           let offset = 0;
-          const platformGradient = homeSummary.platformMix.map((item, index) => {
+          const funnelGradient = homeSummary.funnelMix.map((item, index) => {
             const colors = ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16'];
             const start = offset;
-            offset += (item.total / platformTotal) * 100;
+            offset += (item.total / funnelTotal) * 100;
             return `${colors[index % colors.length]} ${start}% ${offset}%`;
           }).join(', ');
+          const homeSurface = isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200';
+          const homeHeading = isDarkMode ? 'text-white' : 'text-slate-900';
+          const homeMuted = isDarkMode ? 'text-slate-400' : 'text-slate-500';
+          const accentColors: Record<string, string> = { 'bg-indigo-500': '#6366f1', 'bg-cyan-500': '#06b6d4', 'bg-emerald-500': '#10b981', 'bg-amber-500': '#f59e0b' };
           const growth = (current: number, previous: number) => previous === 0 ? '-' : `${getGr(current, previous) >= 0 ? '+' : ''}${formatPct(getGr(current, previous))}`;
-          const metricCard = (label: string, value: string, change: string, accent: string) => (
-            <div className={`bg-white border border-slate-200 p-5 shadow-sm rounded-2xl`}>
-              <div className="flex items-center justify-between mb-4"><span className="text-xs font-bold uppercase tracking-widest text-slate-500">{label}</span><span className={`w-2.5 h-2.5 rounded-full ${accent}`}></span></div>
-              <div className="flex items-end justify-between gap-3"><strong className="text-2xl font-black text-slate-900 tracking-tight">{value}</strong><span className={`text-xs font-bold ${change.startsWith('+') ? 'text-emerald-600' : change === '-' ? 'text-slate-400' : 'text-rose-500'}`}>{change}</span></div>
+          const sparkline = (values: number[], color: string) => {
+            const max = Math.max(...values, 1);
+            const min = Math.min(...values, 0);
+            const range = max - min || 1;
+            const points = values.map((value, index) => `${index * 20},${28 - ((value - min) / range) * 24}`).join(' ');
+            return <svg viewBox="0 0 100 32" preserveAspectRatio="none" className="w-24 h-8 shrink-0" aria-hidden="true"><polyline points={points} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+          };
+          const metricCard = (label: string, value: string, change: string, accent: string, trend: number[]) => (
+            <div className={`${homeSurface} border p-5 shadow-sm rounded-2xl`}>
+              <div className="flex items-center justify-between mb-4"><span className={`text-xs font-bold uppercase tracking-widest ${homeMuted}`}>{label}</span><span className={`w-2.5 h-2.5 rounded-full ${accent}`}></span></div>
+              <div className="flex items-end justify-between gap-3"><strong className={`text-2xl font-black ${homeHeading} tracking-tight`}>{value}</strong>{sparkline(trend, accentColors[accent])}<span className={`text-xs font-bold ${change.startsWith('+') ? 'text-emerald-600' : change === '-' ? 'text-slate-400' : 'text-rose-500'}`}>{change}</span></div>
             </div>
           );
           const mixBars = (items: { label: string; total: number }[], colors: string[]) => (
             <div className="space-y-3">{items.length === 0 ? <p className="text-sm text-slate-400">No data for this period.</p> : items.map((item, index) => (
               <div key={item.label}>
-                <div className="flex justify-between text-xs font-bold text-slate-600 mb-1"><span className="truncate pr-3">{item.label}</span><span>{formatIDR(item.total)}</span></div>
-                <div className="h-2 rounded-full bg-slate-100 overflow-hidden"><div className={`h-full rounded-full ${colors[index % colors.length]}`} style={{ width: `${Math.max(3, (item.total / homeSummary.maxOf(items)) * 100)}%` }}></div></div>
+                <div className={`flex justify-between text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-600'} mb-1`}><span className="truncate pr-3">{item.label}</span><span>{formatIDR(item.total)}</span></div>
+                <div className={`h-2 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'} overflow-hidden`}><div className={`h-full rounded-full ${colors[index % colors.length]}`} style={{ width: `${Math.max(3, (item.total / homeSummary.maxOf(items)) * 100)}%` }}></div></div>
               </div>
             ))}</div>
           );
+          const funnelStack = () => {
+            const colors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-400'];
+            const max = Math.max(...homeSummary.funnelTrend.map(item => item.mix.reduce((total, mix) => total + mix.total, 0)), 1);
+            return <div className="mt-5"><div className={`h-24 flex items-end gap-2 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-100'} pb-0`}>{homeSummary.funnelTrend.map(item => { const total = item.mix.reduce((sum, mix) => sum + mix.total, 0) || 1; return <div key={item.key} className="flex-1 h-full flex items-end" title={`${item.label}: ${item.mix.map(mix => `${mix.label} ${formatIDR(mix.total)}`).join(' | ')}`}><div className="w-full flex flex-col-reverse" style={{ height: `${Math.max(4, total / max * 100)}%` }}>{item.mix.map((mix, index) => <div key={mix.label} className={`w-full ${colors[index % colors.length]} first:rounded-b-sm last:rounded-t-sm`} style={{ height: `${mix.total / total * 100}%` }}></div>)}</div></div>; })}</div><div className={`flex justify-between pt-1 text-[9px] font-bold ${homeMuted}`}>{homeSummary.funnelTrend.map(item => <span key={item.key}>{item.label}</span>)}</div></div>;
+          };
           return (
             <div className="max-w-[1600px] mx-auto space-y-5">
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-widest text-indigo-600 mb-1">Performance snapshot</p><p className="text-sm text-slate-500 font-medium">{homeSummary.periodLabel} across paid media and commerce channels</p></div></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                {metricCard('Media spend', formatIDR(homeSummary.current.media.spend), growth(homeSummary.current.media.spend, homeSummary.previous.media.spend), 'bg-indigo-500')}
-                {metricCard('Impressions', formatNum(homeSummary.current.media.impressions), growth(homeSummary.current.media.impressions, homeSummary.previous.media.impressions), 'bg-cyan-500')}
-                {metricCard('Commerce GMV', formatIDR(homeSummary.current.commerce.gmv), growth(homeSummary.current.commerce.gmv, homeSummary.previous.commerce.gmv), 'bg-emerald-500')}
-                {metricCard('Orders', formatNum(homeSummary.current.commerce.orders), growth(homeSummary.current.commerce.orders, homeSummary.previous.commerce.orders), 'bg-amber-500')}
+                {metricCard('Media spend', formatIDR(homeSummary.current.media.spend), growth(homeSummary.current.media.spend, homeSummary.previous.media.spend), 'bg-indigo-500', homeSummary.trend.map(item => item.mediaSpend))}
+                {metricCard('Impressions', formatNum(homeSummary.current.media.impressions), growth(homeSummary.current.media.impressions, homeSummary.previous.media.impressions), 'bg-cyan-500', homeSummary.trend.map(item => item.mediaImpressions))}
+                {metricCard('Commerce GMV', formatIDR(homeSummary.current.commerce.gmv), growth(homeSummary.current.commerce.gmv, homeSummary.previous.commerce.gmv), 'bg-emerald-500', homeSummary.trend.map(item => item.commerceGmv))}
+                {metricCard('Engagement', formatNum(homeSummary.current.media.clicks), growth(homeSummary.current.media.clicks, homeSummary.previous.media.clicks), 'bg-amber-500', homeSummary.trend.map(item => item.mediaClicks))}
               </div>
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-                <div className="xl:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><div className="flex items-center justify-between mb-5"><div><h2 className="text-base font-black text-slate-900">Six-month momentum</h2><p className="text-xs text-slate-500 mt-1">Media spend and commerce GMV</p></div><span className="text-xs font-bold text-slate-400">Monthly</span></div><div className="h-52 flex items-end gap-3 sm:gap-5 border-b border-slate-100 px-2">{homeSummary.trend.map(item => { const max = Math.max(...homeSummary.trend.map(point => Math.max(point.mediaSpend, point.commerceGmv)), 1); return <div key={item.key} className="flex-1 h-full flex items-end justify-center gap-1.5" title={`${item.label}: Media ${formatIDR(item.mediaSpend)} | GMV ${formatIDR(item.commerceGmv)}`}><div className="w-1/2 bg-indigo-500 rounded-t-md" style={{ height: `${Math.max(4, item.mediaSpend / max * 100)}%` }}></div><div className="w-1/2 bg-emerald-400 rounded-t-md" style={{ height: `${Math.max(4, item.commerceGmv / max * 100)}%` }}></div></div>; })}</div><div className="flex justify-between px-2 pt-2 text-[10px] font-bold text-slate-400">{homeSummary.trend.map(item => <span key={item.key}>{item.label}</span>)}</div><div className="flex gap-4 mt-4 text-[10px] font-bold text-slate-500"><span><i className="inline-block w-2 h-2 rounded-full bg-indigo-500 mr-1"></i>Media spend</span><span><i className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1"></i>Commerce GMV</span></div></div>
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><h2 className="text-base font-black text-slate-900 mb-1">Platform mix</h2><p className="text-xs text-slate-500 mb-4">Investment and commerce activity</p><div className="flex items-center gap-5"><div className="w-40 h-40 rounded-full shrink-0" style={{ background: `conic-gradient(${platformGradient || '#e2e8f0 0 100%'})` }}><div className="w-24 h-24 mt-8 ml-8 rounded-full bg-white flex items-center justify-center text-center"><span className="text-[10px] font-black text-slate-500">MIX</span></div></div><div className="space-y-2 min-w-0">{homeSummary.platformMix.map((item, index) => { const colors = ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16']; return <div key={item.label} className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: colors[index % colors.length] }}></span><span className="truncate text-slate-600">{item.label}</span><strong className="ml-auto text-slate-900">{formatIDR(item.total)}</strong></div>; })}</div></div></div>
+              <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
+                <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm xl:col-span-3`}><div className="flex items-center justify-between mb-5"><div><h2 className={`text-base font-black ${homeHeading}`}>Six-month momentum</h2><p className={`text-xs ${homeMuted} mt-1`}>Media spend and commerce GMV</p></div><span className="text-xs font-bold text-slate-400">Monthly</span></div><div className={`h-52 flex items-end gap-3 sm:gap-5 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-100'} px-2`}>{homeSummary.trend.map(item => { const max = Math.max(...homeSummary.trend.map(point => Math.max(point.mediaSpend, point.commerceGmv)), 1); return <div key={item.key} className="flex-1 h-full flex items-end justify-center gap-1.5" title={`${item.label}: Media ${formatIDR(item.mediaSpend)} | GMV ${formatIDR(item.commerceGmv)}`}><div className="w-1/2 bg-indigo-500 rounded-t-md" style={{ height: `${Math.max(4, item.mediaSpend / max * 100)}%` }}></div><div className="w-1/2 bg-emerald-400 rounded-t-md" style={{ height: `${Math.max(4, item.commerceGmv / max * 100)}%` }}></div></div>; })}</div><div className="flex justify-between px-2 pt-2 text-[10px] font-bold text-slate-400">{homeSummary.trend.map(item => <span key={item.key}>{item.label}</span>)}</div><div className={`flex gap-4 mt-4 text-[10px] font-bold ${homeMuted}`}><span><i className="inline-block w-2 h-2 rounded-full bg-indigo-500 mr-1"></i>Media spend</span><span><i className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1"></i>Commerce GMV</span></div></div>
+                <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Platform mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Investment and commerce activity</p>{mixBars(homeSummary.platformMix, ['bg-indigo-500','bg-emerald-500','bg-amber-400','bg-cyan-500'])}</div>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><h2 className="text-base font-black text-slate-900 mb-1">Funnel mix</h2><p className="text-xs text-slate-500 mb-4">Media spend by funnel stage</p>{mixBars(homeSummary.funnelMix, ['bg-indigo-500','bg-cyan-500','bg-emerald-500','bg-amber-400'])}</div><div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><h2 className="text-base font-black text-slate-900 mb-1">Format mix</h2><p className="text-xs text-slate-500 mb-4">Creative investment by format</p>{mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}</div><div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"><h2 className="text-base font-black text-slate-900 mb-1">Channel health</h2><p className="text-xs text-slate-500 mb-4">Core media efficiency metrics</p><div className="grid grid-cols-2 gap-3"><div className="bg-slate-50 rounded-xl p-3"><span className="text-[10px] font-bold text-slate-500">CTR</span><strong className="block text-lg text-slate-900 mt-1">{formatPct(homeSummary.current.media.ctr)}</strong></div><div className="bg-slate-50 rounded-xl p-3"><span className="text-[10px] font-bold text-slate-500">VTR</span><strong className="block text-lg text-slate-900 mt-1">{formatPct(homeSummary.current.media.vtr)}</strong></div><div className="bg-slate-50 rounded-xl p-3"><span className="text-[10px] font-bold text-slate-500">ROAS</span><strong className="block text-lg text-slate-900 mt-1">{homeSummary.current.commerce.roas.toFixed(2)}x</strong></div><div className="bg-slate-50 rounded-xl p-3"><span className="text-[10px] font-bold text-slate-500">Clicks</span><strong className="block text-lg text-slate-900 mt-1">{formatNum(homeSummary.current.media.clicks)}</strong></div></div></div></div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Funnel mix</h2><p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel stage</p><div className="flex items-center gap-4"><div className="w-28 h-28 rounded-full shrink-0" style={{ background: `conic-gradient(${funnelGradient || '#e2e8f0 0 100%'})` }}><div className={`w-16 h-16 mt-6 ml-6 rounded-full ${isDarkMode ? 'bg-slate-900' : 'bg-white'} flex items-center justify-center`}><span className={`text-[9px] font-black ${homeMuted}`}>MIX</span></div></div><div className="space-y-1 min-w-0">{homeSummary.funnelMix.slice(0, 3).map((item, index) => <div key={item.label} className={`flex items-center gap-2 text-[10px] ${homeMuted}`}><span className={`w-2 h-2 rounded-full ${['bg-indigo-500','bg-emerald-500','bg-amber-400'][index]}`}></span><span className="truncate">{item.label}</span></div>)}</div></div>{funnelStack()}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Format mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Creative investment by format</p>{mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Channel health</h2><p className={`text-xs ${homeMuted} mb-4`}>Core media efficiency metrics</p><div className="grid grid-cols-2 gap-3"><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>CTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.ctr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>VTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.vtr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>ROAS</span><strong className={`block text-lg ${homeHeading} mt-1`}>{homeSummary.current.commerce.roas.toFixed(2)}x</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>Clicks</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatNum(homeSummary.current.media.clicks)}</strong></div></div></div></div>
             </div>
           );
         })()}
