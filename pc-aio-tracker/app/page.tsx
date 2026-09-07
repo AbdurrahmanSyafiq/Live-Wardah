@@ -847,8 +847,11 @@ export default function DashboardApp() {
       const spend = sum(rows, 'Ad Spend');
       const impressions = sum(rows, 'Impressions');
       const clicks = sum(rows, 'Combined Clicks');
-      const views = sum(rows, 'Views') + sum(rows, 'Views 6s');
-      return { spend, impressions, clicks, views, ctr: impressions ? clicks / impressions : 0, vtr: impressions ? views / impressions : 0 };
+      const views6s = sum(rows, 'Views 6s');
+      const views15s = sum(rows, 'Views');
+      const engagement = clicks + views6s + views15s;
+      const views = views15s + views6s;
+      return { spend, impressions, clicks, views, engagement, ctr: impressions ? clicks / impressions : 0, vtr: impressions ? views / impressions : 0 };
     };
     const commerceMetrics = (rows: any[]) => {
       const expense = sum(rows, 'Expense');
@@ -871,7 +874,7 @@ export default function DashboardApp() {
       const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
       const media = mediaMetrics(mediaRows.filter(row => inPeriod(normalizeDate(row['Date']), start, end)));
       const commerce = commerceMetrics(commerceRows.filter(row => inPeriod(normalizeDate(row['Date']), start, end)));
-      return { key: monthKey(date), label: date.toLocaleString('en-GB', { month: 'short' }), mediaSpend: media.spend, mediaImpressions: media.impressions, mediaClicks: media.clicks, commerceGmv: commerce.gmv, commerceOrders: commerce.orders };
+      return { key: monthKey(date), label: date.toLocaleString('en-GB', { month: 'short' }), mediaSpend: media.spend, mediaImpressions: media.impressions, mediaClicks: media.clicks, mediaEngagement: media.engagement, commerceGmv: commerce.gmv, commerceOrders: commerce.orders };
     });
     const funnelTrend = trend.map(item => {
       const date = new Date(`${item.key}-01T00:00:00`);
@@ -1561,14 +1564,6 @@ export default function DashboardApp() {
         </div>
 
         {currentView === 'home' && homeSummary && (() => {
-          const funnelTotal = homeSummary.funnelMix.reduce((total, item) => total + item.total, 0) || 1;
-          let offset = 0;
-          const funnelGradient = homeSummary.funnelMix.map((item, index) => {
-            const colors = ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16'];
-            const start = offset;
-            offset += (item.total / funnelTotal) * 100;
-            return `${colors[index % colors.length]} ${start}% ${offset}%`;
-          }).join(', ');
           const homeSurface = isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200';
           const homeHeading = isDarkMode ? 'text-white' : 'text-slate-900';
           const homeMuted = isDarkMode ? 'text-slate-400' : 'text-slate-500';
@@ -1600,6 +1595,30 @@ export default function DashboardApp() {
             const max = Math.max(...homeSummary.funnelTrend.map(item => item.mix.reduce((total, mix) => total + mix.total, 0)), 1);
             return <div className="mt-5"><div className={`h-24 flex items-end gap-2 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-100'} pb-0`}>{homeSummary.funnelTrend.map(item => { const total = item.mix.reduce((sum, mix) => sum + mix.total, 0) || 1; return <div key={item.key} className="flex-1 h-full flex items-end" title={`${item.label}: ${item.mix.map(mix => `${mix.label} ${formatIDR(mix.total)}`).join(' | ')}`}><div className="w-full flex flex-col-reverse" style={{ height: `${Math.max(4, total / max * 100)}%` }}>{item.mix.map((mix, index) => <div key={mix.label} className={`w-full ${colors[index % colors.length]} first:rounded-b-sm last:rounded-t-sm`} style={{ height: `${mix.total / total * 100}%` }}></div>)}</div></div>; })}</div><div className={`flex justify-between pt-1 text-[9px] font-bold ${homeMuted}`}>{homeSummary.funnelTrend.map(item => <span key={item.key}>{item.label}</span>)}</div></div>;
           };
+          const mixDonut = (items: { label: string; total: number }[], colors: string[], centerLabel: string) => {
+            const total = items.reduce((sum, item) => sum + item.total, 0) || 1;
+            let start = 0;
+            const gradient = items.map((item, index) => {
+              const end = start + (item.total / total) * 100;
+              const slice = `${colors[index % colors.length]} ${start}% ${end}%`;
+              start = end;
+              return slice;
+            }).join(', ');
+            return (
+              <div className="flex items-center gap-4">
+                <div className="w-28 h-28 rounded-full shrink-0" style={{ background: `conic-gradient(${gradient || '#e2e8f0 0 100%'})` }}>
+                  <div className={`w-16 h-16 mt-6 ml-6 rounded-full ${isDarkMode ? 'bg-slate-900' : 'bg-white'} flex items-center justify-center`}><span className={`text-[9px] font-black ${homeMuted}`}>{centerLabel}</span></div>
+                </div>
+                <div className="space-y-1 min-w-0">
+                  {items.slice(0, 6).map((item, index) => <div key={item.label} className={`flex items-center gap-2 text-[10px] ${homeMuted}`}>
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colors[index % colors.length] }}></span>
+                    <span className="truncate">{item.label}</span>
+                    <span className="ml-auto whitespace-nowrap font-bold">{formatPct(item.total / total)} · {formatIDR(item.total)}</span>
+                  </div>)}
+                </div>
+              </div>
+            );
+          };
           return (
             <div className="max-w-[1600px] mx-auto space-y-5">
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-widest text-indigo-600 mb-1">Performance snapshot</p><p className="text-sm text-slate-500 font-medium">{homeSummary.periodLabel} across paid media and commerce channels</p></div></div>
@@ -1607,13 +1626,13 @@ export default function DashboardApp() {
                 {metricCard('Media spend', formatIDR(homeSummary.current.media.spend), growth(homeSummary.current.media.spend, homeSummary.previous.media.spend), 'bg-indigo-500', homeSummary.trend.map(item => item.mediaSpend))}
                 {metricCard('Impressions', formatNum(homeSummary.current.media.impressions), growth(homeSummary.current.media.impressions, homeSummary.previous.media.impressions), 'bg-cyan-500', homeSummary.trend.map(item => item.mediaImpressions))}
                 {metricCard('Commerce GMV', formatIDR(homeSummary.current.commerce.gmv), growth(homeSummary.current.commerce.gmv, homeSummary.previous.commerce.gmv), 'bg-emerald-500', homeSummary.trend.map(item => item.commerceGmv))}
-                {metricCard('Engagement', formatNum(homeSummary.current.media.clicks), growth(homeSummary.current.media.clicks, homeSummary.previous.media.clicks), 'bg-amber-500', homeSummary.trend.map(item => item.mediaClicks))}
+                {metricCard('Engagement', formatNum(homeSummary.current.media.engagement), growth(homeSummary.current.media.engagement, homeSummary.previous.media.engagement), 'bg-amber-500', homeSummary.trend.map(item => item.mediaEngagement))}
               </div>
               <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
                 <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm xl:col-span-3`}><div className="flex items-center justify-between mb-5"><div><h2 className={`text-base font-black ${homeHeading}`}>Six-month momentum</h2><p className={`text-xs ${homeMuted} mt-1`}>Media spend and commerce GMV</p></div><span className="text-xs font-bold text-slate-400">Monthly</span></div><div className={`h-52 flex items-end gap-3 sm:gap-5 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-100'} px-2`}>{homeSummary.trend.map(item => { const max = Math.max(...homeSummary.trend.map(point => Math.max(point.mediaSpend, point.commerceGmv)), 1); return <div key={item.key} className="flex-1 h-full flex items-end justify-center gap-1.5" title={`${item.label}: Media ${formatIDR(item.mediaSpend)} | GMV ${formatIDR(item.commerceGmv)}`}><div className="w-1/2 bg-indigo-500 rounded-t-md" style={{ height: `${Math.max(4, item.mediaSpend / max * 100)}%` }}></div><div className="w-1/2 bg-emerald-400 rounded-t-md" style={{ height: `${Math.max(4, item.commerceGmv / max * 100)}%` }}></div></div>; })}</div><div className="flex justify-between px-2 pt-2 text-[10px] font-bold text-slate-400">{homeSummary.trend.map(item => <span key={item.key}>{item.label}</span>)}</div><div className={`flex gap-4 mt-4 text-[10px] font-bold ${homeMuted}`}><span><i className="inline-block w-2 h-2 rounded-full bg-indigo-500 mr-1"></i>Media spend</span><span><i className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1"></i>Commerce GMV</span></div></div>
-                <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Platform mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Investment and commerce activity</p>{mixBars(homeSummary.platformMix, ['bg-indigo-500','bg-emerald-500','bg-amber-400','bg-cyan-500'])}</div>
+                <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Platform mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Investment and commerce activity</p>{mixDonut(homeSummary.platformMix, ['#6366f1', '#10b981', '#f59e0b', '#06b6d4'], 'MIX')}</div>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Funnel mix</h2><p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel stage</p><div className="flex items-center gap-4"><div className="w-28 h-28 rounded-full shrink-0" style={{ background: `conic-gradient(${funnelGradient || '#e2e8f0 0 100%'})` }}><div className={`w-16 h-16 mt-6 ml-6 rounded-full ${isDarkMode ? 'bg-slate-900' : 'bg-white'} flex items-center justify-center`}><span className={`text-[9px] font-black ${homeMuted}`}>MIX</span></div></div><div className="space-y-1 min-w-0">{homeSummary.funnelMix.slice(0, 3).map((item, index) => <div key={item.label} className={`flex items-center gap-2 text-[10px] ${homeMuted}`}><span className={`w-2 h-2 rounded-full ${['bg-indigo-500','bg-emerald-500','bg-amber-400'][index]}`}></span><span className="truncate">{item.label}</span></div>)}</div></div>{funnelStack()}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Format mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Creative investment by format</p>{mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Channel health</h2><p className={`text-xs ${homeMuted} mb-4`}>Core media efficiency metrics</p><div className="grid grid-cols-2 gap-3"><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>CTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.ctr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>VTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.vtr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>ROAS</span><strong className={`block text-lg ${homeHeading} mt-1`}>{homeSummary.current.commerce.roas.toFixed(2)}x</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>Clicks</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatNum(homeSummary.current.media.clicks)}</strong></div></div></div></div>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Funnel mix</h2><p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel stage</p>{mixDonut(homeSummary.funnelMix, ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16'], 'MIX')}{funnelStack()}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Format mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Creative investment by format</p>{mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Channel health</h2><p className={`text-xs ${homeMuted} mb-4`}>Core media efficiency metrics</p><div className="grid grid-cols-2 gap-3"><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>CTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.ctr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>VTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.vtr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>ROAS</span><strong className={`block text-lg ${homeHeading} mt-1`}>{homeSummary.current.commerce.roas.toFixed(2)}x</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>Clicks</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatNum(homeSummary.current.media.clicks)}</strong></div></div></div></div>
             </div>
           );
         })()}
