@@ -449,8 +449,18 @@ export default function DashboardApp() {
     const currentPeriodObj = signalPeriods.find(p => p.key === selectedSignalPeriod);
     if (!currentPeriodObj) return null;
 
-    const currentIndex = signalPeriods.findIndex(p => p.key === selectedSignalPeriod);
-    const prevPeriodObj = currentIndex !== -1 && currentIndex + 1 < signalPeriods.length ? signalPeriods[currentIndex + 1] : null;
+    const shiftMonth = (value: string) => {
+      const date = parseSheetDate(value);
+      if (!date || isNaN(date.getTime())) return '';
+      const targetMonth = date.getMonth() - 1;
+      const lastDay = new Date(date.getFullYear(), targetMonth + 1, 0).getDate();
+      const shifted = new Date(date.getFullYear(), targetMonth, Math.min(date.getDate(), lastDay));
+      return toYMD(shifted);
+    };
+    const prevPeriodObj = {
+      start: shiftMonth(currentPeriodObj.start),
+      end: shiftMonth(currentPeriodObj.end)
+    };
 
     const cleanStr = (s: any) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const targetBrand = cleanStr(filters.brand);
