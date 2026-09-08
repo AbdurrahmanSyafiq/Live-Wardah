@@ -4,6 +4,19 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import Chart from 'chart.js/auto';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer
+} from 'recharts';
 
 const CONFIG = {
   media: { sheet: "Media API", colDate: "Date", colBrand: "Brand", colPlatform: "Platform", colFunnel: "Funnel", colAdType: "KPI", colFormat: "Format", colConsiSize: "Result" },
@@ -12,7 +25,6 @@ const CONFIG = {
   signal: { sheet: "Media Signal", colBrand: "Brand", colStatus: "Status", colDateStart: "Start Date", colDateEnd: "End Date" }
 };
 
-// Global UI classes placed at module level to completely avoid ReferenceError / TDZ issues
 const selectClass = "w-full bg-[#1e293b] border border-[#334155] text-slate-100 py-3 px-4 rounded-xl text-sm font-semibold shadow-inner outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none dropdown-arrow hover:border-[#475569] transition-colors";
 const dateClass = "w-full bg-white border border-slate-200 text-slate-800 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-center";
 const dateClassDark = "w-full bg-[#1e293b] border border-indigo-500/50 text-indigo-300 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer text-center";
@@ -167,6 +179,9 @@ export default function DashboardApp() {
   const [chartMetricsComm, setChartMetricsComm] = useState<string[]>(['exp', 'gmv']);
   const [creativePage, setCreativePage] = useState(1);
   const CREATIVES_PER_PAGE = 8;
+
+  const [chartTypeEngine, setChartTypeEngine] = useState<'combo' | 'bar' | 'line'>('combo');
+  const [homeMomentumType, setHomeMomentumType] = useState<'bar' | 'line' | 'area'>('bar');
 
   const chartRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstance = useRef<Chart | null>(null);
@@ -442,7 +457,7 @@ export default function DashboardApp() {
     }
   }, [activeEngine, signalPeriods, selectedSignalPeriod]);
 
-  // --- MEDIA SIGNAL DATA COMPILER (ACTUAL VS PLAN + PREVIOUS PERIOD COMPARISON) ---
+  // --- MEDIA SIGNAL DATA COMPILER ---
   const signalCompiled = useMemo(() => {
     if (activeEngine !== 'signal' || rawData.length === 0 || !selectedSignalPeriod) return null;
 
@@ -516,7 +531,6 @@ export default function DashboardApp() {
       const newConsideration = sumSignal(['New Consideration Audience', 'new_consideration_audience']);
       const newConversion = sumSignal(['New Conversion Audience', 'new_conversion_audience']);
 
-      // 1. Rollup External Media API Sheet (Spend & Impressions)
       let spendAwareness = 0; let spendConsideration = 0; let spendConversionMedia = 0; let totalMediaSpend = 0;
       let impAwareness = 0; let impConsideration = 0;
 
@@ -540,7 +554,6 @@ export default function DashboardApp() {
         });
       }
 
-      // 2. Rollup External Commerce Sheet (GMV, Items Sold, Spend)
       let gmvCommerce = 0; let itemsSold = 0; let spendConversionComm = 0;
 
       if (!isPlanOnly && extraSheetsData.commerce && extraSheetsData.commerce.length > 0 && pStart && pEnd) {
@@ -564,7 +577,8 @@ export default function DashboardApp() {
         ? signalSpend || sumSignal(['Spend Awareness', 'Spend Consideration', 'Spend Conversion'])
         : Math.max(spendAwareness + spendConsideration + spendConversion, totalMediaSpend) || signalSpend;
 
-      const impConversion = Math.max(0, paidImpressions - impAwareness - impConsideration);
+      // Impression conversion metric pulled accurately, not whole paid impressions
+      const impConversion = isPlanOnly ? 0 : (sumSignal(['Impression Conversion', 'imp_conversion']) || Math.max(0, paidImpressions - impAwareness - impConsideration));
       const gmvAds = gmvCommerce || sumSignal(['GMV Ads', 'gmv_ads', 'GMV']);
       const finalItemsSold = itemsSold || sumSignal(['Item sold', 'Items Sold', 'items_sold']);
 
@@ -614,10 +628,10 @@ export default function DashboardApp() {
   const signalHierarchyGroups = useMemo(() => {
     if (!signalCompiled) return [];
 
-    const metric = (name: string, key: string, fmt: (value: number) => string, isInv = false) => ({
+    const metric = (name: string, key: string, fmt: (value: number) => string, isInv = false, overridePlan?: number) => ({
       name,
       act: signalCompiled.actual?.[key],
-      pln: signalCompiled.plan?.[key],
+      pln: overridePlan !== undefined ? overridePlan : signalCompiled.plan?.[key],
       prv: signalCompiled.prev?.[key],
       fmt,
       isInv
@@ -689,12 +703,13 @@ export default function DashboardApp() {
           metric("CPM Awareness", "cpmAwareness", formatIDR, true),
           metric("Impression Consideration", "impConsideration", formatNum),
           metric("CPM Consideration", "cpmConsideration", formatIDR, true),
-          metric("Impression Conversion", "impConversion", formatNum),
+          // Impression Conversion explicitly has 0 plan target for "No Target"
+          metric("Impression Conversion", "impConversion", formatNum, false, 0),
           metric("CPM Conversion", "cpmConversion", formatIDR, true),
-          metric("Spend Awareness", "spendAwareness", formatIDR, true),
-          metric("Spend Consideration", "spendConsideration", formatIDR, true),
-          metric("Spend Conversion", "spendConversion", formatIDR, true),
-          metric("Total TikTok Spend", "totalSpend", formatIDR, true)
+          metric("Spend Awareness", "spendAwareness", formatIDR, false),
+          metric("Spend Consideration", "spendConsideration", formatIDR, false),
+          metric("Spend Conversion", "spendConversion", formatIDR, false),
+          metric("Total TikTok Spend", "totalSpend", formatIDR, false)
         ]
       }
     ];
@@ -916,6 +931,7 @@ export default function DashboardApp() {
     };
   }, [homeMediaData, homeCommerceData, homeBrand, homePeriod]);
 
+  // Spend growth is formatted green if increased, red if decreased (isInv = false)
   const renderGR = (cur: number, prev: number, isInv = false) => {
     if (prev === 0 && cur === 0) return <span className="text-[10px] ml-2 font-bold opacity-40">-</span>;
     const gr = getGr(cur, prev);
@@ -999,36 +1015,71 @@ export default function DashboardApp() {
 
     if (activeEngine === 'media') {
       const configs: any = {
-        'spend': { label: 'Spend', data: labels.map(l => groupedData[l].spend), color: '#4f46e5', bg: '#4f46e5', type: 'bar' },
-        'imp': { label: 'Impr', data: labels.map(l => groupedData[l].imp), color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)', type: 'line' },
-        'clicks': { label: 'Clicks', data: labels.map(l => groupedData[l].clicks), color: '#84cc16', bg: 'transparent', type: 'line' },
-        'views': { label: 'Views', data: labels.map(l => groupedData[l].views), color: '#f59e0b', bg: 'transparent', type: 'line' },
-        'ctr': { label: 'CTR', data: labels.map(l => groupedData[l].imp>0 ? (groupedData[l].clicks/groupedData[l].imp)*100 : 0), color: '#ec4899', bg: 'transparent', type: 'line' },
-        'vtr': { label: 'VTR', data: labels.map(l => groupedData[l].imp>0 ? (groupedData[l].views/groupedData[l].imp)*100 : 0), color: '#06b6d4', bg: 'transparent', type: 'line' }
+        'spend': { label: 'Spend', data: labels.map(l => groupedData[l].spend), color: '#4f46e5', bg: '#4f46e5', defaultType: 'bar' },
+        'imp': { label: 'Impr', data: labels.map(l => groupedData[l].imp), color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)', defaultType: 'line' },
+        'clicks': { label: 'Clicks', data: labels.map(l => groupedData[l].clicks), color: '#84cc16', bg: 'transparent', defaultType: 'line' },
+        'views': { label: 'Views', data: labels.map(l => groupedData[l].views), color: '#f59e0b', bg: 'transparent', defaultType: 'line' },
+        'ctr': { label: 'CTR', data: labels.map(l => groupedData[l].imp>0 ? (groupedData[l].clicks/groupedData[l].imp)*100 : 0), color: '#ec4899', bg: 'transparent', defaultType: 'line' },
+        'vtr': { label: 'VTR', data: labels.map(l => groupedData[l].imp>0 ? (groupedData[l].views/groupedData[l].imp)*100 : 0), color: '#06b6d4', bg: 'transparent', defaultType: 'line' }
       };
       chartMetricsMedia.forEach((key, idx) => {
         const c = configs[key];
-        datasets.push({ label: c.label, data: c.data, type: c.type, backgroundColor: c.bg, borderColor: c.color, yAxisID: idx===0?'y':'y1', tension: 0.4, fill: c.type==='line', borderWidth: 3.5, pointRadius: 0, pointHoverRadius: 6, borderRadius: c.type==='bar'?6:0 });
+        const assignedType = chartTypeEngine === 'combo' ? c.defaultType : chartTypeEngine;
+        datasets.push({
+          label: c.label,
+          data: c.data,
+          type: assignedType,
+          backgroundColor: c.bg,
+          borderColor: c.color,
+          yAxisID: idx === 0 ? 'y' : 'y1',
+          tension: 0.4,
+          fill: assignedType === 'line' && key === 'imp',
+          borderWidth: 3,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          borderRadius: assignedType === 'bar' ? 6 : 0
+        });
       });
     } else {
       const configs: any = {
-        'exp': { label: 'Expense', data: labels.map(l => groupedData[l].exp), color: '#4f46e5', bg: '#4f46e5', type: 'bar' },
-        'gmv': { label: 'GMV', data: labels.map(l => groupedData[l].gmv), color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)', type: 'line' },
-        'orders': { label: 'Orders', data: labels.map(l => groupedData[l].orders), color: '#84cc16', bg: 'transparent', type: 'line' },
-        'roas': { label: 'ROAS', data: labels.map(l => groupedData[l].exp>0 ? groupedData[l].gmv/groupedData[l].exp : 0), color: '#f59e0b', bg: 'transparent', type: 'line' },
-        'cpa': { label: 'CPA', data: labels.map(l => groupedData[l].orders>0 ? groupedData[l].exp/groupedData[l].orders : 0), color: '#ec4899', bg: 'transparent', type: 'line' }
+        'exp': { label: 'Expense', data: labels.map(l => groupedData[l].exp), color: '#4f46e5', bg: '#4f46e5', defaultType: 'bar' },
+        'gmv': { label: 'GMV', data: labels.map(l => groupedData[l].gmv), color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)', defaultType: 'line' },
+        'orders': { label: 'Orders', data: labels.map(l => groupedData[l].orders), color: '#84cc16', bg: 'transparent', defaultType: 'line' },
+        'roas': { label: 'ROAS', data: labels.map(l => groupedData[l].exp>0 ? groupedData[l].gmv/groupedData[l].exp : 0), color: '#f59e0b', bg: 'transparent', defaultType: 'line' },
+        'cpa': { label: 'CPA', data: labels.map(l => groupedData[l].orders>0 ? groupedData[l].exp/groupedData[l].orders : 0), color: '#ec4899', bg: 'transparent', defaultType: 'line' }
       };
       chartMetricsComm.forEach((key, idx) => {
         const c = configs[key];
-        datasets.push({ label: c.label, data: c.data, type: c.type, backgroundColor: c.bg, borderColor: c.color, yAxisID: idx===0?'y':'y1', tension: 0.4, fill: c.type==='line', borderWidth: 3.5, pointRadius: 0, pointHoverRadius: 6, borderRadius: c.type==='bar'?6:0 });
+        const assignedType = chartTypeEngine === 'combo' ? c.defaultType : chartTypeEngine;
+        datasets.push({
+          label: c.label,
+          data: c.data,
+          type: assignedType,
+          backgroundColor: c.bg,
+          borderColor: c.color,
+          yAxisID: idx === 0 ? 'y' : 'y1',
+          tension: 0.4,
+          fill: assignedType === 'line' && key === 'gmv',
+          borderWidth: 3,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          borderRadius: assignedType === 'bar' ? 6 : 0
+        });
       });
     }
 
     chartInstance.current = new Chart(ctx, {
-      type: 'bar',
+      type: chartTypeEngine === 'line' ? 'line' : 'bar',
       data: { labels, datasets },
       options: {
-        responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 900,
+          easing: 'easeInOutQuart',
+          delay: (context) => context.dataIndex * 40 + context.datasetIndex * 80
+        },
+        interaction: { mode: 'index', intersect: false },
         plugins: { 
           legend: { 
             position: 'bottom', 
@@ -1050,7 +1101,195 @@ export default function DashboardApp() {
     });
 
     return () => { if (chartInstance.current) chartInstance.current.destroy(); };
-  }, [ctxChartData, ctxCurData, ctxPrevData, globalDates, chartMetricsMedia, chartMetricsComm, activeEngine, granularity, isDarkMode]);
+  }, [ctxChartData, ctxCurData, ctxPrevData, globalDates, chartMetricsMedia, chartMetricsComm, activeEngine, granularity, isDarkMode, chartTypeEngine]);
+
+  const getGrHTML = useCallback((cur: number, prev: number, invertColors = false) => {
+    const gr = getGr(cur, prev);
+    if (cur === 0 && prev === 0) return `<td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">0.00%</td>`;
+    let color = isDarkMode ? "text-slate-400" : "text-slate-500";
+    if (gr > 0) color = invertColors ? "text-red-600 bg-red-50" : "text-emerald-700 bg-emerald-50";
+    if (gr < 0) color = invertColors ? "text-emerald-700 bg-emerald-50" : "text-red-600 bg-red-50";
+    
+    if (isDarkMode) {
+        if (gr > 0) color = invertColors ? "text-red-400 bg-red-500/10" : "text-emerald-400 bg-emerald-500/10";
+        if (gr < 0) color = invertColors ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10";
+    }
+    return `<td class="px-4 py-3 text-right font-mono font-bold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}"><span class="px-2.5 py-1 rounded-lg ${color}">${formatPct(Math.abs(gr))}</span></td>`;
+  }, [isDarkMode]);
+
+  // --- PLATFORM SUMMARY TABLE GENERATOR (DIGITAL MEDIA) WITH CTR INSTEAD OF CLICKS ---
+  const generatePlatformSummaryHTML = useCallback(() => {
+    if (activeEngine !== 'media') return { head: '', body: '' };
+
+    const filterPlatform = (rows: any[], plat: 'Overall' | 'TikTok' | 'Meta') => {
+      if (plat === 'Overall') return rows;
+      return rows.filter(r => {
+        const p = String(r[CONFIG.media.colPlatform] || '').toLowerCase();
+        if (plat === 'Meta') return p.includes('meta') || p.includes('facebook') || p.includes('ig') || p.includes('instagram');
+        return p.includes('tiktok');
+      });
+    };
+
+    const calcSum = (rows: any[]) => {
+      let spend = 0, imp = 0, clicks = 0, v6 = 0, v15 = 0;
+      rows.forEach(r => {
+        spend += parseNum(r['Ad Spend']);
+        imp += parseNum(r['Impressions']);
+        clicks += parseNum(r['Combined Clicks']);
+        v6 += parseNum(r['Views 6s']);
+        v15 += parseNum(r['Views']);
+      });
+      return {
+        spend,
+        imp,
+        cpm: imp > 0 ? (spend / imp) * 1000 : 0,
+        ctr: imp > 0 ? clicks / imp : 0, // Replaced Total Clicks with CTR
+        vtr6: imp > 0 ? v6 / imp : 0,
+        vtr15: imp > 0 ? v15 / imp : 0
+      };
+    };
+
+    const platforms: ('Overall' | 'Meta' | 'TikTok')[] = ['Overall', 'Meta', 'TikTok'];
+    const metricNames = [
+      { name: 'Spend', key: 'spend', fmt: formatIDR, isInv: false },
+      { name: 'Impression', key: 'imp', fmt: formatNum, isInv: false },
+      { name: 'CPM', key: 'cpm', fmt: formatIDR, isInv: true },
+      { name: 'CTR', key: 'ctr', fmt: formatPct, isInv: false }, // Replaced Total Clicks with CTR
+      { name: 'VTR (6s)', key: 'vtr6', fmt: formatPct, isInv: false },
+      { name: 'VTR (15s)', key: 'vtr15', fmt: formatPct, isInv: false }
+    ];
+
+    const thClass = `px-4 py-4 font-bold text-slate-100 bg-[#0f172a]`;
+    let thead = '';
+    let tbody = '';
+
+    if (granularity === 'monthly') {
+      thead = `<tr>
+        <th class="sticky-col ${thClass}">Platform</th>
+        <th class="sticky-col-2 ${thClass}">Metric</th>
+        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">This Month</th>
+        <th class="px-4 py-4 text-right font-bold text-slate-400 bg-[#0f172a] sticky top-0 border-b border-slate-700">Prev Month</th>
+        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">GR%</th>
+      </tr>`;
+
+      platforms.forEach(plat => {
+        const curTotals = calcSum(filterPlatform(ctxCurData, plat));
+        const prevTotals = calcSum(filterPlatform(ctxPrevData, plat));
+
+        metricNames.forEach((m, i) => {
+          const curV = (curTotals as any)[m.key];
+          const prevV = (prevTotals as any)[m.key];
+          let rowCls = i % 2 === 0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50');
+          if (i === 0) rowCls += ' group-start';
+          if (i === metricNames.length - 1) rowCls += ' group-end';
+
+          tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
+          if (i === 0) {
+            tbody += `<td rowspan="${metricNames.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${plat}</td>`;
+          }
+          tbody += `<td class="px-4 py-3 sticky-col-2 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.name}</td>`;
+          tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(curV)}</td>`;
+          tbody += `<td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(prevV)}</td>`;
+          tbody += getGrHTML(curV, prevV, m.isInv);
+          tbody += `</tr>`;
+        });
+      });
+    } else if (granularity === 'weekly') {
+      let weeksFound = new Set<string>(); ctxCurData.forEach(r => weeksFound.add(r.bucket)); ctxPrevData.forEach(r => weeksFound.add(r.bucket));
+      let weeks = Array.from(weeksFound).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
+
+      thead = `<tr>
+        <th class="sticky-col ${thClass}">Platform</th>
+        <th class="sticky-col-2 ${thClass}">Metric</th>`;
+      weeks.forEach(w => {
+        const weekNum = parseInt(w.replace('W', ''));
+        let curD = new Date(globalDates.curStart); curD.setDate(curD.getDate() + (weekNum * 7) - 1); if (curD > globalDates.curMtdEnd) curD = new Date(globalDates.curMtdEnd);
+        let prevD = new Date(globalDates.prevStart); prevD.setDate(prevD.getDate() + (weekNum * 7) - 1); if (prevD > globalDates.prevMtdEnd) prevD = new Date(globalDates.prevMtdEnd);
+        const fmtStr = (d: Date) => `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
+        thead += `<th class="px-4 py-4 text-right bg-[#0f172a] border-l border-slate-700 font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(curD)}</th>
+                  <th class="px-4 py-4 text-right text-slate-400 bg-[#0f172a] font-bold sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(prevD)}</th>
+                  <th class="px-4 py-4 text-right bg-[#0f172a] font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">GR%</th>`;
+      });
+      thead += `<th class="px-4 py-4 text-right border-l border-indigo-500 text-indigo-300 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Cur</th>
+                <th class="px-4 py-4 text-right text-slate-400 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Prev</th>
+                <th class="px-4 py-4 text-right text-indigo-300 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Total GR%</th>
+              </tr>`;
+
+      platforms.forEach(plat => {
+        const curRows = filterPlatform(ctxCurData, plat);
+        const prevRows = filterPlatform(ctxPrevData, plat);
+        const curTotal = calcSum(curRows);
+        const prevTotal = calcSum(prevRows);
+
+        metricNames.forEach((m, i) => {
+          let rowCls = i % 2 === 0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50');
+          if (i === 0) rowCls += ' group-start';
+          if (i === metricNames.length - 1) rowCls += ' group-end';
+
+          tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
+          if (i === 0) {
+            tbody += `<td rowspan="${metricNames.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${plat}</td>`;
+          }
+          tbody += `<td class="px-4 py-3 sticky-col-2 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.name}</td>`;
+
+          let curCumulRows: any[] = [];
+          let prevCumulRows: any[] = [];
+
+          weeks.forEach(w => {
+            curCumulRows = curCumulRows.concat(curRows.filter(r => r.bucket === w));
+            prevCumulRows = prevCumulRows.concat(prevRows.filter(r => r.bucket === w));
+            const wc = (calcSum(curCumulRows) as any)[m.key];
+            const wp = (calcSum(prevCumulRows) as any)[m.key];
+
+            tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-l ${isDarkMode ? 'border-slate-700' : 'border-slate-200'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(wc)}</td>
+                      <td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(wp)}</td>
+                      ${getGrHTML(wc, wp, m.isInv)}`;
+          });
+
+          const curTotVal = (curTotal as any)[m.key];
+          const prevTotVal = (prevTotal as any)[m.key];
+          tbody += `<td class="px-4 py-3 text-right font-mono border-l ${isDarkMode ? 'border-indigo-500 text-indigo-300 bg-indigo-950/50' : 'border-slate-200 text-indigo-700 bg-indigo-50/50'} font-bold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(curTotVal)}</td>
+                    <td class="px-4 py-3 text-right font-mono font-medium text-slate-500 ${isDarkMode ? 'bg-indigo-950/50' : 'bg-indigo-50/50'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(prevTotVal)}</td>
+                    ${getGrHTML(curTotVal, prevTotVal, m.isInv)}</tr>`;
+        });
+      });
+    } else if (granularity === 'daily') {
+      let daysFound = new Set<string>(); ctxCurData.forEach(r => daysFound.add(r.bucket)); let days = Array.from(daysFound).sort();
+      thead = `<tr>
+        <th class="sticky-col ${thClass}">Platform</th>
+        <th class="sticky-col-2 ${thClass}">Metric</th>`;
+      days.forEach(d => {
+        const parts = d.split('-'); const dt = new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]));
+        thead += `<th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700 whitespace-nowrap">${dt.getDate()} ${dt.toLocaleString('en-GB', { month: 'short' })}</th>`;
+      });
+      thead += `<th class="px-4 py-4 text-right text-indigo-300 border-l border-slate-700 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Period Total</th></tr>`;
+
+      platforms.forEach(plat => {
+        const platRows = filterPlatform(ctxCurData, plat);
+        const totalSum = calcSum(platRows);
+
+        metricNames.forEach((m, i) => {
+          let rowCls = i % 2 === 0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50');
+          if (i === 0) rowCls += ' group-start';
+          if (i === metricNames.length - 1) rowCls += ' group-end';
+
+          tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
+          if (i === 0) {
+            tbody += `<td rowspan="${metricNames.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${plat}</td>`;
+          }
+          tbody += `<td class="px-4 py-3 sticky-col-2 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.name}</td>`;
+
+          days.forEach(d => {
+            const daySum = calcSum(platRows.filter(r => r.bucket === d));
+            tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt((daySum as any)[m.key])}</td>`;
+          });
+          tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-indigo-300 bg-indigo-950/50 border-l border-indigo-800/50' : 'text-indigo-700 bg-indigo-50/50 border-l border-indigo-100'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt((totalSum as any)[m.key])}</td></tr>`;
+        });
+      });
+    }
+
+    return { head: thead, body: tbody };
+  }, [ctxCurData, ctxPrevData, granularity, activeEngine, globalDates, isDarkMode, getGrHTML]);
 
   // --- MANUAL TABLE RENDERER FOR MEDIA & COMMERCE ---
   const generateTableHTML = useCallback(() => {
@@ -1077,7 +1316,7 @@ export default function DashboardApp() {
     const getDisplayMetricsArray = (g: any, adTypeLower: string) => {
       if (isMedia) {
         let m = [
-          { name: "Cost", raw: g.spend, fmt: formatIDR(g.spend), isInv: true }, { name: "Impression", raw: g.imp, fmt: formatNum(g.imp), isInv: false },
+          { name: "Cost", raw: g.spend, fmt: formatIDR(g.spend), isInv: false }, { name: "Impression", raw: g.imp, fmt: formatNum(g.imp), isInv: false },
           { name: "Clicks", raw: g.clicks, fmt: formatNum(g.clicks), isInv: false }, { name: "Views (6s)", raw: g.views6s, fmt: formatNum(g.views6s), isInv: false },
           { name: "Views (15s)", raw: g.views15s, fmt: formatNum(g.views15s), isInv: false }, { name: "CTR", raw: g.imp>0?(g.clicks/g.imp):0, fmt: formatPct(g.imp>0?(g.clicks/g.imp):0), isInv: false },
           { name: "VTR (6s)", raw: g.imp>0?(g.views6s/g.imp):0, fmt: formatPct(g.imp>0?(g.views6s/g.imp):0), isInv: false }, { name: "VTR (15s)", raw: g.imp>0?(g.views15s/g.imp):0, fmt: formatPct(g.imp>0?(g.views15s/g.imp):0), isInv: false },
@@ -1094,27 +1333,13 @@ export default function DashboardApp() {
         return m;
       } else {
         let m = [
-          { name: "Expense", raw: g.exp, fmt: formatIDR(g.exp), isInv: true }, { name: "Orders", raw: g.orders, fmt: formatNum(g.orders), isInv: false },
+          { name: "Expense", raw: g.exp, fmt: formatIDR(g.exp), isInv: false }, { name: "Orders", raw: g.orders, fmt: formatNum(g.orders), isInv: false },
           { name: "GMV", raw: g.gmv, fmt: formatIDR(g.gmv), isInv: false }, { name: "CPA", raw: g.orders>0?(g.exp/g.orders):0, fmt: formatIDR(g.orders>0?(g.exp/g.orders):0), isInv: true },
           { name: "ROAS", raw: g.exp>0?(g.gmv/g.exp):0, fmt: (g.exp>0?(g.gmv/g.exp):0).toFixed(2)+"x", isInv: false }
         ];
         if (adTypeLower.includes('live official') || adTypeLower.includes('live affiliate')) m.splice(1, 0, { name: "Live Views", raw: g.liveViews, fmt: formatNum(g.liveViews), isInv: false });
         return m;
       }
-    };
-
-    const getGrHTML = (cur: number, prev: number, invertColors = false) => {
-      const gr = getGr(cur, prev);
-      if (cur === 0 && prev === 0) return `<td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">0.00%</td>`;
-      let color = isDarkMode ? "text-slate-400" : "text-slate-500";
-      if (gr > 0) color = invertColors ? "text-red-600 bg-red-50" : "text-emerald-700 bg-emerald-50";
-      if (gr < 0) color = invertColors ? "text-emerald-700 bg-emerald-50" : "text-red-600 bg-red-50";
-      
-      if (isDarkMode) {
-          if (gr > 0) color = invertColors ? "text-red-400 bg-red-500/10" : "text-emerald-400 bg-emerald-500/10";
-          if (gr < 0) color = invertColors ? "text-emerald-400 bg-emerald-500/10" : "text-red-400 bg-red-500/10";
-      }
-      return `<td class="px-4 py-3 text-right font-mono font-bold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}"><span class="px-2.5 py-1 rounded-lg ${color}">${formatPct(Math.abs(gr))}</span></td>`;
     };
 
     let dim1Set = new Set<string>(); let dim2Set = new Set<string>();
@@ -1284,7 +1509,7 @@ export default function DashboardApp() {
     }
 
     return { head: thead, body: tbody, uniqueDim1: Array.from(dim1Set).sort(), uniqueDim2: Array.from(dim2Set).sort() };
-  }, [ctxCurData, ctxPrevData, granularity, activeEngine, globalDates, tableColFilter1, tableColFilter2, isDarkMode]);
+  }, [ctxCurData, ctxPrevData, granularity, activeEngine, globalDates, tableColFilter1, tableColFilter2, isDarkMode, getGrHTML]);
 
   const getDrivePreviewLink = (url: string) => {
     if (!url || typeof url !== 'string') return '';
@@ -1401,7 +1626,7 @@ export default function DashboardApp() {
   }
 
   return (
-    <div className={`dashboard-shell dashboard-enter w-full min-h-screen flex font-sans transition-colors duration-300 ${isDarkMode ? 'bg-[#0f172a] text-slate-100' : 'bg-[#e7e7ef] text-slate-800'}`}>
+    <div className={`dashboard-shell w-full min-h-screen flex font-sans transition-colors duration-300 ${isDarkMode ? 'bg-[#0f172a] text-slate-100' : 'bg-[#e7e7ef] text-slate-800'}`}>
       <style dangerouslySetInnerHTML={{__html: `
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -1422,8 +1647,30 @@ export default function DashboardApp() {
 
         .dashboard-shell .rounded-3xl { border-radius: 0.75rem !important; }
         .dashboard-shell .rounded-\[2rem\] { border-radius: 0.75rem !important; }
-        @keyframes dashboardEnter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-        .dashboard-enter { animation: dashboardEnter 0.35s ease-out both; }
+        
+        /* Adjustment: Seamless animation when moving across views/workspaces */
+        @keyframes pageFadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .view-transition-container {
+          animation: pageFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* Adjustment 2: Appearance animation for canvas charts */
+        @keyframes chartAppearance {
+          0% {
+            opacity: 0;
+            transform: scale(0.985) translateY(8px);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+        .chart-appearance-animate {
+          animation: chartAppearance 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
 
         .dropdown-arrow { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e"); background-position: right center; background-repeat: no-repeat; background-size: 1rem 1rem; }
         select option { background-color: #0f172a; color: #f1f5f9; padding: 10px; }
@@ -1573,487 +1820,621 @@ export default function DashboardApp() {
           </div>
         </div>
 
-        {currentView === 'home' && homeSummary && (() => {
-          const homeSurface = isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200';
-          const homeHeading = isDarkMode ? 'text-white' : 'text-slate-900';
-          const homeMuted = isDarkMode ? 'text-slate-400' : 'text-slate-500';
-          const accentColors: Record<string, string> = { 'bg-indigo-500': '#6366f1', 'bg-cyan-500': '#06b6d4', 'bg-emerald-500': '#10b981', 'bg-amber-500': '#f59e0b' };
-          const growth = (current: number, previous: number) => previous === 0 ? '-' : `${getGr(current, previous) >= 0 ? '+' : ''}${formatPct(getGr(current, previous))}`;
-          const sparkline = (values: number[], color: string) => {
-            const max = Math.max(...values, 1);
-            const min = Math.min(...values, 0);
-            const range = max - min || 1;
-            const points = values.map((value, index) => `${index * 20},${28 - ((value - min) / range) * 24}`).join(' ');
-            return <svg viewBox="0 0 100 32" preserveAspectRatio="none" className="w-24 h-8 shrink-0" aria-hidden="true"><polyline points={points} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
-          };
-          const metricCard = (label: string, value: string, change: string, accent: string, trend: number[]) => (
-            <div className={`${homeSurface} border p-5 shadow-sm rounded-2xl`}>
-              <div className="flex items-center justify-between mb-4"><span className={`text-xs font-bold uppercase tracking-widest ${homeMuted}`}>{label}</span><span className={`w-2.5 h-2.5 rounded-full ${accent}`}></span></div>
-              <div className="flex items-end justify-between gap-3"><strong className={`text-2xl font-black ${homeHeading} tracking-tight`}>{value}</strong>{sparkline(trend, accentColors[accent])}<span className={`text-xs font-bold ${change.startsWith('+') ? 'text-emerald-600' : change === '-' ? 'text-slate-400' : 'text-rose-500'}`}>{change}</span></div>
-            </div>
-          );
-          const mixBars = (items: { label: string; total: number }[], colors: string[]) => (
-            <div className="space-y-3">{items.length === 0 ? <p className="text-sm text-slate-400">No data for this period.</p> : items.map((item, index) => (
-              <div key={item.label}>
-                <div className={`flex justify-between text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-600'} mb-1`}><span className="truncate pr-3">{item.label}</span><span>{formatIDR(item.total)}</span></div>
-                <div className={`h-2 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'} overflow-hidden`}><div className={`h-full rounded-full ${colors[index % colors.length]}`} style={{ width: `${Math.max(3, (item.total / homeSummary.maxOf(items)) * 100)}%` }}></div></div>
-              </div>
-            ))}</div>
-          );
-          const funnelStack = () => {
-            const colors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-400'];
-            const max = Math.max(...homeSummary.funnelTrend.map(item => item.mix.reduce((total, mix) => total + mix.total, 0)), 1);
-            return <div className="mt-5"><div className={`h-24 flex items-end gap-2 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-100'} pb-0`}>{homeSummary.funnelTrend.map(item => { const total = item.mix.reduce((sum, mix) => sum + mix.total, 0) || 1; return <div key={item.key} className="flex-1 h-full flex items-end" title={`${item.label}: ${item.mix.map(mix => `${mix.label} ${formatIDR(mix.total)}`).join(' | ')}`}><div className="w-full flex flex-col-reverse" style={{ height: `${Math.max(4, total / max * 100)}%` }}>{item.mix.map((mix, index) => <div key={mix.label} className={`w-full ${colors[index % colors.length]} first:rounded-b-sm last:rounded-t-sm`} style={{ height: `${mix.total / total * 100}%` }}></div>)}</div></div>; })}</div><div className={`flex justify-between pt-1 text-[9px] font-bold ${homeMuted}`}>{homeSummary.funnelTrend.map(item => <span key={item.key}>{item.label}</span>)}</div></div>;
-          };
-          const mixDonut = (items: { label: string; total: number }[], colors: string[], centerLabel: string) => {
-            const total = items.reduce((sum, item) => sum + item.total, 0) || 1;
-            let start = 0;
-            const gradient = items.map((item, index) => {
-              const end = start + (item.total / total) * 100;
-              const slice = `${colors[index % colors.length]} ${start}% ${end}%`;
-              start = end;
-              return slice;
-            }).join(', ');
-            return (
-              <div className="flex items-center gap-4">
-                <div className="w-28 h-28 rounded-full shrink-0" style={{ background: `conic-gradient(${gradient || '#e2e8f0 0 100%'})` }}>
-                  <div className={`w-16 h-16 mt-6 ml-6 rounded-full ${isDarkMode ? 'bg-slate-900' : 'bg-white'} flex items-center justify-center`}><span className={`text-[9px] font-black ${homeMuted}`}>{centerLabel}</span></div>
-                </div>
-                <div className="space-y-1 min-w-0">
-                  {items.slice(0, 6).map((item, index) => <div key={item.label} className={`flex items-center gap-2 text-[10px] ${homeMuted}`}>
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colors[index % colors.length] }}></span>
-                    <span className="truncate">{item.label}</span>
-                    <span className="ml-auto whitespace-nowrap font-bold">{formatPct(item.total / total)} · {formatIDR(item.total)}</span>
-                  </div>)}
-                </div>
+        {/* Dynamic view container with seamless enter animation */}
+        <div key={currentView === 'home' ? 'home' : (activeEngine || 'dashboard')} className="view-transition-container">
+          {currentView === 'home' && homeSummary && (() => {
+            const homeSurface = isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200';
+            const homeHeading = isDarkMode ? 'text-white' : 'text-slate-900';
+            const homeMuted = isDarkMode ? 'text-slate-400' : 'text-slate-500';
+            const accentColors: Record<string, string> = { 'bg-indigo-500': '#6366f1', 'bg-cyan-500': '#06b6d4', 'bg-emerald-500': '#10b981', 'bg-amber-500': '#f59e0b' };
+            const growth = (current: number, previous: number) => previous === 0 ? '-' : `${getGr(current, previous) >= 0 ? '+' : ''}${formatPct(getGr(current, previous))}`;
+            const sparkline = (values: number[], color: string) => {
+              const max = Math.max(...values, 1);
+              const min = Math.min(...values, 0);
+              const range = max - min || 1;
+              const points = values.map((value, index) => `${index * 20},${28 - ((value - min) / range) * 24}`).join(' ');
+              return <svg viewBox="0 0 100 32" preserveAspectRatio="none" className="w-24 h-8 shrink-0" aria-hidden="true"><polyline points={points} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+            };
+            const metricCard = (label: string, value: string, change: string, accent: string, trend: number[]) => (
+              <div className={`${homeSurface} border p-5 shadow-sm rounded-2xl`}>
+                <div className="flex items-center justify-between mb-4"><span className={`text-xs font-bold uppercase tracking-widest ${homeMuted}`}>{label}</span><span className={`w-2.5 h-2.5 rounded-full ${accent}`}></span></div>
+                <div className="flex items-end justify-between gap-3"><strong className={`text-2xl font-black ${homeHeading} tracking-tight`}>{value}</strong>{sparkline(trend, accentColors[accent])}<span className={`text-xs font-bold ${change.startsWith('+') ? 'text-emerald-600' : change === '-' ? 'text-slate-400' : 'text-rose-500'}`}>{change}</span></div>
               </div>
             );
-          };
-          return (
-            <div className="max-w-[1600px] mx-auto space-y-5">
-              <div className="flex flex-col md:flex-row md:items-end justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-widest text-indigo-600 mb-1">Performance snapshot</p><p className="text-sm text-slate-500 font-medium">{homeSummary.periodLabel} across paid media and commerce channels</p></div></div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                {metricCard('Media spend', formatIDR(homeSummary.current.media.spend), growth(homeSummary.current.media.spend, homeSummary.previous.media.spend), 'bg-indigo-500', homeSummary.trend.map(item => item.mediaSpend))}
-                {metricCard('Impressions', formatNum(homeSummary.current.media.impressions), growth(homeSummary.current.media.impressions, homeSummary.previous.media.impressions), 'bg-cyan-500', homeSummary.trend.map(item => item.mediaImpressions))}
-                {metricCard('Commerce GMV', formatIDR(homeSummary.current.commerce.gmv), growth(homeSummary.current.commerce.gmv, homeSummary.previous.commerce.gmv), 'bg-emerald-500', homeSummary.trend.map(item => item.commerceGmv))}
-                {metricCard('Engagement', formatNum(homeSummary.current.media.engagement), growth(homeSummary.current.media.engagement, homeSummary.previous.media.engagement), 'bg-amber-500', homeSummary.trend.map(item => item.mediaEngagement))}
-              </div>
-              <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
-                <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm xl:col-span-3`}><div className="flex items-center justify-between mb-5"><div><h2 className={`text-base font-black ${homeHeading}`}>Six-month momentum</h2><p className={`text-xs ${homeMuted} mt-1`}>Media spend and commerce GMV</p></div><span className="text-xs font-bold text-slate-400">Monthly</span></div><div className={`h-52 flex items-end gap-3 sm:gap-5 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-100'} px-2`}>{homeSummary.trend.map(item => { const max = Math.max(...homeSummary.trend.map(point => Math.max(point.mediaSpend, point.commerceGmv)), 1); return <div key={item.key} className="flex-1 h-full flex items-end justify-center gap-1.5" title={`${item.label}: Media ${formatIDR(item.mediaSpend)} | GMV ${formatIDR(item.commerceGmv)}`}><div className="w-1/2 bg-indigo-500 rounded-t-md" style={{ height: `${Math.max(4, item.mediaSpend / max * 100)}%` }}></div><div className="w-1/2 bg-emerald-400 rounded-t-md" style={{ height: `${Math.max(4, item.commerceGmv / max * 100)}%` }}></div></div>; })}</div><div className="flex justify-between px-2 pt-2 text-[10px] font-bold text-slate-400">{homeSummary.trend.map(item => <span key={item.key}>{item.label}</span>)}</div><div className={`flex gap-4 mt-4 text-[10px] font-bold ${homeMuted}`}><span><i className="inline-block w-2 h-2 rounded-full bg-indigo-500 mr-1"></i>Media spend</span><span><i className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1"></i>Commerce GMV</span></div></div>
-                <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Platform mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Investment and commerce activity</p>{mixDonut(homeSummary.platformMix, ['#6366f1', '#10b981', '#f59e0b', '#06b6d4'], 'MIX')}</div>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Funnel mix</h2><p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel stage</p>{mixDonut(homeSummary.funnelMix, ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16'], 'MIX')}{funnelStack()}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Format mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Creative investment by format</p>{mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Channel health</h2><p className={`text-xs ${homeMuted} mb-4`}>Core media efficiency metrics</p><div className="grid grid-cols-2 gap-3"><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>CTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.ctr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>VTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.vtr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>ROAS</span><strong className={`block text-lg ${homeHeading} mt-1`}>{homeSummary.current.commerce.roas.toFixed(2)}x</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>Clicks</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatNum(homeSummary.current.media.clicks)}</strong></div></div></div></div>
-            </div>
-          );
-        })()}
-
-        {/* --- VIEW 1: MEDIA TRACKER --- */}
-        {activeEngine === 'media' && (
-          <div className="max-w-[1600px] mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
-              <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
-                  <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Media</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg></div></div>
-                  <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.overall.spend)}</span>{renderGR(mediaKPIs.overall.spend, mediaKPIs.overall.pSpend, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Impr</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.overall.impr)}</span>{renderGR(mediaKPIs.overall.impr, mediaKPIs.overall.pImpr, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.overall.engage)}</span>{renderGR(mediaKPIs.overall.engage, mediaKPIs.overall.pEngage, false)}</div></div>
+            const mixBars = (items: { label: string; total: number }[], colors: string[]) => (
+              <div className="space-y-3">{items.length === 0 ? <p className="text-sm text-slate-400">No data for this period.</p> : items.map((item, index) => (
+                <div key={item.label}>
+                  <div className={`flex justify-between text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-600'} mb-1`}><span className="truncate pr-3">{item.label}</span><span>{formatIDR(item.total)}</span></div>
+                  <div className={`h-2 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'} overflow-hidden`}><div className={`h-full rounded-full ${colors[index % colors.length]}`} style={{ width: `${Math.max(3, (item.total / homeSummary.maxOf(items)) * 100)}%` }}></div></div>
+                </div>
+              ))}</div>
+            );
+            const funnelStack = () => {
+              const colors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-400'];
+              const max = Math.max(...homeSummary.funnelTrend.map(item => item.mix.reduce((total, mix) => total + mix.total, 0)), 1);
+              return <div className="mt-5"><div className={`h-24 flex items-end gap-2 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-100'} pb-0`}>{homeSummary.funnelTrend.map(item => { const total = item.mix.reduce((sum, mix) => sum + mix.total, 0) || 1; return <div key={item.key} className="flex-1 h-full flex items-end" title={`${item.label}: ${item.mix.map(mix => `${mix.label} ${formatIDR(mix.total)}`).join(' | ')}`}><div className="w-full flex flex-col-reverse transition-all duration-700 ease-out" style={{ height: `${Math.max(4, total / max * 100)}%` }}>{item.mix.map((mix, index) => <div key={mix.label} className={`w-full ${colors[index % colors.length]} first:rounded-b-sm last:rounded-t-sm`} style={{ height: `${mix.total / total * 100}%` }}></div>)}</div></div>; })}</div><div className={`flex justify-between pt-1 text-[9px] font-bold ${homeMuted}`}>{homeSummary.funnelTrend.map(item => <span key={item.key}>{item.label}</span>)}</div></div>;
+            };
+            const mixDonut = (items: { label: string; total: number }[], colors: string[], centerLabel: string) => {
+              const total = items.reduce((sum, item) => sum + item.total, 0) || 1;
+              let start = 0;
+              const gradient = items.map((item, index) => {
+                const end = start + (item.total / total) * 100;
+                const slice = `${colors[index % colors.length]} ${start}% ${end}%`;
+                start = end;
+                return slice;
+              }).join(', ');
+              return (
+                <div className="flex items-center gap-4">
+                  <div className="w-28 h-28 rounded-full shrink-0" style={{ background: `conic-gradient(${gradient || '#e2e8f0 0 100%'})` }}>
+                    <div className={`w-16 h-16 mt-6 ml-6 rounded-full ${isDarkMode ? 'bg-slate-900' : 'bg-white'} flex items-center justify-center`}><span className={`text-[9px] font-black ${homeMuted}`}>{centerLabel}</span></div>
                   </div>
-               </div>
-               <div onClick={() => setDashboardContext('Meta')} className={`bg-blue-500 rounded-3xl p-5 lg:p-6 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Meta' ? 'ring-4 ring-blue-300 shadow-blue-500/40' : ''}`}>
-                  <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-blue-100 uppercase tracking-widest">Meta</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg></div></div>
-                  <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-blue-400 pb-3"><span className="text-xs font-bold text-blue-100">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.meta.spend)}</span>{renderGR(mediaKPIs.meta.spend, mediaKPIs.meta.pSpend, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-blue-400 pb-3"><span className="text-xs font-bold text-blue-100">Impr</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.meta.impr)}</span>{renderGR(mediaKPIs.meta.impr, mediaKPIs.meta.pImpr, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-blue-100">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.meta.engage)}</span>{renderGR(mediaKPIs.meta.engage, mediaKPIs.meta.pEngage, false)}</div></div>
+                  <div className="space-y-1 min-w-0">
+                    {items.slice(0, 6).map((item, index) => <div key={item.label} className={`flex items-center gap-2 text-[10px] ${homeMuted}`}>
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colors[index % colors.length] }}></span>
+                      <span className="truncate">{item.label}</span>
+                      <span className="ml-auto whitespace-nowrap font-bold">{formatPct(item.total / total)} · {formatIDR(item.total)}</span>
+                    </div>)}
                   </div>
-               </div>
-               <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
-                  <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
-                  <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.tiktok.spend)}</span>{renderGR(mediaKPIs.tiktok.spend, mediaKPIs.tiktok.pSpend, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Impr</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.tiktok.impr)}</span>{renderGR(mediaKPIs.tiktok.impr, mediaKPIs.tiktok.pImpr, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.tiktok.engage)}</span>{renderGR(mediaKPIs.tiktok.engage, mediaKPIs.tiktok.pEngage, false)}</div></div>
-                  </div>
-               </div>
-            </div>
-            
-            <div className={`p-5 sm:p-6 lg:p-7 rounded-3xl border shadow-sm mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}>
-              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-7 gap-4">
-                 <div>
-                    <h2 className="text-[clamp(1.1rem,1.8vw,1.5rem)] font-black tracking-tight" id="chartTitleMedia">{dashboardContext} Historical Trend</h2>
-                    <p className={`text-sm font-semibold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                       {granularity === 'monthly' ? 'Displaying data for the past 3 months' : granularity === 'weekly' ? 'MTD Comparison Analytics' : 'Interactive Multi-Metric Analytics'}
-                    </p>
-                 </div>
-                 
-                 <div className={`flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-2xl border w-full xl:w-auto shadow-inner ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
-                    <span className="text-[10px] font-black uppercase tracking-widest px-3 opacity-60">Metrics</span>
-                    {[{id:'spend',l:'Spend', c:'bg-indigo-600'}, {id:'imp',l:'Impr', c:'bg-emerald-500'}, {id:'clicks',l:'Clicks', c:'bg-lime-500'}, {id:'views',l:'Views', c:'bg-amber-500'}, {id:'ctr',l:'CTR', c:'bg-pink-500'}, {id:'vtr',l:'VTR', c:'bg-teal-500'}].map(m => {
-                      const isActive = chartMetricsMedia.includes(m.id);
-                      return (
-                        <button key={m.id} onClick={() => handleToggleMetric('media', m.id)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${isActive ? `${m.c} text-white shadow-md` : isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>
-                          {m.l}
-                        </button>
-                      );
-                    })}
-                 </div>
-               </div>
-               <div className="w-full h-[380px]"><canvas ref={chartRef}></canvas></div>
-            </div>
-
-            <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
-              <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
-                 <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Pivot Analysis Table</h2>
-                 
-                 <div className="flex flex-wrap gap-3 w-full md:w-auto">
-                   <select value={tableColFilter1} onChange={(e) => setTableColFilter1(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-indigo-300 hover:border-indigo-500' : 'border-slate-300 text-indigo-700 hover:border-indigo-500 bg-slate-50'}`}>
-                     <option value="All">All Ad Types / Platforms</option>
-                     {generateTableHTML().uniqueDim1.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
-                   </select>
-                   <select value={tableColFilter2} onChange={(e) => setTableColFilter2(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-emerald-300 hover:border-emerald-500' : 'border-slate-300 text-emerald-700 hover:border-emerald-500 bg-slate-50'}`}>
-                     <option value="All">All Formats / Ad Types</option>
-                     {generateTableHTML().uniqueDim2.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
-                   </select>
-                 </div>
-               </div>
-               <div className="overflow-auto max-h-[600px] relative w-full rounded-b-3xl">
-                  <table className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-separate [border-spacing:0] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
-                    <thead dangerouslySetInnerHTML={{ __html: generateTableHTML().head }} />
-                    <tbody dangerouslySetInnerHTML={{ __html: generateTableHTML().body }} />
-                  </table>
-               </div>
-            </div>
-          </div>
-        )}
-
-        {/* --- VIEW 2: COMMERCE TRACKER --- */}
-        {activeEngine === 'commerce' && (
-          <div className="max-w-[1600px] mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
-              <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
-                  <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Commerce</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg></div></div>
-                  <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.exp)}</span>{renderGR(commerceKPIs.overall.exp, commerceKPIs.overall.pExp, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.gmv)}</span>{renderGR(commerceKPIs.overall.gmv, commerceKPIs.overall.pGmv, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-300 leading-none">{commerceKPIs.overall.roas}</span>{renderGR(commerceKPIs.overall.roasNum, commerceKPIs.overall.pRoasNum, false)}</div></div>
-                  </div>
-               </div>
-               <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
-                  <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok Shop</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
-                  <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.exp)}</span>{renderGR(commerceKPIs.tiktok.exp, commerceKPIs.tiktok.pExp, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.gmv)}</span>{renderGR(commerceKPIs.tiktok.gmv, commerceKPIs.tiktok.pGmv, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-400 leading-none">{commerceKPIs.tiktok.roas}</span>{renderGR(commerceKPIs.tiktok.roasNum, commerceKPIs.tiktok.pRoasNum, false)}</div></div>
-                  </div>
-               </div>
-               <div onClick={() => setDashboardContext('Shopee')} className={`bg-orange-500 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Shopee' ? 'ring-4 ring-orange-300 shadow-orange-500/40' : ''}`}>
-                  <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-orange-100 uppercase tracking-widest">Shopee</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 109.59 122.88" fill="currentColor"><path d="M74.98,91.98C76.15,82.36,69.96,76.22,53.6,71c-7.92-2.7-11.66-6.24-11.57-11.12 c0.33-5.4,5.36-9.34,12.04-9.47c4.63,0.09,9.77,1.22,14.76,4.56c0.59,0.37,1.01,0.32,1.35-0.2c0.46-0.74,1.61-2.53,2-3.17 c0.26-0.42,0.31-0.96-0.35-1.44c-0.95-0.7-3.6-2.13-5.03-2.72c-3.88-1.62-8.23-2.64-12.86-2.63c-9.77,0.04-17.47,6.22-18.12,14.47 c-0.42,5.95,2.53,10.79,8.86,14.47c1.34,0.78,8.6,3.67,11.49,4.57c9.08,2.83,13.8,7.9,12.69,13.81c-1.01,5.36-6.65,8.83-14.43,8.93 c-6.17-0.24-11.71-2.75-16.02-6.1c-0.11-0.08-0.65-0.5-0.72-0.56c-0.53-0.42-1.11-0.39-1.47,0.15c-0.26,0.4-1.92,2.8-2.34,3.43 c-0.39,0.55-0.18,0.86,0.23,1.2c1.8,1.5,4.18,3.14,5.81,3.97c4.47,2.28,9.32,3.53,14.48,3.72c3.32,0.22,7.5-0.49,10.63-1.81 C70.63,102.67,74.25,97.92,74.98,91.98L74.98,91.98z M54.79,7.18c-10.59,0-19.22,9.98-19.62,22.47h39.25 C74.01,17.16,65.38,7.18,54.79,7.18L54.79,7.18z M94.99,122.88l-0.41,0l-80.82-0.01h0c-5.5-0.21-9.54-4.66-10.09-10.19l-0.05-1 l-3.61-79.5v0C0,32.12,0,32.06,0,32c0-1.28,1.03-2.33,2.3-2.35l0,0h25.48C28.41,13.15,40.26,0,54.79,0s26.39,13.15,27.01,29.65 h25.4h0.04c1.3,0,2.35,1.05,2.35,2.35c0,0.04,0,0.08,0,0.12v0l-3.96,79.81l-0.04,0.68C105.12,118.21,100.59,122.73,94.99,122.88 L94.99,122.88z"/></svg></div></div>
-                  <div className="space-y-4">
-                     <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.exp)}</span>{renderGR(commerceKPIs.shopee.exp, commerceKPIs.shopee.pExp, true)}</div></div>
-                     <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.gmv)}</span>{renderGR(commerceKPIs.shopee.gmv, commerceKPIs.shopee.pGmv, false)}</div></div>
-                     <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-orange-100">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-200 leading-none">{commerceKPIs.shopee.roas}</span>{renderGR(commerceKPIs.shopee.roasNum, commerceKPIs.shopee.pRoasNum, false)}</div></div>
-                  </div>
-               </div>
-            </div>
-            
-            <div className={`p-5 sm:p-6 lg:p-7 rounded-3xl border shadow-sm mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}>
-              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-7 gap-4">
-                 <div>
-                    <h2 className="text-[clamp(1.1rem,1.8vw,1.5rem)] font-black tracking-tight" id="chartTitleCommerce">{dashboardContext} Historical Trend</h2>
-                    <p className={`text-sm font-semibold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                       {granularity === 'monthly' ? 'Displaying data for the past 3 months' : granularity === 'weekly' ? 'MTD Comparison Analytics' : 'Interactive Multi-Metric Analytics'}
-                    </p>
-                 </div>
-                 
-                 <div className={`flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-2xl border w-full xl:w-auto shadow-inner ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
-                    <span className="text-[10px] font-black uppercase tracking-widest px-3 opacity-60">Metrics</span>
-                    {[{id:'exp',l:'Expense', c:'bg-indigo-600'}, {id:'gmv',l:'GMV', c:'bg-emerald-500'}, {id:'orders',l:'Orders', c:'bg-lime-500'}, {id:'roas',l:'ROAS', c:'bg-amber-500'}, {id:'cpa',l:'CPA', c:'bg-pink-500'}].map(m => {
-                      const isActive = chartMetricsComm.includes(m.id);
-                      return (
-                        <button key={m.id} onClick={() => handleToggleMetric('commerce', m.id)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${isActive ? `${m.c} text-white shadow-md` : isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>
-                          {m.l}
-                        </button>
-                      );
-                    })}
-                 </div>
-               </div>
-               <div className="w-full h-[380px]"><canvas ref={chartRef}></canvas></div>
-            </div>
-
-            <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
-              <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
-                 <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform & Ad Type Pivot</h2>
-                 <div className="flex flex-wrap gap-3 w-full md:w-auto">
-                   <select value={tableColFilter1} onChange={(e) => setTableColFilter1(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-indigo-300 hover:border-indigo-500' : 'border-slate-300 text-indigo-700 hover:border-indigo-500 bg-slate-50'}`}>
-                     <option value="All">All Platforms / Ad Types</option>
-                     {generateTableHTML().uniqueDim1.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
-                   </select>
-                   <select value={tableColFilter2} onChange={(e) => setTableColFilter2(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-emerald-300 hover:border-emerald-500' : 'border-slate-300 text-emerald-700 hover:border-emerald-500 bg-slate-50'}`}>
-                     <option value="All">All Ad Types</option>
-                     {generateTableHTML().uniqueDim2.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
-                   </select>
-                 </div>
-               </div>
-               <div className="overflow-auto max-h-[600px] relative w-full rounded-b-3xl">
-                  <table className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-separate [border-spacing:0] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
-                    <thead dangerouslySetInnerHTML={{ __html: generateTableHTML().head }} />
-                    <tbody dangerouslySetInnerHTML={{ __html: generateTableHTML().body }} />
-                  </table>
-               </div>
-            </div>
-          </div>
-        )}
-
-        {/* --- VIEW 3: TOP CREATIVE TRACKER --- */}
-        {activeEngine === 'creative' && (
-          <div className="max-w-[1600px] mx-auto">
-            <div className="space-y-4">
-              {creativeData.length === 0 ? (
-                <div className="bg-white p-12 rounded-3xl border border-slate-200 shadow-sm text-center"><p className="text-slate-500 font-bold">No creative data found for the selected filters.</p></div>
-              ) : (
-                creativeData.slice((creativePage - 1) * CREATIVES_PER_PAGE, creativePage * CREATIVES_PER_PAGE).map((row, index) => {
-                  const driveLink = getDrivePreviewLink(row['Creative Link']);
-                  const igEmbed = getInstagramEmbedLink(row['Social Link']);
-                  const iframeSrc = driveLink || igEmbed;
-                  const adType = String(row['Ad Type'] || '').toLowerCase();
-
-                  return (
-                    <div key={index} className={`rounded-[2rem] border shadow-sm overflow-hidden flex flex-col xl:flex-row transition-all hover:shadow-lg ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-indigo-500/50' : 'bg-white border-slate-200 hover:border-indigo-400'}`}>
-                       <div className="w-full xl:w-3/12 border-b xl:border-b-0 xl:border-r border-slate-200 relative bg-[#0f172a]">
-                         {iframeSrc ? (
-                           <iframe src={iframeSrc} className="w-full h-full min-h-[280px]" frameBorder="0" allowFullScreen></iframe>
-                         ) : (
-                           <div className="w-full h-full min-h-[280px] flex items-center justify-center text-xs text-slate-500 font-medium">No Preview Available</div>
-                         )}
-                       </div>
-                       
-                       <div className="w-full xl:w-9/12 p-5 md:p-6 flex flex-col">
-                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-4">
-                           <h3 className={`text-sm md:text-base font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'} line-clamp-2`}>
-                             {row['Ad Name'] || 'Unknown Ad'}
-                           </h3>
-                           
-                           {row['Social Link'] && row['Social Link'] !== '-' && (
-                             <a
-                               href={row['Social Link']}
-                               target="_blank"
-                               rel="noopener noreferrer"
-                               className={`shrink-0 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-transform hover:-translate-y-0.5 ${
-                                 isDarkMode ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-900 text-white hover:bg-indigo-600'
-                               }`}
-                             >
-                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                               </svg>
-                               Social Link
-                             </a>
-                           )}
-                         </div>
-
-                         <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
-                            <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Spend</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatIDR(parseNum(row['Spend']))}</p></div>
-                            <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Impressions</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatNum(parseNum(row['Impressions']))}</p></div>
-                            <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>CTR</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{row['CTR'] || '-'}</p></div>
-                            <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>CPM</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatIDR(parseNum(row['CPM']))}</p></div>
-                            
-                            <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>VTR (6s)</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{row['VTR (6s)'] || '-'}</p></div>
-                            <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>VTR (15s)</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{row['VTR (15s)'] || '-'}</p></div>
-                            <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>CPCo</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{row['CPCo (Cost/Result)'] || '-'}</p></div>
-                            {adType.includes('cpas') && (
-                              <>
-                                <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Purchases</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatNum(parseNum(row['Purchases']))}</p></div>
-                                <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>GMV</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatIDR(parseNum(row['GMV']))}</p></div>
-                                <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>ROAS</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] text-emerald-500`}>{parseNum(row['ROAS']).toFixed(2)}x</p></div>
-                              </>
-                            )}
-                         </div>
-
-                         <div className="mt-auto">
-                            <div className="flex items-center justify-between mb-2">
-                               <h4 className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Creative Analysis
-                               </h4>
-                            </div>
-                            <div className={`p-3 rounded-2xl text-sm leading-relaxed border font-medium ${isDarkMode ? 'bg-indigo-950/40 text-indigo-200 border-indigo-900/50' : 'bg-indigo-50/60 text-indigo-900 border-indigo-100'}`}>
-                               {row['Insights'] || 'No insights available.'}
-                            </div>
-                         </div>
-                       </div>
+                </div>
+              );
+            };
+            return (
+              <div className="max-w-[1600px] mx-auto space-y-5">
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-widest text-indigo-600 mb-1">Performance snapshot</p><p className="text-sm text-slate-500 font-medium">{homeSummary.periodLabel} across paid media and commerce channels</p></div></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  {metricCard('Media spend', formatIDR(homeSummary.current.media.spend), growth(homeSummary.current.media.spend, homeSummary.previous.media.spend), 'bg-indigo-500', homeSummary.trend.map(item => item.mediaSpend))}
+                  {metricCard('Impressions', formatNum(homeSummary.current.media.impressions), growth(homeSummary.current.media.impressions, homeSummary.previous.media.impressions), 'bg-cyan-500', homeSummary.trend.map(item => item.mediaImpressions))}
+                  {metricCard('Commerce GMV', formatIDR(homeSummary.current.commerce.gmv), growth(homeSummary.current.commerce.gmv, homeSummary.previous.commerce.gmv), 'bg-emerald-500', homeSummary.trend.map(item => item.commerceGmv))}
+                  {metricCard('Engagement', formatNum(homeSummary.current.media.engagement), growth(homeSummary.current.media.engagement, homeSummary.previous.media.engagement), 'bg-amber-500', homeSummary.trend.map(item => item.mediaEngagement))}
+                </div>
+                <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
+                  <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm xl:col-span-3`}>
+                    <div className="flex items-center justify-between mb-5">
+                      <div>
+                        <h2 className={`text-base font-black ${homeHeading}`}>Six-month momentum</h2>
+                        <p className={`text-xs ${homeMuted} mt-1`}>Media spend and commerce GMV</p>
+                      </div>
+                      <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                        {(['bar', 'line', 'area'] as const).map(type => (
+                          <button
+                            key={type}
+                            onClick={() => setHomeMomentumType(type)}
+                            className={`px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider transition-all ${homeMomentumType === type ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                    
+                    <div className="h-52 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        {homeMomentumType === 'bar' ? (
+                          <BarChart data={homeSummary.trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
+                            <XAxis dataKey="label" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} />
+                            <YAxis stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `${(val / 1000000).toFixed(0)}M`} />
+                            <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '11px' }} formatter={(v: any) => [formatIDR(Number(v)), '']} />
+                            <Bar dataKey="mediaSpend" name="Media Spend" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={900} animationEasing="ease-out" />
+                            <Bar dataKey="commerceGmv" name="Commerce GMV" fill="#34d399" radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={1100} animationEasing="ease-out" />
+                          </BarChart>
+                        ) : homeMomentumType === 'line' ? (
+                          <LineChart data={homeSummary.trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
+                            <XAxis dataKey="label" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} />
+                            <YAxis stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `${(val / 1000000).toFixed(0)}M`} />
+                            <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '11px' }} formatter={(v: any) => [formatIDR(Number(v)), '']} />
+                            <Line type="monotone" dataKey="mediaSpend" name="Media Spend" stroke="#6366f1" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} animationDuration={900} />
+                            <Line type="monotone" dataKey="commerceGmv" name="Commerce GMV" stroke="#34d399" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} animationDuration={1100} />
+                          </LineChart>
+                        ) : (
+                          <AreaChart data={homeSummary.trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="mediaGradientHome" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
+                              </linearGradient>
+                              <linearGradient id="gmvGradientHome" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#34d399" stopOpacity={0.4} />
+                                <stop offset="95%" stopColor="#34d399" stopOpacity={0.0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
+                            <XAxis dataKey="label" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} />
+                            <YAxis stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `${(val / 1000000).toFixed(0)}M`} />
+                            <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '11px' }} formatter={(v: any) => [formatIDR(Number(v)), '']} />
+                            <Area type="monotone" dataKey="mediaSpend" name="Media Spend" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#mediaGradientHome)" animationDuration={900} />
+                            <Area type="monotone" dataKey="commerceGmv" name="Commerce GMV" stroke="#34d399" strokeWidth={2.5} fillOpacity={1} fill="url(#gmvGradientHome)" animationDuration={1100} />
+                          </AreaChart>
+                        )}
+                      </ResponsiveContainer>
+                    </div>
 
-            {creativeData.length > CREATIVES_PER_PAGE && (
-              <div className="flex justify-center items-center space-x-3 mt-12 mb-12">
-                 <button disabled={creativePage === 1} onClick={() => { setCreativePage(p => p - 1); window.scrollTo(0, 0); }} className={`px-6 py-3 border rounded-xl font-bold text-sm shadow-sm transition-all disabled:opacity-40 ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>Previous</button>
-                 <span className={`px-6 py-3 font-black rounded-xl border text-sm ${isDarkMode ? 'bg-indigo-900/50 text-indigo-300 border-indigo-800' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>Page {creativePage} of {Math.ceil(creativeData.length / CREATIVES_PER_PAGE)}</span>
-                 <button disabled={creativePage === Math.ceil(creativeData.length / CREATIVES_PER_PAGE)} onClick={() => { setCreativePage(p => p + 1); window.scrollTo(0, 0); }} className={`px-6 py-3 border rounded-xl font-bold text-sm shadow-sm transition-all disabled:opacity-40 ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>Next Page</button>
+                    <div className={`flex gap-4 mt-4 text-[10px] font-bold ${homeMuted}`}>
+                      <span><i className="inline-block w-2 h-2 rounded-full bg-indigo-500 mr-1"></i>Media spend</span>
+                      <span><i className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1"></i>Commerce GMV</span>
+                    </div>
+                  </div>
+                  
+                  <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
+                    <h2 className={`text-base font-black ${homeHeading} mb-1`}>Platform mix</h2>
+                    <p className={`text-xs ${homeMuted} mb-4`}>Investment and commerce activity</p>
+                    {mixDonut(homeSummary.platformMix, ['#6366f1', '#10b981', '#f59e0b', '#06b6d4'], 'MIX')}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Funnel mix</h2><p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel stage</p>{mixDonut(homeSummary.funnelMix, ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16'], 'MIX')}{funnelStack()}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Format mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Creative investment by format</p>{mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Channel health</h2><p className={`text-xs ${homeMuted} mb-4`}>Core media efficiency metrics</p><div className="grid grid-cols-2 gap-3"><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>CTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.ctr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>VTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.vtr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>ROAS</span><strong className={`block text-lg ${homeHeading} mt-1`}>{homeSummary.current.commerce.roas.toFixed(2)}x</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>Clicks</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatNum(homeSummary.current.media.clicks)}</strong></div></div></div></div>
               </div>
-            )}
-          </div>
-        )}
+            );
+          })()}
 
-        {/* --- VIEW 4: MEDIA SIGNAL TRACKER --- */}
-        {activeEngine === 'signal' && signalCompiled && (
-          <div className="max-w-[1600px] mx-auto space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-indigo-600 p-5 rounded-3xl text-white shadow-lg">
-                <p className="text-xs font-bold uppercase tracking-wider text-indigo-200 mb-1">Total Ad Spend</p>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-2xl font-black">{formatIDR(signalCompiled.actual?.totalSpend || 0)}</h3>
-                  {signalCompiled.prev && renderGR(signalCompiled.actual?.totalSpend || 0, signalCompiled.prev.totalSpend, true)}
-                </div>
-                <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
-                  <span>Plan: {formatIDR(signalCompiled.plan?.totalSpend || 0)}</span>
-                  <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.totalSpend || 0, signalCompiled.plan?.totalSpend || 0))}</span>
-                </div>
-                <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-                  <div className="bg-emerald-300 h-full rounded-full transition-all" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.totalSpend || 0, signalCompiled.plan?.totalSpend || 0) * 100)}%` }}></div>
-                </div>
-              </div>
-
-              <div className="bg-slate-800 p-5 rounded-3xl text-white shadow-lg">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Total Impressions</p>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-2xl font-black">{formatNum(signalCompiled.actual?.impressions || 0)}</h3>
-                  {signalCompiled.prev && renderGR(signalCompiled.actual?.impressions || 0, signalCompiled.prev.impressions, false)}
-                </div>
-                <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
-                  <span>Plan: {formatNum(signalCompiled.plan?.impressions || 0)}</span>
-                  <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.impressions || 0, signalCompiled.plan?.impressions || 0))}</span>
-                </div>
-                <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-                  <div className="bg-emerald-400 h-full rounded-full transition-all" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.impressions || 0, signalCompiled.plan?.impressions || 0) * 100)}%` }}></div>
-                </div>
-              </div>
-
-              <div className="bg-teal-700 p-5 rounded-3xl text-white shadow-lg">
-                <p className="text-xs font-bold uppercase tracking-wider text-teal-200 mb-1">Total Engagements</p>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-2xl font-black">{formatNum(signalCompiled.actual?.engagements || 0)}</h3>
-                  {signalCompiled.prev && renderGR(signalCompiled.actual?.engagements || 0, signalCompiled.prev.engagements, false)}
-                </div>
-                <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
-                  <span>Plan: {formatNum(signalCompiled.plan?.engagements || 0)}</span>
-                  <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.engagements || 0, signalCompiled.plan?.engagements || 0))}</span>
-                </div>
-                <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-                  <div className="bg-emerald-300 h-full rounded-full transition-all" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.engagements || 0, signalCompiled.plan?.engagements || 0) * 100)}%` }}></div>
-                </div>
-              </div>
-
-              <div className="bg-emerald-600 p-5 rounded-3xl text-white shadow-lg">
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-200 mb-1">GMV Ads</p>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-2xl font-black">{formatIDR(signalCompiled.actual?.gmvAds || 0)}</h3>
-                  {signalCompiled.prev && renderGR(signalCompiled.actual?.gmvAds || 0, signalCompiled.prev.gmvAds, false)}
-                </div>
-                <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
-                  <span>Plan: {formatIDR(signalCompiled.plan?.gmvAds || 0)}</span>
-                  <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.gmvAds || 0, signalCompiled.plan?.gmvAds || 0))}</span>
-                </div>
-                <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-                  <div className="bg-white h-full rounded-full transition-all" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.gmvAds || 0, signalCompiled.plan?.gmvAds || 0) * 100)}%` }}></div>
-                </div>
-              </div>
-            </div>
-
-            {/* PROGRESS & ACHIEVEMENT HIERARCHY TABLE */}
-            <div className={`p-6 rounded-3xl border shadow-sm ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-2">
-                <div>
-                  <h2 className="text-lg font-black tracking-tight">TikTok Media Signal Matrix (MTD Achievement & Growth)</h2>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">
-                    Viewing: {signalCompiled.currentPeriod.start} to {signalCompiled.currentPeriod.end} 
-                    {signalCompiled.prevPeriod ? ` (compared with ${signalCompiled.prevPeriod.start} to ${signalCompiled.prevPeriod.end})` : ''}
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    void exportMediaSignalToExcel({
-                      rawData,
-                      extraSheetsData,
-                      selectedPeriod: signalCompiled.currentPeriod,
-                      parseNum,
-                      parseSheetDate,
-                      toYMD
-                    });
-                  }}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md transition-all active:scale-95"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Export All Brands (.xlsx)
-                </button>
+          {/* --- VIEW 1: DIGITAL MEDIA --- */}
+          {activeEngine === 'media' && (
+            <div className="max-w-[1600px] mx-auto space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
+                <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
+                    <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Media</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg></div></div>
+                    <div className="space-y-4">
+                       <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.overall.spend)}</span>{renderGR(mediaKPIs.overall.spend, mediaKPIs.overall.pSpend, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Impr</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.overall.impr)}</span>{renderGR(mediaKPIs.overall.impr, mediaKPIs.overall.pImpr, false)}</div></div>
+                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.overall.engage)}</span>{renderGR(mediaKPIs.overall.engage, mediaKPIs.overall.pEngage, false)}</div></div>
+                    </div>
+                 </div>
+                 <div onClick={() => setDashboardContext('Meta')} className={`bg-blue-500 rounded-3xl p-5 lg:p-6 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Meta' ? 'ring-4 ring-blue-300 shadow-blue-500/40' : ''}`}>
+                    <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-blue-100 uppercase tracking-widest">Meta</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg></div></div>
+                    <div className="space-y-4">
+                       <div className="flex justify-between items-end border-b border-blue-400 pb-3"><span className="text-xs font-bold text-blue-100">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.meta.spend)}</span>{renderGR(mediaKPIs.meta.spend, mediaKPIs.meta.pSpend, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-blue-400 pb-3"><span className="text-xs font-bold text-blue-100">Impr</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.meta.impr)}</span>{renderGR(mediaKPIs.meta.impr, mediaKPIs.meta.pImpr, false)}</div></div>
+                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-blue-100">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.meta.engage)}</span>{renderGR(mediaKPIs.meta.engage, mediaKPIs.meta.pEngage, false)}</div></div>
+                    </div>
+                 </div>
+                 <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
+                    <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
+                    <div className="space-y-4">
+                       <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Spend</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(mediaKPIs.tiktok.spend)}</span>{renderGR(mediaKPIs.tiktok.spend, mediaKPIs.tiktok.pSpend, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Impr</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.tiktok.impr)}</span>{renderGR(mediaKPIs.tiktok.impr, mediaKPIs.tiktok.pImpr, false)}</div></div>
+                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">Engage</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatNum(mediaKPIs.tiktok.engage)}</span>{renderGR(mediaKPIs.tiktok.engage, mediaKPIs.tiktok.pEngage, false)}</div></div>
+                    </div>
+                 </div>
               </div>
               
-              <div className="overflow-x-auto w-full">
-                <table className="w-full text-left text-sm whitespace-nowrap border-collapse">
-                  <thead>
-                    <tr className={`border-b text-xs font-black uppercase tracking-wider ${isDarkMode ? 'border-slate-700 text-slate-400 bg-slate-900/60' : 'border-slate-200 text-slate-500 bg-slate-100/60'}`}>
-                      <th className="py-3.5 px-4 text-left w-1/4 min-w-[220px]">Metrics</th>
-                      <th className="py-3.5 px-4 text-right w-36 min-w-[120px]">Actual (MTD)</th>
-                      <th className="py-3.5 px-4 text-right w-36 min-w-[120px]">Plan Target</th>
-                      <th className="py-3.5 px-6 text-center w-48 min-w-[160px]">Target Progress</th>
-                      <th className="py-3.5 px-4 text-right w-24 min-w-[90px]">% Ach</th>
-                      <th className="py-3.5 px-4 text-right w-36 min-w-[120px]">Prev Period</th>
-                      <th className="py-3.5 px-4 text-right w-32 min-w-[110px]">MoM Growth</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y ${isDarkMode ? 'divide-slate-700/50' : 'divide-slate-100'}`}>
-                    {signalHierarchyGroups.map((group, gIdx) => (
-                      <React.Fragment key={gIdx}>
-                        <tr className={isDarkMode ? 'bg-slate-900/90' : 'bg-slate-100/80'}>
-                          <td colSpan={7} className="py-2.5 px-4 font-black uppercase text-xs tracking-wider text-indigo-400 border-t-2 border-slate-700/60">
-                            {group.category}
-                          </td>
-                        </tr>
-                        {group.rows.map((row, rIdx) => {
-                          const actVal = Number(row.act) || 0;
-                          const plnVal = Number(row.pln) || 0;
-                          const prvVal = Number(row.prv) || 0;
-                          const ach = signalCompiled.computeAch(actVal, plnVal);
-                          const pctWidth = Math.min(100, Math.max(0, ach * 100));
+              <div className={`p-5 sm:p-6 lg:p-7 rounded-3xl border shadow-sm mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}>
+                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-7 gap-4">
+                   <div>
+                      <h2 className="text-[clamp(1.1rem,1.8vw,1.5rem)] font-black tracking-tight" id="chartTitleMedia">{dashboardContext} Historical Trend</h2>
+                      <p className={`text-sm font-semibold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                         {granularity === 'monthly' ? 'Displaying data for the past 3 months' : granularity === 'weekly' ? 'MTD Comparison Analytics' : 'Interactive Multi-Metric Analytics'}
+                      </p>
+                   </div>
+                   
+                   <div className="flex flex-wrap items-center gap-3">
+                     <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                       {(['combo', 'bar', 'line'] as const).map(t => (
+                         <button
+                           key={t}
+                           onClick={() => setChartTypeEngine(t)}
+                           className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${chartTypeEngine === t ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}`}
+                         >
+                           {t}
+                         </button>
+                       ))}
+                     </div>
 
+                     <div className={`flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-2xl border w-full xl:w-auto shadow-inner ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                        <span className="text-[10px] font-black uppercase tracking-widest px-3 opacity-60">Metrics</span>
+                        {[{id:'spend',l:'Spend', c:'bg-indigo-600'}, {id:'imp',l:'Impr', c:'bg-emerald-500'}, {id:'clicks',l:'Clicks', c:'bg-lime-500'}, {id:'views',l:'Views', c:'bg-amber-500'}, {id:'ctr',l:'CTR', c:'bg-pink-500'}, {id:'vtr',l:'VTR', c:'bg-teal-500'}].map(m => {
+                          const isActive = chartMetricsMedia.includes(m.id);
                           return (
-                            <tr key={rIdx} className={`transition-colors ${isDarkMode ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'}`}>
-                              <td className="py-3 px-4 font-medium text-left">{row.name}</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold text-emerald-400">{row.fmt(actVal)}</td>
-                              <td className="py-3 px-4 text-right font-mono text-slate-400">{plnVal > 0 ? row.fmt(plnVal) : '-'}</td>
-                              <td className="py-3 px-6 text-center">
-                                {plnVal > 0 ? (
-                                  <div className={`w-full h-2 rounded-full overflow-hidden p-0.5 ${isDarkMode ? 'bg-slate-700/60' : 'bg-slate-200'}`}>
-                                    <div className={`h-full rounded-full transition-all ${ach >= 1 ? 'bg-emerald-400' : 'bg-indigo-500'}`} style={{ width: `${pctWidth}%` }}></div>
-                                  </div>
-                                ) : (
-                                  <span className="text-[10px] text-slate-500 italic block text-center">No Target</span>
-                                )}
-                              </td>
-                              <td className="py-3 px-4 text-right font-mono font-bold">
-                                {plnVal > 0 ? (
-                                  <span className={`px-2 py-0.5 rounded text-xs ${ach >= 1 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-700/40 text-slate-300'}`}>
-                                    {formatPct(ach)}
-                                  </span>
-                                ) : '-'}
-                              </td>
-                              <td className="py-3 px-4 text-right font-mono text-slate-400">{signalCompiled.prevPeriod ? row.fmt(prvVal) : '-'}</td>
-                              <td className="py-3 px-4 text-right font-mono font-bold">
-                                {signalCompiled.prevPeriod ? renderGR(actVal, prvVal, row.isInv) : '-'}
-                              </td>
-                            </tr>
+                            <button key={m.id} onClick={() => handleToggleMetric('media', m.id)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${isActive ? `${m.c} text-white shadow-md` : isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>
+                              {m.l}
+                            </button>
                           );
                         })}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
+                     </div>
+                   </div>
+                 </div>
+
+                 {/* Canvas with smooth appearance animation */}
+                 <div
+                   key={`chart-media-${dashboardContext}-${chartTypeEngine}-${chartMetricsMedia.join('-')}`}
+                   className="w-full h-[380px] chart-appearance-animate"
+                 >
+                   <canvas ref={chartRef}></canvas>
+                 </div>
+              </div>
+
+              {/* Dedicated Platform Summary Table (Overall, Meta, TikTok) */}
+              <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                <div className={`p-5 border-b flex justify-between items-center ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
+                  <div>
+                    <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform Summary Rollup</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Core performance across platforms (Spend, Impression, CPM, CTR, VTR)</p>
+                  </div>
+                </div>
+                <div className="overflow-auto max-h-[400px] relative w-full">
+                  <table className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-separate [border-spacing:0] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                    <thead dangerouslySetInnerHTML={{ __html: generatePlatformSummaryHTML().head }} />
+                    <tbody dangerouslySetInnerHTML={{ __html: generatePlatformSummaryHTML().body }} />
+                  </table>
+                </div>
+              </div>
+
+              {/* Full Table with increased max height (850px) */}
+              <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
+                   <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Pivot Analysis Table</h2>
+                   
+                   <div className="flex flex-wrap gap-3 w-full md:w-auto">
+                     <select value={tableColFilter1} onChange={(e) => setTableColFilter1(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-indigo-300 hover:border-indigo-500' : 'border-slate-300 text-indigo-700 hover:border-indigo-500 bg-slate-50'}`}>
+                       <option value="All">All Ad Types / Platforms</option>
+                       {generateTableHTML().uniqueDim1.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
+                     </select>
+                     <select value={tableColFilter2} onChange={(e) => setTableColFilter2(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-emerald-300 hover:border-emerald-500' : 'border-slate-300 text-emerald-700 hover:border-emerald-500 bg-slate-50'}`}>
+                       <option value="All">All Formats / Ad Types</option>
+                       {generateTableHTML().uniqueDim2.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
+                     </select>
+                   </div>
+                 </div>
+                 <div className="overflow-auto max-h-[850px] relative w-full rounded-b-3xl">
+                    <table className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-separate [border-spacing:0] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                      <thead dangerouslySetInnerHTML={{ __html: generateTableHTML().head }} />
+                      <tbody dangerouslySetInnerHTML={{ __html: generateTableHTML().body }} />
+                    </table>
+                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* --- VIEW 2: COMMERCE TRACKER --- */}
+          {activeEngine === 'commerce' && (
+            <div className="max-w-[1600px] mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
+                <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
+                    <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Commerce</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg></div></div>
+                    <div className="space-y-4">
+                       <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.exp)}</span>{renderGR(commerceKPIs.overall.exp, commerceKPIs.overall.pExp, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.gmv)}</span>{renderGR(commerceKPIs.overall.gmv, commerceKPIs.overall.pGmv, false)}</div></div>
+                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-300 leading-none">{commerceKPIs.overall.roas}</span>{renderGR(commerceKPIs.overall.roasNum, commerceKPIs.overall.pRoasNum, false)}</div></div>
+                    </div>
+                 </div>
+                 <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
+                    <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok Shop</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
+                    <div className="space-y-4">
+                       <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.exp)}</span>{renderGR(commerceKPIs.tiktok.exp, commerceKPIs.tiktok.pExp, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.gmv)}</span>{renderGR(commerceKPIs.tiktok.gmv, commerceKPIs.tiktok.pGmv, false)}</div></div>
+                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-400 leading-none">{commerceKPIs.tiktok.roas}</span>{renderGR(commerceKPIs.tiktok.roasNum, commerceKPIs.tiktok.pRoasNum, false)}</div></div>
+                    </div>
+                 </div>
+                 <div onClick={() => setDashboardContext('Shopee')} className={`bg-orange-500 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Shopee' ? 'ring-4 ring-orange-300 shadow-orange-500/40' : ''}`}>
+                    <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-orange-100 uppercase tracking-widest">Shopee</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 109.59 122.88" fill="currentColor"><path d="M74.98,91.98C76.15,82.36,69.96,76.22,53.6,71c-7.92-2.7-11.66-6.24-11.57-11.12 c0.33-5.4,5.36-9.34,12.04-9.47c4.63,0.09,9.77,1.22,14.76,4.56c0.59,0.37,1.01,0.32,1.35-0.2c0.46-0.74,1.61-2.53,2-3.17 c0.26-0.42,0.31-0.96-0.35-1.44c-0.95-0.7-3.6-2.13-5.03-2.72c-3.88-1.62-8.23-2.64-12.86-2.63c-9.77,0.04-17.47,6.22-18.12,14.47 c-0.42,5.95,2.53,10.79,8.86,14.47c1.34,0.78,8.6,3.67,11.49,4.57c9.08,2.83,13.8,7.9,12.69,13.81c-1.01,5.36-6.65,8.83-14.43,8.93 c-6.17-0.24-11.71-2.75-16.02-6.1c-0.11-0.08-0.65-0.5-0.72-0.56c-0.53-0.42-1.11-0.39-1.47,0.15c-0.26,0.4-1.92,2.8-2.34,3.43 c-0.39,0.55-0.18,0.86,0.23,1.2c1.8,1.5,4.18,3.14,5.81,3.97c4.47,2.28,9.32,3.53,14.48,3.72c3.32,0.22,7.5-0.49,10.63-1.81 C70.63,102.67,74.25,97.92,74.98,91.98L74.98,91.98z M54.79,7.18c-10.59,0-19.22,9.98-19.62,22.47h39.25 C74.01,17.16,65.38,7.18,54.79,7.18L54.79,7.18z M94.99,122.88l-0.41,0l-80.82-0.01h0c-5.5-0.21-9.54-4.66-10.09-10.19l-0.05-1 l-3.61-79.5v0C0,32.12,0,32.06,0,32c0-1.28,1.03-2.33,2.3-2.35l0,0h25.48C28.41,13.15,40.26,0,54.79,0s26.39,13.15,27.01,29.65 h25.4h0.04c1.3,0,2.35,1.05,2.35,2.35c0,0.04,0,0.08,0,0.12v0l-3.96,79.81l-0.04,0.68C105.12,118.21,100.59,122.73,94.99,122.88 L94.99,122.88z"/></svg></div></div>
+                    <div className="space-y-4">
+                       <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.exp)}</span>{renderGR(commerceKPIs.shopee.exp, commerceKPIs.shopee.pExp, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.gmv)}</span>{renderGR(commerceKPIs.shopee.gmv, commerceKPIs.shopee.pGmv, false)}</div></div>
+                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-orange-100">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-200 leading-none">{commerceKPIs.shopee.roas}</span>{renderGR(commerceKPIs.shopee.roasNum, commerceKPIs.shopee.pRoasNum, false)}</div></div>
+                    </div>
+                 </div>
+              </div>
+              
+              <div className={`p-5 sm:p-6 lg:p-7 rounded-3xl border shadow-sm mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}>
+                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-7 gap-4">
+                   <div>
+                      <h2 className="text-[clamp(1.1rem,1.8vw,1.5rem)] font-black tracking-tight" id="chartTitleCommerce">{dashboardContext} Historical Trend</h2>
+                      <p className={`text-sm font-semibold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                         {granularity === 'monthly' ? 'Displaying data for the past 3 months' : granularity === 'weekly' ? 'MTD Comparison Analytics' : 'Interactive Multi-Metric Analytics'}
+                      </p>
+                   </div>
+                   
+                   <div className="flex flex-wrap items-center gap-3">
+                     <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                       {(['combo', 'bar', 'line'] as const).map(t => (
+                         <button
+                           key={t}
+                           onClick={() => setChartTypeEngine(t)}
+                           className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${chartTypeEngine === t ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'}`}
+                         >
+                           {t}
+                         </button>
+                       ))}
+                     </div>
+
+                     <div className={`flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-2xl border w-full xl:w-auto shadow-inner ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                        <span className="text-[10px] font-black uppercase tracking-widest px-3 opacity-60">Metrics</span>
+                        {[{id:'exp',l:'Expense', c:'bg-indigo-600'}, {id:'gmv',l:'GMV', c:'bg-emerald-500'}, {id:'orders',l:'Orders', c:'bg-lime-500'}, {id:'roas',l:'ROAS', c:'bg-amber-500'}, {id:'cpa',l:'CPA', c:'bg-pink-500'}].map(m => {
+                          const isActive = chartMetricsComm.includes(m.id);
+                          return (
+                            <button key={m.id} onClick={() => handleToggleMetric('commerce', m.id)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${isActive ? `${m.c} text-white shadow-md` : isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'}`}>
+                              {m.l}
+                            </button>
+                          );
+                        })}
+                     </div>
+                   </div>
+                 </div>
+
+                 {/* Canvas with smooth appearance animation */}
+                 <div
+                   key={`chart-comm-${dashboardContext}-${chartTypeEngine}-${chartMetricsComm.join('-')}`}
+                   className="w-full h-[380px] chart-appearance-animate"
+                 >
+                   <canvas ref={chartRef}></canvas>
+                 </div>
+              </div>
+
+              {/* Adjustment 2: Full Table with increased max height (850px) */}
+              <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
+                   <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform & Ad Type Pivot</h2>
+                   <div className="flex flex-wrap gap-3 w-full md:w-auto">
+                     <select value={tableColFilter1} onChange={(e) => setTableColFilter1(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-indigo-300 hover:border-indigo-500' : 'border-slate-300 text-indigo-700 hover:border-indigo-500 bg-slate-50'}`}>
+                       <option value="All">All Platforms / Ad Types</option>
+                       {generateTableHTML().uniqueDim1.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
+                     </select>
+                     <select value={tableColFilter2} onChange={(e) => setTableColFilter2(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-emerald-300 hover:border-emerald-500' : 'border-slate-300 text-emerald-700 hover:border-emerald-500 bg-slate-50'}`}>
+                       <option value="All">All Ad Types</option>
+                       {generateTableHTML().uniqueDim2.map((opt: any) => <option key={opt} value={opt}>{opt}</option>)}
+                     </select>
+                   </div>
+                 </div>
+                 <div className="overflow-auto max-h-[850px] relative w-full rounded-b-3xl">
+                    <table className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-separate [border-spacing:0] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                      <thead dangerouslySetInnerHTML={{ __html: generateTableHTML().head }} />
+                      <tbody dangerouslySetInnerHTML={{ __html: generateTableHTML().body }} />
+                    </table>
+                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* --- VIEW 3: TOP CREATIVE TRACKER --- */}
+          {activeEngine === 'creative' && (
+            <div className="max-w-[1600px] mx-auto">
+              <div className="space-y-4">
+                {creativeData.length === 0 ? (
+                  <div className="bg-white p-12 rounded-3xl border border-slate-200 shadow-sm text-center"><p className="text-slate-500 font-bold">No creative data found for the selected filters.</p></div>
+                ) : (
+                  creativeData.slice((creativePage - 1) * CREATIVES_PER_PAGE, creativePage * CREATIVES_PER_PAGE).map((row, index) => {
+                    const driveLink = getDrivePreviewLink(row['Creative Link']);
+                    const igEmbed = getInstagramEmbedLink(row['Social Link']);
+                    const iframeSrc = driveLink || igEmbed;
+                    const adType = String(row['Ad Type'] || '').toLowerCase();
+
+                    return (
+                      <div key={index} className={`rounded-[2rem] border shadow-sm overflow-hidden flex flex-col xl:flex-row transition-all hover:shadow-lg ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-indigo-500/50' : 'bg-white border-slate-200 hover:border-indigo-400'}`}>
+                         <div className="w-full xl:w-3/12 border-b xl:border-b-0 xl:border-r border-slate-200 relative bg-[#0f172a]">
+                           {iframeSrc ? (
+                             <iframe src={iframeSrc} className="w-full h-full min-h-[280px]" frameBorder="0" allowFullScreen></iframe>
+                           ) : (
+                             <div className="w-full h-full min-h-[280px] flex items-center justify-center text-xs text-slate-500 font-medium">No Preview Available</div>
+                           )}
+                         </div>
+                         
+                         <div className="w-full xl:w-9/12 p-5 md:p-6 flex flex-col">
+                           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-4">
+                             <h3 className={`text-sm md:text-base font-bold ${isDarkMode ? 'text-white' : 'text-slate-900'} line-clamp-2`}>
+                               {row['Ad Name'] || 'Unknown Ad'}
+                             </h3>
+                             
+                             {row['Social Link'] && row['Social Link'] !== '-' && (
+                               <a
+                                 href={row['Social Link']}
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+                                 className={`shrink-0 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-transform hover:-translate-y-0.5 ${
+                                   isDarkMode ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-slate-900 text-white hover:bg-indigo-600'
+                                 }`}
+                               >
+                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                 </svg>
+                                 Social Link
+                               </a>
+                             )}
+                           </div>
+
+                           <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 p-4 rounded-2xl border ${isDarkMode ? 'bg-slate-900/50 border-slate-700' : 'bg-slate-50 border-slate-100'}`}>
+                              <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Spend</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatIDR(parseNum(row['Spend']))}</p></div>
+                              <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Impressions</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatNum(parseNum(row['Impressions']))}</p></div>
+                              <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>CTR</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{row['CTR'] || '-'}</p></div>
+                              <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>CPM</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatIDR(parseNum(row['CPM']))}</p></div>
+                              
+                              <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>VTR (6s)</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{row['VTR (6s)'] || '-'}</p></div>
+                              <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>VTR (15s)</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{row['VTR (15s)'] || '-'}</p></div>
+                              <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>CPCo</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{row['CPCo (Cost/Result)'] || '-'}</p></div>
+                              {adType.includes('cpas') && (
+                                <>
+                                  <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Purchases</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatNum(parseNum(row['Purchases']))}</p></div>
+                                  <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>GMV</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>{formatIDR(parseNum(row['GMV']))}</p></div>
+                                  <div><p className={`font-bold mb-1.5 text-[10px] uppercase tracking-widest ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>ROAS</p><p className={`font-mono font-bold text-[clamp(14px,1vw,16px)] text-emerald-500`}>{parseNum(row['ROAS']).toFixed(2)}x</p></div>
+                                </>
+                              )}
+                           </div>
+
+                           <div className="mt-auto">
+                              <div className="flex items-center justify-between mb-2">
+                                 <h4 className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 ${isDarkMode ? 'text-indigo-400' : 'text-indigo-600'}`}>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> Creative Analysis
+                                 </h4>
+                              </div>
+                              <div className={`p-3 rounded-2xl text-sm leading-relaxed border font-medium ${isDarkMode ? 'bg-indigo-950/40 text-indigo-200 border-indigo-900/50' : 'bg-indigo-50/60 text-indigo-900 border-indigo-100'}`}>
+                                 {row['Insights'] || 'No insights available.'}
+                              </div>
+                           </div>
+                         </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {creativeData.length > CREATIVES_PER_PAGE && (
+                <div className="flex justify-center items-center space-x-3 mt-12 mb-12">
+                   <button disabled={creativePage === 1} onClick={() => { setCreativePage(p => p - 1); window.scrollTo(0, 0); }} className={`px-6 py-3 border rounded-xl font-bold text-sm shadow-sm transition-all disabled:opacity-40 ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>Previous</button>
+                   <span className={`px-6 py-3 font-black rounded-xl border text-sm ${isDarkMode ? 'bg-indigo-900/50 text-indigo-300 border-indigo-800' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>Page {creativePage} of {Math.ceil(creativeData.length / CREATIVES_PER_PAGE)}</span>
+                   <button disabled={creativePage === Math.ceil(creativeData.length / CREATIVES_PER_PAGE)} onClick={() => { setCreativePage(p => p + 1); window.scrollTo(0, 0); }} className={`px-6 py-3 border rounded-xl font-bold text-sm shadow-sm transition-all disabled:opacity-40 ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>Next Page</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* --- VIEW 4: MEDIA SIGNAL TRACKER --- */}
+          {activeEngine === 'signal' && signalCompiled && (
+            <div className="max-w-[1600px] mx-auto space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-indigo-600 p-5 rounded-3xl text-white shadow-lg">
+                  <p className="text-xs font-bold uppercase tracking-wider text-indigo-200 mb-1">Total Ad Spend</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-2xl font-black">{formatIDR(signalCompiled.actual?.totalSpend || 0)}</h3>
+                    {signalCompiled.prev && renderGR(signalCompiled.actual?.totalSpend || 0, signalCompiled.prev.totalSpend, false)}
+                  </div>
+                  <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
+                    <span>Plan: {formatIDR(signalCompiled.plan?.totalSpend || 0)}</span>
+                    <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.totalSpend || 0, signalCompiled.plan?.totalSpend || 0))}</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                    <div className="bg-emerald-300 h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.totalSpend || 0, signalCompiled.plan?.totalSpend || 0) * 100)}%` }}></div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800 p-5 rounded-3xl text-white shadow-lg">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Total Impressions</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-2xl font-black">{formatNum(signalCompiled.actual?.impressions || 0)}</h3>
+                    {signalCompiled.prev && renderGR(signalCompiled.actual?.impressions || 0, signalCompiled.prev.impressions, false)}
+                  </div>
+                  <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
+                    <span>Plan: {formatNum(signalCompiled.plan?.impressions || 0)}</span>
+                    <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.impressions || 0, signalCompiled.plan?.impressions || 0))}</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                    <div className="bg-emerald-400 h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.impressions || 0, signalCompiled.plan?.impressions || 0) * 100)}%` }}></div>
+                  </div>
+                </div>
+
+                <div className="bg-teal-700 p-5 rounded-3xl text-white shadow-lg">
+                  <p className="text-xs font-bold uppercase tracking-wider text-teal-200 mb-1">Total Engagements</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-2xl font-black">{formatNum(signalCompiled.actual?.engagements || 0)}</h3>
+                    {signalCompiled.prev && renderGR(signalCompiled.actual?.engagements || 0, signalCompiled.prev.engagements, false)}
+                  </div>
+                  <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
+                    <span>Plan: {formatNum(signalCompiled.plan?.engagements || 0)}</span>
+                    <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.engagements || 0, signalCompiled.plan?.engagements || 0))}</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                    <div className="bg-emerald-300 h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.engagements || 0, signalCompiled.plan?.engagements || 0) * 100)}%` }}></div>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-600 p-5 rounded-3xl text-white shadow-lg">
+                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-200 mb-1">GMV Ads</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-2xl font-black">{formatIDR(signalCompiled.actual?.gmvAds || 0)}</h3>
+                    {signalCompiled.prev && renderGR(signalCompiled.actual?.gmvAds || 0, signalCompiled.prev.gmvAds, false)}
+                  </div>
+                  <div className="flex justify-between text-xs mb-1.5 opacity-90 font-medium">
+                    <span>Plan: {formatIDR(signalCompiled.plan?.gmvAds || 0)}</span>
+                    <span>{formatPct(signalCompiled.computeAch(signalCompiled.actual?.gmvAds || 0, signalCompiled.plan?.gmvAds || 0))}</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                    <div className="bg-white h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, signalCompiled.computeAch(signalCompiled.actual?.gmvAds || 0, signalCompiled.plan?.gmvAds || 0) * 100)}%` }}></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* PROGRESS & ACHIEVEMENT HIERARCHY TABLE */}
+              <div className={`p-6 rounded-3xl border shadow-sm ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-5 gap-2">
+                  <div>
+                    <h2 className="text-lg font-black tracking-tight">TikTok Media Signal Matrix (MTD Achievement & Growth)</h2>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">
+                      Viewing: {signalCompiled.currentPeriod.start} to {signalCompiled.currentPeriod.end} 
+                      {signalCompiled.prevPeriod ? ` (compared with ${signalCompiled.prevPeriod.start} to ${signalCompiled.prevPeriod.end})` : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      void exportMediaSignalToExcel({
+                        rawData,
+                        extraSheetsData,
+                        selectedPeriod: signalCompiled.currentPeriod,
+                        parseNum,
+                        parseSheetDate,
+                        toYMD
+                      });
+                    }}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md transition-all active:scale-95"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export All Brands (.xlsx)
+                  </button>
+                </div>
+                
+                <div className="overflow-x-auto w-full">
+                  <table className="w-full text-left text-sm whitespace-nowrap border-collapse">
+                    <thead>
+                      <tr className={`border-b text-xs font-black uppercase tracking-wider ${isDarkMode ? 'border-slate-700 text-slate-400 bg-slate-900/60' : 'border-slate-200 text-slate-500 bg-slate-100/60'}`}>
+                        <th className="py-3.5 px-4 text-left w-1/4 min-w-[220px]">Metrics</th>
+                        <th className="py-3.5 px-4 text-right w-36 min-w-[120px]">Actual (MTD)</th>
+                        <th className="py-3.5 px-4 text-right w-36 min-w-[120px]">Plan Target</th>
+                        <th className="py-3.5 px-6 text-center w-48 min-w-[160px]">Target Progress</th>
+                        <th className="py-3.5 px-4 text-right w-24 min-w-[90px]">% Ach</th>
+                        <th className="py-3.5 px-4 text-right w-36 min-w-[120px]">Prev Period</th>
+                        <th className="py-3.5 px-4 text-right w-32 min-w-[110px]">MoM Growth</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${isDarkMode ? 'divide-slate-700/50' : 'divide-slate-100'}`}>
+                      {signalHierarchyGroups.map((group, gIdx) => (
+                        <React.Fragment key={gIdx}>
+                          <tr className={isDarkMode ? 'bg-slate-900/90' : 'bg-slate-100/80'}>
+                            <td colSpan={7} className="py-2.5 px-4 font-black uppercase text-xs tracking-wider text-indigo-400 border-t-2 border-slate-700/60">
+                              {group.category}
+                            </td>
+                          </tr>
+                          {group.rows.map((row, rIdx) => {
+                            const actVal = Number(row.act) || 0;
+                            const plnVal = Number(row.pln) || 0;
+                            const prvVal = Number(row.prv) || 0;
+                            const ach = signalCompiled.computeAch(actVal, plnVal);
+                            const pctWidth = Math.min(100, Math.max(0, ach * 100));
+
+                            return (
+                              <tr key={rIdx} className={`transition-colors ${isDarkMode ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'}`}>
+                                <td className="py-3 px-4 font-medium text-left">{row.name}</td>
+                                <td className="py-3 px-4 text-right font-mono font-bold text-emerald-400">{row.fmt(actVal)}</td>
+                                <td className="py-3 px-4 text-right font-mono text-slate-400">{plnVal > 0 ? row.fmt(plnVal) : '-'}</td>
+                                <td className="py-3 px-6 text-center">
+                                  {plnVal > 0 ? (
+                                    <div className={`w-full h-2 rounded-full overflow-hidden p-0.5 ${isDarkMode ? 'bg-slate-700/60' : 'bg-slate-200'}`}>
+                                      <div className={`h-full rounded-full transition-all duration-700 ease-out ${ach >= 1 ? 'bg-emerald-400' : 'bg-indigo-500'}`} style={{ width: `${pctWidth}%` }}></div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-500 italic block text-center">No Target</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-right font-mono font-bold">
+                                  {plnVal > 0 ? (
+                                    <span className={`px-2 py-0.5 rounded text-xs ${ach >= 1 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-700/40 text-slate-300'}`}>
+                                      {formatPct(ach)}
+                                    </span>
+                                  ) : '-'}
+                                </td>
+                                <td className="py-3 px-4 text-right font-mono text-slate-400">{signalCompiled.prevPeriod ? row.fmt(prvVal) : '-'}</td>
+                                <td className="py-3 px-4 text-right font-mono font-bold">
+                                  {signalCompiled.prevPeriod ? renderGR(actVal, prvVal, row.isInv) : '-'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
       </main>
     </div>
