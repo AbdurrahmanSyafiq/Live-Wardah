@@ -105,10 +105,12 @@ export async function exportMediaSignalToExcel({ rawData, extraSheetsData, selec
       const platform = String(row['Platform'] || '').toLowerCase().trim();
       if (!platform.includes('tiktok') || clean(row['Brand fx'] || row['Brand']) !== target) return;
       const date = parseSheetDate(row['Date']); if (!date || date < start || date > end) return;
-      gmvCommerce += parseNum(row['GMV']); itemsSold += parseNum(row['Orders']) || parseNum(row['Item sold']) || parseNum(row['Items Sold']); spendConversionComm += parseNum(row['Expense']);
+      gmvCommerce += parseNum(row['GMV']); 
+      itemsSold += parseNum(row['Items Sold']) || parseNum(row['Item sold']) || parseNum(row['items_sold']) || parseNum(row['Orders']); 
+      spendConversionComm += parseNum(row['Expense']);
     });
     const gmv = gmvCommerce || sum(['GMV Ads', 'gmv_ads', 'GMV']);
-    const sold = itemsSold || sum(['Item sold', 'Items Sold', 'items_sold']);
+    const sold = itemsSold || sum(['Items Sold', 'Item sold', 'items_sold', 'Orders']);
     const spendConversion = spendConversionComm || spendConversionMedia || sum(['Spend Conversion', 'spend_conversion']);
     const impConversion = Math.max(0, paidImpressions - impAwareness - impConsideration);
     const totalSpend = Math.max(spendAwareness + spendConsideration + spendConversion, totalMediaSpend) || sum(['Total TikTok Spend', 'Total TikTok', 'Ad Spend', 'Spend', 'total_spend']);
@@ -566,7 +568,7 @@ export default function DashboardApp() {
           if (!rDate || rDate < pStart || rDate > pEnd) return;
 
           gmvCommerce += parseNum(row['GMV']);
-          itemsSold += parseNum(row['Orders']) || parseNum(row['Item sold']) || parseNum(row['Items Sold']);
+          itemsSold += parseNum(row['Items Sold']) || parseNum(row['Item sold']) || parseNum(row['items_sold']) || parseNum(row['Orders']);
           spendConversionComm += parseNum(row['Expense']);
         });
       }
@@ -577,10 +579,9 @@ export default function DashboardApp() {
         ? signalSpend || sumSignal(['Spend Awareness', 'Spend Consideration', 'Spend Conversion'])
         : Math.max(spendAwareness + spendConsideration + spendConversion, totalMediaSpend) || signalSpend;
 
-      // Impression conversion metric pulled accurately, not whole paid impressions
       const impConversion = isPlanOnly ? 0 : (sumSignal(['Impression Conversion', 'imp_conversion']) || Math.max(0, paidImpressions - impAwareness - impConsideration));
       const gmvAds = gmvCommerce || sumSignal(['GMV Ads', 'gmv_ads', 'GMV']);
-      const finalItemsSold = itemsSold || sumSignal(['Item sold', 'Items Sold', 'items_sold']);
+      const finalItemsSold = itemsSold || sumSignal(['Items Sold', 'Item sold', 'items_sold', 'Orders']);
 
       return {
         impressions, paidImpressions, organicImpressions,
@@ -703,7 +704,6 @@ export default function DashboardApp() {
           metric("CPM Awareness", "cpmAwareness", formatIDR, true),
           metric("Impression Consideration", "impConsideration", formatNum),
           metric("CPM Consideration", "cpmConsideration", formatIDR, true),
-          // Impression Conversion explicitly has 0 plan target for "No Target"
           metric("Impression Conversion", "impConversion", formatNum, false, 0),
           metric("CPM Conversion", "cpmConversion", formatIDR, true),
           metric("Spend Awareness", "spendAwareness", formatIDR, false),
@@ -881,7 +881,10 @@ export default function DashboardApp() {
     const commerceMetrics = (rows: any[]) => {
       const expense = sum(rows, 'Expense');
       const gmv = sum(rows, 'GMV');
-      const orders = sum(rows, 'Orders');
+      const orders = rows.reduce(
+        (total, row) => total + parseNum(row['Items Sold'] || row['Item sold'] || row['items_sold'] || row['Orders']),
+        0
+      );
       return { expense, gmv, orders, roas: expense ? gmv / expense : 0 };
     };
     const groupSum = (rows: any[], key: string, value: string) => {
@@ -931,7 +934,6 @@ export default function DashboardApp() {
     };
   }, [homeMediaData, homeCommerceData, homeBrand, homePeriod]);
 
-  // Spend growth is formatted green if increased, red if decreased (isInv = false)
   const renderGR = (cur: number, prev: number, isInv = false) => {
     if (prev === 0 && cur === 0) return <span className="text-[10px] ml-2 font-bold opacity-40">-</span>;
     const gr = getGr(cur, prev);
@@ -973,7 +975,7 @@ export default function DashboardApp() {
             } else {
               running.exp += parseNum(row['Expense']);
               running.gmv += parseNum(row['GMV']);
-              running.orders += parseNum(row['Orders']);
+              running.orders += parseNum(row['Items Sold'] || row['Item sold'] || row['items_sold'] || row['Orders']);
             }
           });
 
@@ -1002,7 +1004,8 @@ export default function DashboardApp() {
           groupedData[label].spend += parseNum(row['Ad Spend']); groupedData[label].imp += parseNum(row['Impressions']);
           groupedData[label].clicks += parseNum(row['Combined Clicks']); groupedData[label].views += parseNum(row['Views']) + parseNum(row['Views 6s']);
         } else {
-          groupedData[label].exp += parseNum(row['Expense']); groupedData[label].gmv += parseNum(row['GMV']); groupedData[label].orders += parseNum(row['Orders']);
+          groupedData[label].exp += parseNum(row['Expense']); groupedData[label].gmv += parseNum(row['GMV']); 
+          groupedData[label].orders += parseNum(row['Items Sold'] || row['Item sold'] || row['items_sold'] || row['Orders']);
         }
       });
     }
@@ -1121,7 +1124,7 @@ export default function DashboardApp() {
   const generatePlatformSummaryHTML = useCallback(() => {
     if (activeEngine !== 'media') return { head: '', body: '' };
 
-    const filterPlatform = (rows: any[], plat: 'Overall' | 'TikTok' | 'Meta') => {
+    const filterPlatform = (rows: any[], plat: 'Overall' | 'Meta' | 'TikTok') => {
       if (plat === 'Overall') return rows;
       return rows.filter(r => {
         const p = String(r[CONFIG.media.colPlatform] || '').toLowerCase();
@@ -1143,7 +1146,7 @@ export default function DashboardApp() {
         spend,
         imp,
         cpm: imp > 0 ? (spend / imp) * 1000 : 0,
-        ctr: imp > 0 ? clicks / imp : 0, // Replaced Total Clicks with CTR
+        ctr: imp > 0 ? clicks / imp : 0,
         vtr6: imp > 0 ? v6 / imp : 0,
         vtr15: imp > 0 ? v15 / imp : 0
       };
@@ -1154,7 +1157,7 @@ export default function DashboardApp() {
       { name: 'Spend', key: 'spend', fmt: formatIDR, isInv: false },
       { name: 'Impression', key: 'imp', fmt: formatNum, isInv: false },
       { name: 'CPM', key: 'cpm', fmt: formatIDR, isInv: true },
-      { name: 'CTR', key: 'ctr', fmt: formatPct, isInv: false }, // Replaced Total Clicks with CTR
+      { name: 'CTR', key: 'ctr', fmt: formatPct, isInv: false },
       { name: 'VTR (6s)', key: 'vtr6', fmt: formatPct, isInv: false },
       { name: 'VTR (15s)', key: 'vtr15', fmt: formatPct, isInv: false }
     ];
@@ -1308,7 +1311,8 @@ export default function DashboardApp() {
         target.gmv += parseNum(row["GMV"]); target.purchase += parseNum(row["Purchases With Shared Items"]);
       } else {
         target.exp += parseNum(row["Expense"]); target.imp += parseNum(row["Impression"]);
-        target.clicks += parseNum(row["Clicks"]); target.orders += parseNum(row["Orders"]);
+        target.clicks += parseNum(row["Clicks"]); 
+        target.orders += parseNum(row["Items Sold"] || row["Item sold"] || row["items_sold"] || row["Orders"]);
         target.gmv += parseNum(row["GMV"]); target.liveViews += parseNum(row["Live Views"]);
       }
     };
@@ -1648,7 +1652,6 @@ export default function DashboardApp() {
         .dashboard-shell .rounded-3xl { border-radius: 0.75rem !important; }
         .dashboard-shell .rounded-\[2rem\] { border-radius: 0.75rem !important; }
         
-        /* Adjustment: Seamless animation when moving across views/workspaces */
         @keyframes pageFadeIn {
           from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
@@ -1657,7 +1660,6 @@ export default function DashboardApp() {
           animation: pageFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
-        /* Adjustment 2: Appearance animation for canvas charts */
         @keyframes chartAppearance {
           0% {
             opacity: 0;
@@ -2033,7 +2035,6 @@ export default function DashboardApp() {
                    </div>
                  </div>
 
-                 {/* Canvas with smooth appearance animation */}
                  <div
                    key={`chart-media-${dashboardContext}-${chartTypeEngine}-${chartMetricsMedia.join('-')}`}
                    className="w-full h-[380px] chart-appearance-animate"
@@ -2150,7 +2151,6 @@ export default function DashboardApp() {
                    </div>
                  </div>
 
-                 {/* Canvas with smooth appearance animation */}
                  <div
                    key={`chart-comm-${dashboardContext}-${chartTypeEngine}-${chartMetricsComm.join('-')}`}
                    className="w-full h-[380px] chart-appearance-animate"
