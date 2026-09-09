@@ -18,6 +18,37 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
+// --- SHADCN/UI TABLE PRIMITIVES ---
+const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(({ className = '', ...props }, ref) => (
+  <table ref={ref} className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-separate [border-spacing:0] caption-bottom ${className}`} {...props} />
+));
+Table.displayName = "Table";
+
+const TableHeader = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(({ className = '', ...props }, ref) => (
+  <thead ref={ref} className={`[&_tr]:border-b ${className}`} {...props} />
+));
+TableHeader.displayName = "TableHeader";
+
+const TableBody = React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(({ className = '', ...props }, ref) => (
+  <tbody ref={ref} className={`[&_tr:last-child]:border-0 ${className}`} {...props} />
+));
+TableBody.displayName = "TableBody";
+
+const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(({ className = '', ...props }, ref) => (
+  <tr ref={ref} className={`transition-colors ${className}`} {...props} />
+));
+TableRow.displayName = "TableRow";
+
+const TableHead = React.forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<HTMLTableCellElement>>(({ className = '', ...props }, ref) => (
+  <th ref={ref} className={`px-4 py-4 text-xs font-bold uppercase tracking-wider align-middle [&:has([role=checkbox])]:pr-0 ${className}`} {...props} />
+));
+TableHead.displayName = "TableHead";
+
+const TableCell = React.forwardRef<HTMLTableCellElement, React.TdHTMLAttributes<HTMLTableCellElement>>(({ className = '', ...props }, ref) => (
+  <td ref={ref} className={`px-4 py-3 align-middle [&:has([role=checkbox])]:pr-0 ${className}`} {...props} />
+));
+TableCell.displayName = "TableCell";
+
 const CONFIG = {
   media: { sheet: "Media API", colDate: "Date", colBrand: "Brand", colPlatform: "Platform", colFunnel: "Funnel", colAdType: "KPI", colFormat: "Format", colConsiSize: "Result" },
   commerce: { sheet: "Commerce", colDate: "Date", colBrand: "Brand fx", colPlatform: "Platform", colAdType: "Ad Type" },
@@ -1120,9 +1151,9 @@ export default function DashboardApp() {
     return `<td class="px-4 py-3 text-right font-mono font-bold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}"><span class="px-2.5 py-1 rounded-lg ${color}">${formatPct(Math.abs(gr))}</span></td>`;
   }, [isDarkMode]);
 
-  // --- PLATFORM SUMMARY TABLE GENERATOR (DIGITAL MEDIA) WITH CTR INSTEAD OF CLICKS ---
-  const generatePlatformSummaryHTML = useCallback(() => {
-    if (activeEngine !== 'media') return { head: '', body: '' };
+  // --- PLATFORM SUMMARY BODY GENERATOR (DIGITAL MEDIA) ---
+  const generatePlatformSummaryBodyHTML = useCallback(() => {
+    if (activeEngine !== 'media') return '';
 
     const filterPlatform = (rows: any[], plat: 'Overall' | 'Meta' | 'TikTok') => {
       if (plat === 'Overall') return rows;
@@ -1162,19 +1193,9 @@ export default function DashboardApp() {
       { name: 'VTR (15s)', key: 'vtr15', fmt: formatPct, isInv: false }
     ];
 
-    const thClass = `px-4 py-4 font-bold text-slate-100 bg-[#0f172a]`;
-    let thead = '';
     let tbody = '';
 
     if (granularity === 'monthly') {
-      thead = `<tr>
-        <th class="sticky-col ${thClass}">Platform</th>
-        <th class="sticky-col-2 ${thClass}">Metric</th>
-        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">This Month</th>
-        <th class="px-4 py-4 text-right font-bold text-slate-400 bg-[#0f172a] sticky top-0 border-b border-slate-700">Prev Month</th>
-        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">GR%</th>
-      </tr>`;
-
       platforms.forEach(plat => {
         const curTotals = calcSum(filterPlatform(ctxCurData, plat));
         const prevTotals = calcSum(filterPlatform(ctxPrevData, plat));
@@ -1200,23 +1221,6 @@ export default function DashboardApp() {
     } else if (granularity === 'weekly') {
       let weeksFound = new Set<string>(); ctxCurData.forEach(r => weeksFound.add(r.bucket)); ctxPrevData.forEach(r => weeksFound.add(r.bucket));
       let weeks = Array.from(weeksFound).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
-
-      thead = `<tr>
-        <th class="sticky-col ${thClass}">Platform</th>
-        <th class="sticky-col-2 ${thClass}">Metric</th>`;
-      weeks.forEach(w => {
-        const weekNum = parseInt(w.replace('W', ''));
-        let curD = new Date(globalDates.curStart); curD.setDate(curD.getDate() + (weekNum * 7) - 1); if (curD > globalDates.curMtdEnd) curD = new Date(globalDates.curMtdEnd);
-        let prevD = new Date(globalDates.prevStart); prevD.setDate(prevD.getDate() + (weekNum * 7) - 1); if (prevD > globalDates.prevMtdEnd) prevD = new Date(globalDates.prevMtdEnd);
-        const fmtStr = (d: Date) => `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
-        thead += `<th class="px-4 py-4 text-right bg-[#0f172a] border-l border-slate-700 font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(curD)}</th>
-                  <th class="px-4 py-4 text-right text-slate-400 bg-[#0f172a] font-bold sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(prevD)}</th>
-                  <th class="px-4 py-4 text-right bg-[#0f172a] font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">GR%</th>`;
-      });
-      thead += `<th class="px-4 py-4 text-right border-l border-indigo-500 text-indigo-300 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Cur</th>
-                <th class="px-4 py-4 text-right text-slate-400 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Prev</th>
-                <th class="px-4 py-4 text-right text-indigo-300 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Total GR%</th>
-              </tr>`;
 
       platforms.forEach(plat => {
         const curRows = filterPlatform(ctxCurData, plat);
@@ -1258,14 +1262,6 @@ export default function DashboardApp() {
       });
     } else if (granularity === 'daily') {
       let daysFound = new Set<string>(); ctxCurData.forEach(r => daysFound.add(r.bucket)); let days = Array.from(daysFound).sort();
-      thead = `<tr>
-        <th class="sticky-col ${thClass}">Platform</th>
-        <th class="sticky-col-2 ${thClass}">Metric</th>`;
-      days.forEach(d => {
-        const parts = d.split('-'); const dt = new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]));
-        thead += `<th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700 whitespace-nowrap">${dt.getDate()} ${dt.toLocaleString('en-GB', { month: 'short' })}</th>`;
-      });
-      thead += `<th class="px-4 py-4 text-right text-indigo-300 border-l border-slate-700 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Period Total</th></tr>`;
 
       platforms.forEach(plat => {
         const platRows = filterPlatform(ctxCurData, plat);
@@ -1291,8 +1287,8 @@ export default function DashboardApp() {
       });
     }
 
-    return { head: thead, body: tbody };
-  }, [ctxCurData, ctxPrevData, granularity, activeEngine, globalDates, isDarkMode, getGrHTML]);
+    return tbody;
+  }, [ctxCurData, ctxPrevData, granularity, activeEngine, isDarkMode, getGrHTML]);
 
   // --- MANUAL TABLE RENDERER FOR MEDIA & COMMERCE ---
   const generateTableHTML = useCallback(() => {
@@ -1550,7 +1546,7 @@ export default function DashboardApp() {
           .fluid-blob-3 { animation: fluidMove3 16s ease-in-out infinite; }
         `}} />
         
-        <div className="hidden md:block w-[60%] h-full relative bg-[#180b3d] overflow-hidden">
+        <div className="hidden md:block w-[60%] h-full relative bg-[#090d16] overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-[#12082b] via-[#210e4a] to-[#0a1f24]" />
           <div className="fluid-blob-1 absolute -top-24 -left-24 w-[520px] h-[520px] rounded-full opacity-90 mix-blend-screen pointer-events-none" style={{ background: 'radial-gradient(circle, #8beb3a 0%, #43ca55 45%, transparent 70%)', filter: 'blur(75px)' }} />
           <div className="fluid-blob-2 absolute -bottom-32 -right-20 w-[600px] h-[600px] rounded-full opacity-95 mix-blend-screen pointer-events-none" style={{ background: 'radial-gradient(circle, #7a22cf 0%, #48118d 50%, transparent 75%)', filter: 'blur(80px)' }} />
@@ -1598,28 +1594,28 @@ export default function DashboardApp() {
 
   if (currentView === 'welcome') {
     return (
-      <div className="welcome-screen fixed inset-0 z-[100] bg-[#0f172a] flex flex-col items-center justify-center p-6 font-sans">
+      <div className="welcome-screen fixed inset-0 z-[100] bg-[#090d16] flex flex-col items-center justify-center p-6 font-sans">
         <div className="max-w-6xl w-full text-center">
           <h1 className="text-[clamp(2.5rem,5vw,4rem)] font-black text-white mb-4 tracking-tight">Welcome to All in One Dashboard</h1>
           <p className="text-slate-400 mb-16 text-[clamp(1rem,1.5vw,1.25rem)] font-medium">Please select the tracker you wish to launch. You can navigate between them at any time.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
-            <button onClick={() => selectHome()} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group border border-indigo-500/20">
+            <button onClick={() => selectHome()} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group border border-indigo-500/20">
               <div className="w-14 h-14 mx-auto bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12h18M3 6h18M3 18h18"></path></svg></div>
               <h2 className="text-xl font-bold text-white mb-1">General Overview</h2><p className="text-xs text-slate-400">Cross-channel performance summary.</p>
             </button>
-            <button onClick={() => selectEngine('media')} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group">
+            <button onClick={() => selectEngine('media')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group">
               <div className="w-14 h-14 bg-indigo-500 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></div>
               <h2 className="text-xl font-bold text-white mb-1">Digital Media</h2><p className="text-xs text-slate-400">Full-funnel media metrics.</p>
             </button>
-            <button onClick={() => selectEngine('commerce')} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group">
+            <button onClick={() => selectEngine('commerce')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group">
               <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></div>
               <h2 className="text-xl font-bold text-white mb-1">Commerce Tracker</h2><p className="text-xs text-slate-400">Revenue and ROAS metrics.</p>
             </button>
-            <button onClick={() => selectEngine('creative')} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group">
+            <button onClick={() => selectEngine('creative')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group">
               <div className="w-14 h-14 bg-lime-500 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
               <h2 className="text-xl font-bold text-white mb-1">Top Creative</h2><p className="text-xs text-slate-400">Winning creative assets.</p>
             </button>
-            <button onClick={() => selectEngine('signal')} className="bg-[#1e293b] p-8 rounded-3xl hover:bg-[#27354f] transition-all group border border-emerald-500/20">
+            <button onClick={() => selectEngine('signal')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group border border-emerald-500/20">
               <div className="w-14 h-14 bg-emerald-600 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg></div>
               <h2 className="text-xl font-bold text-white mb-1">Media Signal</h2><p className="text-xs text-slate-400">TikTok Actual vs Plan.</p>
             </button>
@@ -1630,7 +1626,7 @@ export default function DashboardApp() {
   }
 
   return (
-    <div className={`dashboard-shell w-full min-h-screen flex font-sans transition-colors duration-300 ${isDarkMode ? 'bg-[#0f172a] text-slate-100' : 'bg-[#e7e7ef] text-slate-800'}`}>
+    <div className={`dashboard-shell w-full min-h-screen flex font-sans transition-colors duration-300 ${isDarkMode ? 'bg-[#090d16] text-slate-100' : 'bg-[#e7e7ef] text-slate-800'}`}>
       <style dangerouslySetInnerHTML={{__html: `
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -1638,13 +1634,13 @@ export default function DashboardApp() {
         ::-webkit-scrollbar-thumb:hover { background: #64748b; }
         
         table { border-collapse: separate !important; border-spacing: 0 !important; }
-        thead th { position: sticky !important; top: 0 !important; z-index: 30 !important; background-color: #0f172a !important; }
-        thead th.sticky-col { position: sticky !important; top: 0 !important; left: 0px !important; z-index: 60 !important; background-color: #0f172a !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid #334155 !important; border-bottom: 2px solid #334155 !important; }
-        thead th.sticky-col-2 { position: sticky !important; top: 0 !important; left: 180px !important; z-index: 60 !important; background-color: #0f172a !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid #334155 !important; border-bottom: 2px solid #334155 !important; }
-        thead th.sticky-col-3 { position: sticky !important; top: 0 !important; left: 360px !important; z-index: 60 !important; background-color: #0f172a !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; border-right: 1px solid #334155 !important; border-bottom: 2px solid #334155 !important; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.3) !important; }
-        tbody td.sticky-col { position: sticky !important; left: 0px !important; z-index: 20 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important; }
-        tbody td.sticky-col-2 { position: sticky !important; left: 180px !important; z-index: 20 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important; }
-        tbody td.sticky-col-3 { position: sticky !important; left: 360px !important; z-index: 20 !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; border-right: 1px solid ${isDarkMode ? '#334155' : '#e2e8f0'} !important; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.08) !important; }
+        thead th { position: sticky !important; top: 0 !important; z-index: 30 !important; background-color: #090d16 !important; }
+        thead th.sticky-col { position: sticky !important; top: 0 !important; left: 0px !important; z-index: 60 !important; background-color: #090d16 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid #1e293b !important; border-bottom: 2px solid #1e293b !important; }
+        thead th.sticky-col-2 { position: sticky !important; top: 0 !important; left: 180px !important; z-index: 60 !important; background-color: #090d16 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid #1e293b !important; border-bottom: 2px solid #1e293b !important; }
+        thead th.sticky-col-3 { position: sticky !important; top: 0 !important; left: 360px !important; z-index: 60 !important; background-color: #090d16 !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; border-right: 1px solid #1e293b !important; border-bottom: 2px solid #1e293b !important; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.3) !important; }
+        tbody td.sticky-col { position: sticky !important; left: 0px !important; z-index: 20 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid ${isDarkMode ? '#1e293b' : '#e2e8f0'} !important; }
+        tbody td.sticky-col-2 { position: sticky !important; left: 180px !important; z-index: 20 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid ${isDarkMode ? '#1e293b' : '#e2e8f0'} !important; }
+        tbody td.sticky-col-3 { position: sticky !important; left: 360px !important; z-index: 20 !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; border-right: 1px solid ${isDarkMode ? '#1e293b' : '#e2e8f0'} !important; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.08) !important; }
         tr.group-start:not(:first-child) td { border-top: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important; }
         tr.group-start td[rowspan] { border-bottom: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important; }
         tr.group-end td { border-bottom: 2.5px solid ${isDarkMode ? '#64748b' : '#94a3b8'} !important; }
@@ -1675,7 +1671,7 @@ export default function DashboardApp() {
         }
 
         .dropdown-arrow { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e"); background-position: right center; background-repeat: no-repeat; background-size: 1rem 1rem; }
-        select option { background-color: #0f172a; color: #f1f5f9; padding: 10px; }
+        select option { background-color: #090d16; color: #f1f5f9; padding: 10px; }
       `}} />
 
       {isLoading && (
@@ -1686,27 +1682,27 @@ export default function DashboardApp() {
       )}
 
       {/* SIDEBAR */}
-      <aside className={`${isSidebarOpen ? 'w-[300px] translate-x-0' : 'w-0 -translate-x-full lg:w-0'} bg-[#0f172a] border-r border-[#1e293b] h-screen fixed lg:static overflow-y-auto flex-shrink-0 transition-all duration-300 ease-in-out z-40 text-slate-300 flex flex-col`}>
-        <div className="p-6 border-b border-[#1e293b] flex justify-between items-center bg-[#0f172a] sticky top-0 z-20">
+      <aside className={`${isSidebarOpen ? 'w-[300px] translate-x-0' : 'w-0 -translate-x-full lg:w-0'} bg-[#090d16] border-r border-slate-800/80 h-screen fixed lg:static overflow-y-auto flex-shrink-0 transition-all duration-300 ease-in-out z-40 text-slate-300 flex flex-col`}>
+        <div className="p-6 border-b border-slate-800/80 flex justify-between items-center bg-[#090d16] sticky top-0 z-20">
           <h1 className="text-lg font-extrabold text-white tracking-tight leading-tight">PC Brands<br/>All in One Tracker</h1>
           <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-slate-500 hover:text-white">✕</button>
         </div>
         
-        <div className="pt-6 pb-4 px-5 space-y-1.5 border-b border-[#1e293b]">
+        <div className="pt-6 pb-4 px-5 space-y-1.5 border-b border-slate-800/80">
           <p className="px-3 text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Workspaces</p>
-          <button onClick={() => selectHome()} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${currentView === 'home' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
+          <button onClick={() => selectHome()} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${currentView === 'home' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l9-9 9 9M5 10v10h14V10M9 20v-6h6v6"></path></svg>General Overview
           </button>
-          <button onClick={() => selectEngine('media')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'media' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
+          <button onClick={() => selectEngine('media')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'media' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>Digital Media
           </button>
-          <button onClick={() => selectEngine('commerce')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'commerce' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
+          <button onClick={() => selectEngine('commerce')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'commerce' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>Commerce Tracker
           </button>
-          <button onClick={() => selectEngine('creative')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'creative' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
+          <button onClick={() => selectEngine('creative')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'creative' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Top Creative
           </button>
-          <button onClick={() => selectEngine('signal')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'signal' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-[#1e293b] text-slate-400'}`}>
+          <button onClick={() => selectEngine('signal')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'signal' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>Media Signal
           </button>
         </div>
@@ -1716,7 +1712,7 @@ export default function DashboardApp() {
           
           {/* STANDARD DATE PICKER */}
           {currentView !== 'home' && activeEngine !== 'creative' && activeEngine !== 'signal' && (
-             <div className="bg-[#1e293b] p-4 rounded-2xl border border-[#334155] space-y-3 shadow-inner">
+             <div className="bg-[#111827] p-4 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
                 <div className="flex items-center justify-between mb-1">
                    <label className="text-xs font-bold text-slate-400">Date Range</label>
                    <select value={granularity} onChange={(e) => setGranularity(e.target.value)} className="bg-transparent text-indigo-400 text-xs font-bold outline-none cursor-pointer appearance-none pr-8 text-right dropdown-arrow bg-[length:12px_12px] bg-[position:right_center]">
@@ -1737,13 +1733,13 @@ export default function DashboardApp() {
           )}
 
           {currentView === 'home' && (
-            <div className="bg-[#1e293b] p-4 rounded-2xl border border-[#334155] space-y-3 shadow-inner">
+            <div className="bg-[#111827] p-4 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
               <label className="block text-xs font-bold text-slate-400">Home Filters</label>
               <select value={homeBrand} onChange={(e) => setHomeBrand(e.target.value)} className={selectClass}>
                 {homeBrandOptions.map(brand => <option key={brand} value={brand}>{brand}</option>)}
               </select>
               <input type="month" value={homePeriod} onChange={(e) => setHomePeriod(e.target.value)} className={isDarkMode ? dateClassDark : dateClass} />
-              <button onClick={() => loadHomeData(true)} className="w-full bg-slate-800 hover:bg-indigo-600 text-white font-bold py-2.5 rounded-xl border border-slate-700 hover:border-indigo-500 transition-all text-xs">Sync Home Data</button>
+              <button onClick={() => loadHomeData(true)} className="w-full bg-[#1e293b] hover:bg-indigo-600 text-white font-bold py-2.5 rounded-xl border border-slate-700 hover:border-indigo-500 transition-all text-xs">Sync Home Data</button>
             </div>
           )}
 
@@ -1794,8 +1790,8 @@ export default function DashboardApp() {
             )}
           </div>
         </div>
-        <div className="p-6 bg-[#0f172a] border-t border-[#1e293b]">
-          <button onClick={() => loadData(activeEngine as any, true)} className="w-full bg-slate-800 hover:bg-indigo-600 text-white font-bold py-3.5 rounded-xl border border-slate-700 hover:border-indigo-500 shadow-md transition-all flex justify-center items-center gap-2 text-sm tracking-wide">Sync Live Data</button>
+        <div className="p-6 bg-[#090d16] border-t border-slate-800/80">
+          <button onClick={() => loadData(activeEngine as any, true)} className="w-full bg-[#1e293b] hover:bg-indigo-600 text-white font-bold py-3.5 rounded-xl border border-slate-700 hover:border-indigo-500 shadow-md transition-all flex justify-center items-center gap-2 text-sm tracking-wide">Sync Live Data</button>
         </div>
       </aside>
 
@@ -1868,7 +1864,7 @@ export default function DashboardApp() {
               return (
                 <div className="flex items-center gap-4">
                   <div className="w-28 h-28 rounded-full shrink-0" style={{ background: `conic-gradient(${gradient || '#e2e8f0 0 100%'})` }}>
-                    <div className={`w-16 h-16 mt-6 ml-6 rounded-full ${isDarkMode ? 'bg-slate-900' : 'bg-white'} flex items-center justify-center`}><span className={`text-[9px] font-black ${homeMuted}`}>{centerLabel}</span></div>
+                    <div className={`w-16 h-16 mt-6 ml-6 rounded-full ${isDarkMode ? 'bg-[#090d16]' : 'bg-white'} flex items-center justify-center`}><span className={`text-[9px] font-black ${homeMuted}`}>{centerLabel}</span></div>
                   </div>
                   <div className="space-y-1 min-w-0">
                     {items.slice(0, 6).map((item, index) => <div key={item.label} className={`flex items-center gap-2 text-[10px] ${homeMuted}`}>
@@ -1964,7 +1960,7 @@ export default function DashboardApp() {
                     {mixDonut(homeSummary.platformMix, ['#6366f1', '#10b981', '#f59e0b', '#06b6d4'], 'MIX')}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Funnel mix</h2><p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel stage</p>{mixDonut(homeSummary.funnelMix, ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16'], 'MIX')}{funnelStack()}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Format mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Creative investment by format</p>{mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Channel health</h2><p className={`text-xs ${homeMuted} mb-4`}>Core media efficiency metrics</p><div className="grid grid-cols-2 gap-3"><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>CTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.ctr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>VTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.vtr)}</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>ROAS</span><strong className={`block text-lg ${homeHeading} mt-1`}>{homeSummary.current.commerce.roas.toFixed(2)}x</strong></div><div className={`${isDarkMode ? 'bg-slate-900' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>Clicks</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatNum(homeSummary.current.media.clicks)}</strong></div></div></div></div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Funnel mix</h2><p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel stage</p>{mixDonut(homeSummary.funnelMix, ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16'], 'MIX')}{funnelStack()}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Format mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Creative investment by format</p>{mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Channel health</h2><p className={`text-xs ${homeMuted} mb-4`}>Core media efficiency metrics</p><div className="grid grid-cols-2 gap-3"><div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>CTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.ctr)}</strong></div><div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>VTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.vtr)}</strong></div><div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>ROAS</span><strong className={`block text-lg ${homeHeading} mt-1`}>{homeSummary.current.commerce.roas.toFixed(2)}x</strong></div><div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>Clicks</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatNum(homeSummary.current.media.clicks)}</strong></div></div></div></div>
               </div>
             );
           })()}
@@ -2021,7 +2017,7 @@ export default function DashboardApp() {
                        ))}
                      </div>
 
-                     <div className={`flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-2xl border w-full xl:w-auto shadow-inner ${isDarkMode ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                     <div className={`flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-2xl border w-full xl:w-auto shadow-inner ${isDarkMode ? 'bg-[#090d16] border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
                         <span className="text-[10px] font-black uppercase tracking-widest px-3 opacity-60">Metrics</span>
                         {[{id:'spend',l:'Spend', c:'bg-indigo-600'}, {id:'imp',l:'Impr', c:'bg-emerald-500'}, {id:'clicks',l:'Clicks', c:'bg-lime-500'}, {id:'views',l:'Views', c:'bg-amber-500'}, {id:'ctr',l:'CTR', c:'bg-pink-500'}, {id:'vtr',l:'VTR', c:'bg-teal-500'}].map(m => {
                           const isActive = chartMetricsMedia.includes(m.id);
@@ -2043,7 +2039,7 @@ export default function DashboardApp() {
                  </div>
               </div>
 
-              {/* Dedicated Platform Summary Table (Overall, Meta, TikTok) */}
+              {/* Dedicated Platform Summary Table (Overall, Meta, TikTok) with SHADCN/UI Table Primitives */}
               <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                 <div className={`p-5 border-b flex justify-between items-center ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
                   <div>
@@ -2052,10 +2048,66 @@ export default function DashboardApp() {
                   </div>
                 </div>
                 <div className="overflow-auto max-h-[400px] relative w-full">
-                  <table className={`min-w-full text-left text-[clamp(12px,1vw,14px)] whitespace-nowrap border-separate [border-spacing:0] ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
-                    <thead dangerouslySetInnerHTML={{ __html: generatePlatformSummaryHTML().head }} />
-                    <tbody dangerouslySetInnerHTML={{ __html: generatePlatformSummaryHTML().body }} />
-                  </table>
+                  <Table className={isDarkMode ? 'text-slate-200' : 'text-slate-700'}>
+                    <TableHeader>
+                      {granularity === 'monthly' && (
+                        <TableRow className="border-b border-slate-700 bg-[#090d16]">
+                          <TableHead className="sticky-col text-slate-100 bg-[#090d16]">Platform</TableHead>
+                          <TableHead className="sticky-col-2 text-slate-100 bg-[#090d16]">Metric</TableHead>
+                          <TableHead className="text-right text-white bg-[#090d16] sticky top-0 border-b border-slate-700">This Month</TableHead>
+                          <TableHead className="text-right text-slate-400 bg-[#090d16] sticky top-0 border-b border-slate-700">Prev Month</TableHead>
+                          <TableHead className="text-right text-white bg-[#090d16] sticky top-0 border-b border-slate-700">GR%</TableHead>
+                        </TableRow>
+                      )}
+
+                      {granularity === 'weekly' && (() => {
+                        let weeksFound = new Set<string>(); ctxCurData.forEach(r => weeksFound.add(r.bucket)); ctxPrevData.forEach(r => weeksFound.add(r.bucket));
+                        let weeks = Array.from(weeksFound).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
+                        return (
+                          <TableRow className="border-b border-slate-700 bg-[#090d16]">
+                            <TableHead className="sticky-col text-slate-100 bg-[#090d16]">Platform</TableHead>
+                            <TableHead className="sticky-col-2 text-slate-100 bg-[#090d16]">Metric</TableHead>
+                            {weeks.map(w => {
+                              const weekNum = parseInt(w.replace('W', ''));
+                              let curD = new Date(globalDates.curStart); curD.setDate(curD.getDate() + (weekNum * 7) - 1); if (curD > globalDates.curMtdEnd) curD = new Date(globalDates.curMtdEnd);
+                              let prevD = new Date(globalDates.prevStart); prevD.setDate(prevD.getDate() + (weekNum * 7) - 1); if (prevD > globalDates.prevMtdEnd) prevD = new Date(globalDates.prevMtdEnd);
+                              const fmtStr = (d: Date) => `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
+                              return (
+                                <React.Fragment key={w}>
+                                  <TableHead className="text-right bg-[#090d16] border-l border-slate-700 text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD {fmtStr(curD)}</TableHead>
+                                  <TableHead className="text-right text-slate-400 bg-[#090d16] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD {fmtStr(prevD)}</TableHead>
+                                  <TableHead className="text-right bg-[#090d16] text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">GR%</TableHead>
+                                </React.Fragment>
+                              );
+                            })}
+                            <TableHead className="text-right border-l border-indigo-500 text-indigo-300 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Cur</TableHead>
+                            <TableHead className="text-right text-slate-400 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Prev</TableHead>
+                            <TableHead className="text-right text-indigo-300 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Total GR%</TableHead>
+                          </TableRow>
+                        );
+                      })()}
+
+                      {granularity === 'daily' && (() => {
+                        let daysFound = new Set<string>(); ctxCurData.forEach(r => daysFound.add(r.bucket)); let days = Array.from(daysFound).sort();
+                        return (
+                          <TableRow className="border-b border-slate-700 bg-[#090d16]">
+                            <TableHead className="sticky-col text-slate-100 bg-[#090d16]">Platform</TableHead>
+                            <TableHead className="sticky-col-2 text-slate-100 bg-[#090d16]">Metric</TableHead>
+                            {days.map(d => {
+                              const parts = d.split('-'); const dt = new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]));
+                              return (
+                                <TableHead key={d} className="text-right text-white bg-[#090d16] sticky top-0 border-b border-slate-700 whitespace-nowrap">
+                                  {dt.getDate()} {dt.toLocaleString('en-GB', { month: 'short' })}
+                                </TableHead>
+                              );
+                            })}
+                            <TableHead className="text-right text-indigo-300 border-l border-slate-700 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Period Total</TableHead>
+                          </TableRow>
+                        );
+                      })()}
+                    </TableHeader>
+                    <TableBody dangerouslySetInnerHTML={{ __html: generatePlatformSummaryBodyHTML() }} />
+                  </Table>
                 </div>
               </div>
 
@@ -2199,7 +2251,7 @@ export default function DashboardApp() {
 
                     return (
                       <div key={index} className={`rounded-[2rem] border shadow-sm overflow-hidden flex flex-col xl:flex-row transition-all hover:shadow-lg ${isDarkMode ? 'bg-slate-800 border-slate-700 hover:border-indigo-500/50' : 'bg-white border-slate-200 hover:border-indigo-400'}`}>
-                         <div className="w-full xl:w-3/12 border-b xl:border-b-0 xl:border-r border-slate-200 relative bg-[#0f172a]">
+                         <div className="w-full xl:w-3/12 border-b xl:border-b-0 xl:border-r border-slate-200 relative bg-[#090d16]">
                            {iframeSrc ? (
                              <iframe src={iframeSrc} className="w-full h-full min-h-[280px]" frameBorder="0" allowFullScreen></iframe>
                            ) : (
