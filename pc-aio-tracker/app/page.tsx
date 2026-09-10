@@ -993,12 +993,20 @@ export default function DashboardApp() {
     };
     const commerceMetrics = (rows: any[]) => {
       const expense = sum(rows, 'Expense');
+      const impressions = rows.reduce(
+        (acc, row) => acc + (parseNum(row['Impression']) || parseNum(row['Impressions']) || 0),
+        0
+      );
+      const clicks = rows.reduce(
+        (acc, row) => acc + (parseNum(row['Clicks']) || parseNum(row['Combined Clicks']) || 0),
+        0
+      );
       const gmv = sum(rows, 'GMV');
       const orders = rows.reduce(
         (total, row) => total + parseNum(row['Items Sold'] || row['Item sold'] || row['items_sold'] || row['Orders']),
         0
       );
-      return { expense, gmv, orders, roas: expense ? gmv / expense : 0 };
+      return { expense, impressions, clicks, gmv, orders, roas: expense ? gmv / expense : 0 };
     };
     const groupSum = (rows: any[], key: string, value: string) => {
       const grouped = new Map<string, number>();
@@ -1025,9 +1033,9 @@ export default function DashboardApp() {
         spend: media.spend + commerce.expense,
         mediaSpend: media.spend,
         commerceExpense: commerce.expense,
-        impressions: media.impressions,
-        clicks: media.clicks,
-        engagement: media.engagement,
+        impressions: media.impressions + commerce.impressions,
+        clicks: media.clicks + commerce.clicks,
+        engagement: media.engagement + commerce.clicks,
         commerceGmv: commerce.gmv,
         orders: commerce.orders
       };
@@ -1061,6 +1069,12 @@ export default function DashboardApp() {
     const currentTotalSpend = current.media.spend + current.commerce.expense;
     const previousTotalSpend = previous.media.spend + previous.commerce.expense;
 
+    const currentTotalImpressions = current.media.impressions + current.commerce.impressions;
+    const previousTotalImpressions = previous.media.impressions + previous.commerce.impressions;
+
+    const currentTotalEngagement = current.media.engagement + current.commerce.clicks;
+    const previousTotalEngagement = previous.media.engagement + previous.commerce.clicks;
+
     const maxOf = (items: { total: number }[]) => Math.max(...items.map(item => item.total), 1);
     const platformMix = groupSum(currentMedia, 'Platform', 'Ad Spend').concat(groupSum(currentCommerce, 'Platform', 'Expense'));
     const platformTotals = Array.from(
@@ -1077,6 +1091,10 @@ export default function DashboardApp() {
       previous,
       currentTotalSpend,
       previousTotalSpend,
+      currentTotalImpressions,
+      previousTotalImpressions,
+      currentTotalEngagement,
+      previousTotalEngagement,
       trend,
       funnelTrend,
       platformTrend,
@@ -1232,9 +1250,8 @@ export default function DashboardApp() {
         responsive: true,
         maintainAspectRatio: false,
         animation: {
-          duration: 900,
-          easing: 'easeInOutQuart',
-          delay: (context) => context.dataIndex * 40 + context.datasetIndex * 80
+          duration: 400,
+          easing: 'easeInOutQuart'
         },
         interaction: { mode: 'index', intersect: false },
         plugins: { 
@@ -1247,7 +1264,10 @@ export default function DashboardApp() {
               boxHeight: 6,
               color: isDarkMode ? '#cbd5e1' : '#475569'
             } 
-          } 
+          },
+          tooltip: {
+            animation: { duration: 0 }
+          }
         },
         scales: {
           x: { grid: { display: false }, ticks: { color: isDarkMode ? '#94a3b8' : '#64748b' } },
@@ -1984,8 +2004,33 @@ export default function DashboardApp() {
             <button onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className={`p-2.5 rounded-xl shadow-sm border transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-600'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={isFullscreen ? 'M9 3v6H3m12-6v6h6M9 21v-6H3m12 6v-6h6' : 'M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 15v3a2 2 0 0 0 2 2h3'}></path></svg>
             </button>
-            <button onClick={() => setIsDarkMode(!isDarkMode)} aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'} className={`px-4 py-2.5 rounded-full text-xs font-black uppercase tracking-widest border transition-all shadow-sm flex items-center gap-2 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}>
-              {isDarkMode ? '☀️ Light' : '🌙 Dark'}
+
+            {/* Flat-Icon Pill Slider Dark Mode Toggle */}
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              className={`relative inline-flex h-9 w-20 items-center rounded-full transition-colors duration-300 focus:outline-none p-1 shadow-inner ${
+                isDarkMode ? 'bg-[#2b2d31] border border-slate-700' : 'bg-white border border-slate-300'
+              }`}
+            >
+              <span
+                className={`inline-flex h-7 w-7 transform items-center justify-center rounded-full shadow-md transition-transform duration-300 ease-in-out ${
+                  isDarkMode
+                    ? 'translate-x-0 bg-white text-[#2b2d31]'
+                    : 'translate-x-11 bg-[#111827] text-white'
+                }`}
+              >
+                {isDarkMode ? (
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="4.5" />
+                    <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M12 2v2m0 16v2M2 12h2m16 0h2m-3.05-6.95l-1.41 1.41m-11.08 11.08l-1.41 1.41m0-13.9l1.41 1.41m11.08 11.08l1.41 1.41" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                    <path d="M12.3 2a10 10 0 0 0-.19 14 10 10 0 0 0 11.89 4 10.23 10.23 0 0 1-5.5 1.5A10.5 10.5 0 0 1 8 11a10.4 10.4 0 0 1 4.3-9z" />
+                  </svg>
+                )}
+              </span>
             </button>
           </div>
         </div>
@@ -2014,67 +2059,89 @@ export default function DashboardApp() {
               return `${rate >= 0 ? '+' : ''}${formatPct(rate)}`;
             };
 
-const metricCard = (label: string, value: string, change: string, gradId: string, hexColor: string, trendValues: number[]) => {
-  const isPositive = change.startsWith('+');
-  const isNeutral = change === '-';
-  const badgeClass = isNeutral
-    ? (isDarkMode ? 'text-slate-400' : 'text-slate-500')
-    : isPositive
-    ? 'text-emerald-500'
-    : 'text-rose-500';
+            const metricCard = (
+              label: string,
+              value: string,
+              change: string,
+              gradId: string,
+              hexColor: string,
+              chartData: { label: string; val: number }[],
+              fmt: (val: number) => string
+            ) => {
+              const isPositive = change.startsWith('+');
+              const isNeutral = change === '-';
+              const badgeClass = isNeutral
+                ? (isDarkMode ? 'text-slate-400' : 'text-slate-500')
+                : isPositive
+                ? 'text-emerald-500'
+                : 'text-rose-500';
 
-  const chartData = trendValues.map((v, i) => ({ val: v, i }));
+              return (
+                <div className={`${homeSurface} border shadow-sm rounded-2xl flex flex-col justify-between overflow-hidden h-[180px] pt-5 pb-0 relative`}>
+                  <div className="px-5 flex items-center justify-between mb-1 z-10">
+                    <span className={`text-xs font-bold uppercase tracking-wider ${homeMuted}`}>{label}</span>
+                    <span className={`text-xs font-black tracking-tight ${badgeClass}`}>
+                      {change}
+                    </span>
+                  </div>
 
-  return (
-    <div className={`${homeSurface} border shadow-sm rounded-2xl flex flex-col justify-between overflow-hidden h-[180px] pt-5 pb-0 relative`}>
-      {/* 1. Added px-5 here for card padding */}
-      <div className="px-5 flex items-center justify-between mb-1 z-10">
-        <span className={`text-xs font-bold uppercase tracking-wider ${homeMuted}`}>{label}</span>
-        <span className={`text-xs font-black tracking-tight ${badgeClass}`}>
-          {change}
-        </span>
-      </div>
+                  <div className="px-5 z-10 mb-2">
+                    <strong className={`text-[clamp(1.35rem,1.8vw,1.85rem)] font-black ${homeHeading} tracking-tight block leading-tight`}>
+                      {value}
+                    </strong>
+                  </div>
 
-      {/* 2. Added px-5 here for number padding */}
-      <div className="px-5 z-10 mb-2">
-        <strong className={`text-[clamp(1.35rem,1.8vw,1.85rem)] font-black ${homeHeading} tracking-tight block leading-tight`}>
-          {value}
-        </strong>
-      </div>
-
-      {/* 3. Changed wrapper to clean 'w-full' with no negative horizontal margins */}
-      <div className="h-16 w-full mt-auto">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={hexColor} stopOpacity={0.4} />
-                <stop offset="100%" stopColor={hexColor} stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            {/* Explicitly removes edge padding */}
-            <XAxis dataKey="i" hide padding={{ left: 0, right: 0 }} />
-            <Area 
-              type="monotone" 
-              dataKey="val" 
-              stroke={hexColor} 
-              strokeWidth={2.5} 
-              fillOpacity={1} 
-              fill={`url(#${gradId})`} 
-              isAnimationActive={false} 
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-};
+                  <div className="h-16 w-full mt-auto">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={hexColor} stopOpacity={0.4} />
+                            <stop offset="100%" stopColor={hexColor} stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="label" hide padding={{ left: 0, right: 0 }} />
+                        <RechartsTooltip
+                          isAnimationActive={false}
+                          animationDuration={0}
+                          wrapperStyle={{ zIndex: 50, outline: 'none' }}
+                          contentStyle={{
+                            backgroundColor: isDarkMode ? '#0f172a' : '#ffffff',
+                            borderColor: isDarkMode ? '#334155' : '#e2e8f0',
+                            borderRadius: '0.5rem',
+                            fontSize: '11px',
+                            padding: '4px 8px',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                          }}
+                          formatter={(v: any) => [fmt(Number(v)), label]}
+                          labelStyle={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontWeight: 600 }}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="val" 
+                          stroke={hexColor} 
+                          strokeWidth={2.5} 
+                          fillOpacity={1} 
+                          fill={`url(#${gradId})`} 
+                          isAnimationActive={false} 
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              );
+            };
 
             const mixBars = (items: { label: string; total: number }[], colors: string[]) => (
               <div className="space-y-3">{items.length === 0 ? <p className="text-sm text-slate-400">No data for this period.</p> : items.map((item, index) => (
-                <div key={item.label}>
-                  <div className={`flex justify-between text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-600'} mb-1`}><span className="truncate pr-3">{item.label}</span><span>{formatIDR(item.total)}</span></div>
-                  <div className={`h-2 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'} overflow-hidden`}><div className={`h-full rounded-full ${colors[index % colors.length]}`} style={{ width: `${Math.max(3, (item.total / homeSummary.maxOf(items)) * 100)}%` }}></div></div>
+                <div key={item.label} className="group relative cursor-pointer" title={`${item.label}: ${formatIDR(item.total)}`}>
+                  <div className={`flex justify-between text-xs font-bold ${isDarkMode ? 'text-slate-300' : 'text-slate-600'} mb-1`}>
+                    <span className="truncate pr-3">{item.label}</span>
+                    <span>{formatIDR(item.total)}</span>
+                  </div>
+                  <div className={`h-2 rounded-full ${isDarkMode ? 'bg-slate-700' : 'bg-slate-100'} overflow-hidden`}>
+                    <div className={`h-full rounded-full ${colors[index % colors.length]}`} style={{ width: `${Math.max(3, (item.total / homeSummary.maxOf(items)) * 100)}%` }}></div>
+                  </div>
                 </div>
               ))}</div>
             );
@@ -2088,8 +2155,20 @@ const metricCard = (label: string, value: string, change: string, gradId: string
                     {trendData.map(item => {
                       const total = item.mix.reduce((sum, mix) => sum + mix.total, 0) || 1;
                       return (
-                        <div key={item.key} className="flex-1 h-full flex items-end" title={`${item.label}: ${item.mix.map(mix => `${mix.label} ${formatIDR(mix.total)}`).join(' | ')}`}>
-                          <div className="w-full flex flex-col-reverse transition-all duration-700 ease-out" style={{ height: `${Math.max(6, (total / max) * 100)}%` }}>
+                        <div key={item.key} className="flex-1 h-full flex items-end group relative cursor-pointer">
+                          <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col gap-1 p-2 rounded-lg text-[10px] font-bold shadow-xl z-30 pointer-events-none whitespace-nowrap border ${
+                            isDarkMode ? 'bg-[#0f172a] text-white border-slate-700' : 'bg-white text-slate-800 border-slate-200'
+                          }`}>
+                            <span className="text-slate-400 font-extrabold border-b border-slate-200 dark:border-slate-700 pb-0.5">{item.label}</span>
+                            {item.mix.map(mix => (
+                              <div key={mix.label} className="flex items-center justify-between gap-3">
+                                <span>{mix.label}</span>
+                                <span className="text-indigo-400 font-mono">{formatIDR(mix.total)}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="w-full flex flex-col-reverse transition-all duration-300 ease-out" style={{ height: `${Math.max(6, (total / max) * 100)}%` }}>
                             {item.mix.map((mix, index) => (
                               <div key={mix.label} className={`w-full ${stackColors[index % stackColors.length]} first:rounded-b-sm last:rounded-t-sm`} style={{ height: `${(mix.total / total) * 100}%` }}></div>
                             ))}
@@ -2126,7 +2205,7 @@ const metricCard = (label: string, value: string, change: string, gradId: string
                     <table className="w-full border-collapse text-left">
                       <tbody>
                         {items.slice(0, 5).map((item, index) => (
-                          <tr key={item.label} className="border-b border-transparent hover:bg-slate-500/5 transition-colors">
+                          <tr key={item.label} className="border-b border-transparent hover:bg-slate-500/5 transition-colors group relative cursor-pointer" title={`${item.label}: ${formatIDR(item.total)} (${formatPct(item.total / total)})`}>
                             <td className="py-1 pr-2 w-4">
                               <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: colors[index % colors.length] }}></span>
                             </td>
@@ -2157,15 +2236,13 @@ const metricCard = (label: string, value: string, change: string, gradId: string
                   </div>
                 </div>
 
-                {/* KPI Cards: Media Spend covers all spend (Media + Commerce) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                  {metricCard('Media spend', formatIDR(homeSummary.currentTotalSpend), growth(homeSummary.currentTotalSpend, homeSummary.previousTotalSpend), 'gradSpend', '#6366f1', homeSummary.trend.map(item => item.spend))}
-                  {metricCard('Impressions', formatNum(homeSummary.current.media.impressions), growth(homeSummary.current.media.impressions, homeSummary.previous.media.impressions), 'gradImp', '#06b6d4', homeSummary.trend.map(item => item.impressions))}
-                  {metricCard('Commerce GMV', formatIDR(homeSummary.current.commerce.gmv), growth(homeSummary.current.commerce.gmv, homeSummary.previous.commerce.gmv), 'gradGmv', '#10b981', homeSummary.trend.map(item => item.commerceGmv))}
-                  {metricCard('Engagement', formatNum(homeSummary.current.media.engagement), growth(homeSummary.current.media.engagement, homeSummary.previous.media.engagement), 'gradEng', '#f59e0b', homeSummary.trend.map(item => item.engagement))}
+                  {metricCard('Media spend', formatIDR(homeSummary.currentTotalSpend), growth(homeSummary.currentTotalSpend, homeSummary.previousTotalSpend), 'gradSpend', '#6366f1', homeSummary.trend.map(item => ({ label: item.label, val: item.spend })), formatIDR)}
+                  {metricCard('Impressions', formatNum(homeSummary.currentTotalImpressions), growth(homeSummary.currentTotalImpressions, homeSummary.previousTotalImpressions), 'gradImp', '#06b6d4', homeSummary.trend.map(item => ({ label: item.label, val: item.impressions })), formatNum)}
+                  {metricCard('Commerce GMV', formatIDR(homeSummary.current.commerce.gmv), growth(homeSummary.current.commerce.gmv, homeSummary.previous.commerce.gmv), 'gradGmv', '#10b981', homeSummary.trend.map(item => ({ label: item.label, val: item.commerceGmv })), formatIDR)}
+                  {metricCard('Engagement', formatNum(homeSummary.currentTotalEngagement), growth(homeSummary.currentTotalEngagement, homeSummary.previousTotalEngagement), 'gradEng', '#f59e0b', homeSummary.trend.map(item => ({ label: item.label, val: item.engagement })), formatNum)}
                 </div>
 
-                {/* 12-Column Grid: Equal height between Six-Month Momentum and Platform Mix */}
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
                   <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm xl:col-span-7 flex flex-col justify-between`}>
                     <div>
@@ -2176,7 +2253,6 @@ const metricCard = (label: string, value: string, change: string, gradId: string
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
-                          {/* Multi-Metric Selection Dropdown (with merged 'Spend') */}
                           <div className="relative">
                             <button
                               type="button"
@@ -2211,7 +2287,6 @@ const metricCard = (label: string, value: string, change: string, gradId: string
                             )}
                           </div>
 
-                          {/* Chart Type Selector */}
                           <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
                             {(['bar', 'line', 'area'] as const).map(type => (
                               <button
@@ -2236,7 +2311,7 @@ const metricCard = (label: string, value: string, change: string, gradId: string
                               {activeMetricConfigs.length > 1 && (
                                 <YAxis yAxisId="right" orientation="right" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
                               )}
-                              <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '12px' }} formatter={(v: any, name: any) => {
+                              <RechartsTooltip isAnimationActive={false} animationDuration={0} contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '12px' }} formatter={(v: any, name: any) => {
                                 const cfg = activeMetricConfigs.find(m => m.label === name);
                                 return [cfg ? cfg.fmt(Number(v)) : v, name];
                               }} />
@@ -2252,7 +2327,7 @@ const metricCard = (label: string, value: string, change: string, gradId: string
                               {activeMetricConfigs.length > 1 && (
                                 <YAxis yAxisId="right" orientation="right" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
                               )}
-                              <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '12px' }} formatter={(v: any, name: any) => {
+                              <RechartsTooltip isAnimationActive={false} animationDuration={0} contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '12px' }} formatter={(v: any, name: any) => {
                                 const cfg = activeMetricConfigs.find(m => m.label === name);
                                 return [cfg ? cfg.fmt(Number(v)) : v, name];
                               }} />
@@ -2276,7 +2351,7 @@ const metricCard = (label: string, value: string, change: string, gradId: string
                               {activeMetricConfigs.length > 1 && (
                                 <YAxis yAxisId="right" orientation="right" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
                               )}
-                              <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '12px' }} formatter={(v: any, name: any) => {
+                              <RechartsTooltip isAnimationActive={false} animationDuration={0} contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '12px' }} formatter={(v: any, name: any) => {
                                 const cfg = activeMetricConfigs.find(m => m.label === name);
                                 return [cfg ? cfg.fmt(Number(v)) : v, name];
                               }} />
@@ -2289,7 +2364,6 @@ const metricCard = (label: string, value: string, change: string, gradId: string
                       </div>
                     </div>
 
-                    {/* Dynamic Chart Legend */}
                     <div className={`flex flex-wrap gap-4 mt-3 text-[11px] font-bold ${homeMuted}`}>
                       {activeMetricConfigs.map(cfg => (
                         <span key={cfg.key} className="flex items-center gap-1.5">
@@ -2300,7 +2374,6 @@ const metricCard = (label: string, value: string, change: string, gradId: string
                     </div>
                   </div>
 
-                  {/* Platform mix: Matched height and structure */}
                   <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm xl:col-span-5 flex flex-col justify-between`}>
                     <div>
                       <h2 className={`text-base font-black ${homeHeading} mb-1`}>Platform mix</h2>
