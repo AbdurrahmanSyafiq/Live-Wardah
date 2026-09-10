@@ -2014,48 +2014,61 @@ export default function DashboardApp() {
               return `${rate >= 0 ? '+' : ''}${formatPct(rate)}`;
             };
 
-            const metricCard = (label: string, value: string, change: string, gradId: string, hexColor: string, trendValues: number[]) => {
-              const isPositive = change.startsWith('+');
-              const isNeutral = change === '-';
-              const badgeClass = isNeutral
-                ? (isDarkMode ? 'text-slate-400' : 'text-slate-500')
-                : isPositive
-                ? 'text-emerald-500'
-                : 'text-rose-500';
+const metricCard = (label: string, value: string, change: string, gradId: string, hexColor: string, trendValues: number[]) => {
+  const isPositive = change.startsWith('+');
+  const isNeutral = change === '-';
+  const badgeClass = isNeutral
+    ? (isDarkMode ? 'text-slate-400' : 'text-slate-500')
+    : isPositive
+    ? 'text-emerald-500'
+    : 'text-rose-500';
 
-              const chartData = trendValues.map((v, i) => ({ val: v, i }));
+  const chartData = trendValues.map((v, i) => ({ val: v, i }));
 
-              return (
-                <div className={`${homeSurface} border shadow-sm rounded-2xl flex flex-col justify-between overflow-hidden h-[180px] pt-5 px-5 pb-0 relative`}>
-                  <div className="flex items-center justify-between mb-1 z-10">
-                    <span className={`text-xs font-bold uppercase tracking-wider ${homeMuted}`}>{label}</span>
-                    <span className={`text-xs font-black tracking-tight ${badgeClass}`}>
-                      {change}
-                    </span>
-                  </div>
+  return (
+    <div className={`${homeSurface} border shadow-sm rounded-2xl flex flex-col justify-between overflow-hidden h-[180px] pt-5 pb-0 relative`}>
+      {/* 1. Added px-5 here for card padding */}
+      <div className="px-5 flex items-center justify-between mb-1 z-10">
+        <span className={`text-xs font-bold uppercase tracking-wider ${homeMuted}`}>{label}</span>
+        <span className={`text-xs font-black tracking-tight ${badgeClass}`}>
+          {change}
+        </span>
+      </div>
 
-                  <div className="z-10 mb-2">
-                    <strong className={`text-[clamp(1.35rem,1.8vw,1.85rem)] font-black ${homeHeading} tracking-tight block leading-tight`}>
-                      {value}
-                    </strong>
-                  </div>
+      {/* 2. Added px-5 here for number padding */}
+      <div className="px-5 z-10 mb-2">
+        <strong className={`text-[clamp(1.35rem,1.8vw,1.85rem)] font-black ${homeHeading} tracking-tight block leading-tight`}>
+          {value}
+        </strong>
+      </div>
 
-                  <div className="h-16 w-full -mx-5 -mb-1 mt-auto">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={hexColor} stopOpacity={0.4} />
-                            <stop offset="100%" stopColor={hexColor} stopOpacity={0.02} />
-                          </linearGradient>
-                        </defs>
-                        <Area type="monotone" dataKey="val" stroke={hexColor} strokeWidth={2.5} fillOpacity={1} fill={`url(#${gradId})`} isAnimationActive={false} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              );
-            };
+      {/* 3. Changed wrapper to clean 'w-full' with no negative horizontal margins */}
+      <div className="h-16 w-full mt-auto">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={hexColor} stopOpacity={0.4} />
+                <stop offset="100%" stopColor={hexColor} stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            {/* Explicitly removes edge padding */}
+            <XAxis dataKey="i" hide padding={{ left: 0, right: 0 }} />
+            <Area 
+              type="monotone" 
+              dataKey="val" 
+              stroke={hexColor} 
+              strokeWidth={2.5} 
+              fillOpacity={1} 
+              fill={`url(#${gradId})`} 
+              isAnimationActive={false} 
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
 
             const mixBars = (items: { label: string; total: number }[], colors: string[]) => (
               <div className="space-y-3">{items.length === 0 ? <p className="text-sm text-slate-400">No data for this period.</p> : items.map((item, index) => (
