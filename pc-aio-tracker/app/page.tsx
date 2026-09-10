@@ -201,8 +201,12 @@ export default function DashboardApp() {
   const [dateWeekly, setDateWeekly] = useState('');
   const [dateDailyStart, setDateDailyStart] = useState('');
   const [dateDailyEnd, setDateDailyEnd] = useState('');
+  
+  // Home Filters & Momentum Metric State
   const [homeBrand, setHomeBrand] = useState('All');
-  const [homePeriod, setHomePeriod] = useState('');
+  const [homePeriods, setHomePeriods] = useState<string[]>([]);
+  const [homeMomentumMetrics, setHomeMomentumMetrics] = useState<string[]>(['spend', 'commerceGmv']);
+  const [isMomentumDropdownOpen, setIsMomentumDropdownOpen] = useState(false);
 
   const [tableColFilter1, setTableColFilter1] = useState('All');
   const [tableColFilter2, setTableColFilter2] = useState('All');
@@ -237,7 +241,7 @@ export default function DashboardApp() {
     const start_yyyy_mm_dd = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
     
     setDateMonth(yyyy_mm); setDateWeekly(yyyy_mm_dd); setDateDailyStart(start_yyyy_mm_dd); setDateDailyEnd(yyyy_mm_dd);
-    setHomePeriod(yyyy_mm);
+    setHomePeriods([yyyy_mm]);
   }, []);
 
   const parseNum = (val: any) => {
@@ -428,6 +432,13 @@ export default function DashboardApp() {
     }
   };
 
+  const isValidBrandName = (brand: any) => {
+    const s = String(brand || '').trim();
+    if (!s) return false;
+    const lower = s.toLowerCase();
+    return lower !== '-' && lower !== 'na' && lower !== 'n/a' && lower !== 'null' && lower !== 'undefined';
+  };
+
   const getDependentOptions = (colName: string, filterKeyToExclude: string) => {
     if (!rawData || rawData.length === 0) return ['All'];
     const cfg = CONFIG[activeEngine || 'media'] as any;
@@ -446,7 +457,11 @@ export default function DashboardApp() {
       if (filterKeyToExclude !== 'format' && filters.format !== 'All') filtered = filtered.filter(r => String(r[cfg.colFormat]) === filters.format);
     }
 
-    const unique = Array.from(new Set(filtered.map(r => r[colName]))).filter(v => v && String(v).trim() !== "");
+    const unique = Array.from(new Set(filtered.map(r => r[colName]))).filter(v => {
+      if (!v || String(v).trim() === "") return false;
+      if (colName.toLowerCase().includes('brand')) return isValidBrandName(v);
+      return true;
+    });
     return ['All', ...unique.sort()];
   };
 
@@ -870,33 +885,100 @@ export default function DashboardApp() {
 
   const homeBrandOptions = useMemo(() => {
     const brands = new Set<string>();
-    homeMediaData.forEach(row => { const brand = String(row['Brand'] || '').trim(); if (brand) brands.add(brand); });
-    homeCommerceData.forEach(row => { const brand = String(row['Brand fx'] || '').trim(); if (brand) brands.add(brand); });
+    homeMediaData.forEach(row => {
+      const brand = String(row['Brand'] || '').trim();
+      if (isValidBrandName(brand)) brands.add(brand);
+    });
+    homeCommerceData.forEach(row => {
+      const brand = String(row['Brand fx'] || '').trim();
+      if (isValidBrandName(brand)) brands.add(brand);
+    });
     return ['All', ...Array.from(brands).sort()];
   }, [homeMediaData, homeCommerceData]);
 
-  const homeSummary = useMemo(() => {
-    const [year, month] = (homePeriod || '').split('-').map(Number);
-    if (!year || !month) return null;
+  const availableHomeMonths = useMemo(() => {
+    const months = new Set<string>();
+    const addDate = (dStr: any) => {
+      const d = parseSheetDate(dStr);
+      if (d && !isNaN(d.getTime())) {
+        months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+    };
+    homeMediaData.forEach(r => addDate(r['Date']));
+    homeCommerceData.forEach(r => addDate(r['Date']));
+    return Array.from(months).sort((a, b) => b.localeCompare(a));
+  }, [homeMediaData, homeCommerceData]);
 
-    const periodStart = new Date(year, month - 1, 1);
-    const periodEnd = new Date(year, month, 0, 23, 59, 59, 999);
-    const previousStart = new Date(year, month - 2, 1);
-    const previousEnd = new Date(year, month - 1, 0, 23, 59, 59, 999);
+  const handleToggleHomeMonth = (month: string) => {
+    setHomePeriods(prev => {
+      if (prev.includes(month)) {
+        if (prev.length === 1) return prev;
+        return prev.filter(m => m !== month);
+      } else {
+        return [...prev, month].sort();
+      }
+    });
+  };
+
+  const handleToggleMomentumMetric = (metricKey: string) => {
+    setHomeMomentumMetrics(prev => {
+      if (prev.includes(metricKey)) {
+        if (prev.length === 1) return prev;
+        return prev.filter(k => k !== metricKey);
+      } else {
+        if (prev.length >= 2) return [prev[1], metricKey];
+        return [...prev, metricKey];
+      }
+    });
+  };
+
+  // --- HOME / GENERAL OVERVIEW SUMMARY COMPILER ---
+  const homeSummary = useMemo(() => {
+    if (!homePeriods.length) return null;
+
     const normalizeDate = (value: any) => {
       const date = parseSheetDate(value);
       if (!date || isNaN(date.getTime())) return null;
       date.setHours(0, 0, 0, 0);
       return date;
     };
-    const inPeriod = (date: Date | null, start: Date, end: Date) => Boolean(date && date >= start && date <= end);
+
+    const getMonthRanges = (periodList: string[]) => {
+      return periodList.map(p => {
+        const [year, month] = p.split('-').map(Number);
+        return {
+          start: new Date(year, month - 1, 1),
+          end: new Date(year, month, 0, 23, 59, 59, 999)
+        };
+      });
+    };
+
+    const getPrevMonthRanges = (periodList: string[]) => {
+      return periodList.map(p => {
+        const [year, month] = p.split('-').map(Number);
+        return {
+          start: new Date(year, month - 2, 1),
+          end: new Date(year, month - 1, 0, 23, 59, 59, 999)
+        };
+      });
+    };
+
+    const currentRanges = getMonthRanges(homePeriods);
+    const previousRanges = getPrevMonthRanges(homePeriods);
+
+    const inRanges = (date: Date | null, ranges: { start: Date; end: Date }[]) => {
+      if (!date) return false;
+      return ranges.some(r => date >= r.start && date <= r.end);
+    };
+
     const matchesBrand = (value: any) => homeBrand === 'All' || String(value || '').trim() === homeBrand;
     const mediaRows = homeMediaData.filter(row => matchesBrand(row['Brand']));
     const commerceRows = homeCommerceData.filter(row => matchesBrand(row['Brand fx']));
-    const currentMedia = mediaRows.filter(row => inPeriod(normalizeDate(row['Date']), periodStart, periodEnd));
-    const previousMedia = mediaRows.filter(row => inPeriod(normalizeDate(row['Date']), previousStart, previousEnd));
-    const currentCommerce = commerceRows.filter(row => inPeriod(normalizeDate(row['Date']), periodStart, periodEnd));
-    const previousCommerce = commerceRows.filter(row => inPeriod(normalizeDate(row['Date']), previousStart, previousEnd));
+
+    const currentMedia = mediaRows.filter(row => inRanges(normalizeDate(row['Date']), currentRanges));
+    const previousMedia = mediaRows.filter(row => inRanges(normalizeDate(row['Date']), previousRanges));
+    const currentCommerce = commerceRows.filter(row => inRanges(normalizeDate(row['Date']), currentRanges));
+    const previousCommerce = commerceRows.filter(row => inRanges(normalizeDate(row['Date']), previousRanges));
 
     const sum = (rows: any[], field: string) => rows.reduce((total, row) => total + parseNum(row[field]), 0);
     const mediaMetrics = (rows: any[]) => {
@@ -926,44 +1008,85 @@ export default function DashboardApp() {
       });
       return Array.from(grouped, ([label, total]) => ({ label, total })).sort((a, b) => b.total - a.total);
     };
+
+    const latestSortedMonth = [...homePeriods].sort().pop() || '';
+    const [latestYear, latestMonth] = latestSortedMonth.split('-').map(Number);
     const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
     const trend = Array.from({ length: 6 }, (_, index) => {
-      const date = new Date(year, month - 1 - (5 - index), 1);
+      const date = new Date(latestYear, latestMonth - 1 - (5 - index), 1);
       const start = new Date(date.getFullYear(), date.getMonth(), 1);
       const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-      const media = mediaMetrics(mediaRows.filter(row => inPeriod(normalizeDate(row['Date']), start, end)));
-      const commerce = commerceMetrics(commerceRows.filter(row => inPeriod(normalizeDate(row['Date']), start, end)));
-      return { key: monthKey(date), label: date.toLocaleString('en-GB', { month: 'short' }), mediaSpend: media.spend, mediaImpressions: media.impressions, mediaClicks: media.clicks, mediaEngagement: media.engagement, commerceGmv: commerce.gmv, commerceOrders: commerce.orders };
+      const media = mediaMetrics(mediaRows.filter(row => inRanges(normalizeDate(row['Date']), [{ start, end }])));
+      const commerce = commerceMetrics(commerceRows.filter(row => inRanges(normalizeDate(row['Date']), [{ start, end }])));
+      return {
+        key: monthKey(date),
+        label: date.toLocaleString('en-GB', { month: 'short' }),
+        spend: media.spend + commerce.expense,
+        mediaSpend: media.spend,
+        commerceExpense: commerce.expense,
+        impressions: media.impressions,
+        clicks: media.clicks,
+        engagement: media.engagement,
+        commerceGmv: commerce.gmv,
+        orders: commerce.orders
+      };
     });
+
     const funnelTrend = trend.map(item => {
       const date = new Date(`${item.key}-01T00:00:00`);
       const start = new Date(date.getFullYear(), date.getMonth(), 1);
       const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-      const rows = mediaRows.filter(row => inPeriod(normalizeDate(row['Date']), start, end));
-      return { ...item, mix: groupSum(rows, 'Funnel', 'Ad Spend').slice(0, 3) };
+      const rows = mediaRows.filter(row => inRanges(normalizeDate(row['Date']), [{ start, end }]));
+      return { ...item, mix: groupSum(rows, 'Funnel', 'Ad Spend').slice(0, 4) };
     });
+
+    const platformTrend = trend.map(item => {
+      const date = new Date(`${item.key}-01T00:00:00`);
+      const start = new Date(date.getFullYear(), date.getMonth(), 1);
+      const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+      const mRows = mediaRows.filter(row => inRanges(normalizeDate(row['Date']), [{ start, end }]));
+      const cRows = commerceRows.filter(row => inRanges(normalizeDate(row['Date']), [{ start, end }]));
+      const mPlat = groupSum(mRows, 'Platform', 'Ad Spend');
+      const cPlat = groupSum(cRows, 'Platform', 'Expense');
+      const combined = new Map<string, number>();
+      mPlat.concat(cPlat).forEach(p => combined.set(p.label, (combined.get(p.label) || 0) + p.total));
+      const mix = Array.from(combined, ([label, total]) => ({ label, total })).sort((a, b) => b.total - a.total).slice(0, 4);
+      return { ...item, mix };
+    });
+
     const current = { media: mediaMetrics(currentMedia), commerce: commerceMetrics(currentCommerce) };
     const previous = { media: mediaMetrics(previousMedia), commerce: commerceMetrics(previousCommerce) };
+
+    const currentTotalSpend = current.media.spend + current.commerce.expense;
+    const previousTotalSpend = previous.media.spend + previous.commerce.expense;
+
     const maxOf = (items: { total: number }[]) => Math.max(...items.map(item => item.total), 1);
     const platformMix = groupSum(currentMedia, 'Platform', 'Ad Spend').concat(groupSum(currentCommerce, 'Platform', 'Expense'));
-    const platformTotals = Array.from(platformMix.reduce((map, item) => map.set(item.label, (map.get(item.label) || 0) + item.total), new Map<string, number>()), ([label, total]) => ({ label, total })).sort((a, b) => b.total - a.total);
+    const platformTotals = Array.from(
+      platformMix.reduce((map, item) => map.set(item.label, (map.get(item.label) || 0) + item.total), new Map<string, number>()),
+      ([label, total]) => ({ label, total })
+    ).sort((a, b) => b.total - a.total);
+
+    const formattedPeriodLabel = homePeriods.length === 1
+      ? new Date(`${homePeriods[0]}-01`).toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+      : `${homePeriods.length} Months Selected (${homePeriods.sort().join(', ')})`;
+
     return {
       current,
       previous,
+      currentTotalSpend,
+      previousTotalSpend,
       trend,
       funnelTrend,
-      funnelMix: groupSum(currentMedia, 'Funnel', 'Ad Spend').slice(0, 6),
+      platformTrend,
+      funnelMix: groupSum(currentMedia, 'Funnel', 'Ad Spend').slice(0, 5),
       formatMix: groupSum(currentMedia, 'Format', 'Ad Spend').slice(0, 6),
-      platformMix: platformTotals.slice(0, 6),
-      channelMix: [
-        { label: 'Media spend', total: current.media.spend },
-        { label: 'Commerce expense', total: current.commerce.expense },
-        { label: 'Commerce GMV', total: current.commerce.gmv }
-      ],
+      platformMix: platformTotals.slice(0, 5),
       maxOf,
-      periodLabel: periodStart.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+      periodLabel: formattedPeriodLabel
     };
-  }, [homeMediaData, homeCommerceData, homeBrand, homePeriod]);
+  }, [homeMediaData, homeCommerceData, homeBrand, homePeriods]);
 
   const renderGR = (cur: number, prev: number, isInv = false) => {
     if (prev === 0 && cur === 0) return <span className="text-[10px] ml-2 font-bold opacity-40">-</span>;
@@ -975,7 +1098,7 @@ export default function DashboardApp() {
     return <span className={`text-[11px] ml-2 px-1.5 py-0.5 rounded font-bold tracking-wide backdrop-blur-sm shadow-sm ${color}`}>{arrow} {formatPct(Math.abs(gr))}</span>;
   };
 
-  // --- CHART RENDERING ---
+  // --- CHART RENDERING (ENGINE TABS) ---
   useEffect(() => {
     if ((activeEngine !== 'media' && activeEngine !== 'commerce') || !chartRef.current) return;
     if (chartInstance.current) chartInstance.current.destroy();
@@ -1417,7 +1540,7 @@ export default function DashboardApp() {
                   <th class="px-4 py-4 text-right bg-[#0f172a] font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">GR%</th>`;
       });
       thead += `<th class="px-4 py-4 text-right border-l border-indigo-500 text-indigo-300 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Cur</th>
-                <th class="px-4 py-4 text-right text-slate-400 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Prev</th>
+                <th class="px-4 py-4 text-right text-slate-400 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Prev</th>
                 <th class="px-4 py-4 text-right text-indigo-300 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Total GR%</th>
               </tr>`;
 
@@ -1529,7 +1652,7 @@ export default function DashboardApp() {
     return '';
   };
 
-  // --- LOGIN VIEW: FLUID AURORA MESH GRADIENT ---
+  // --- LOGIN VIEW ---
   if (currentView === 'login') {
     return (
       <div className="flex w-full h-screen font-sans overflow-hidden bg-white">
@@ -1600,24 +1723,43 @@ export default function DashboardApp() {
           <p className="text-slate-400 mb-16 text-[clamp(1rem,1.5vw,1.25rem)] font-medium">Please select the tracker you wish to launch. You can navigate between them at any time.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
             <button onClick={() => selectHome()} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group border border-indigo-500/20">
-              <div className="w-14 h-14 mx-auto bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12h18M3 6h18M3 18h18"></path></svg></div>
-              <h2 className="text-xl font-bold text-white mb-1">General Overview</h2><p className="text-xs text-slate-400">Cross-channel performance summary.</p>
+              <div className="w-14 h-14 mx-auto bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-6">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12h18M3 6h18M3 18h18"></path></svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-1">General Overview</h2>
+              <p className="text-xs text-slate-400">Cross-channel performance summary.</p>
             </button>
+
             <button onClick={() => selectEngine('media')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group">
-              <div className="w-14 h-14 bg-indigo-500 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg></div>
-              <h2 className="text-xl font-bold text-white mb-1">Digital Media</h2><p className="text-xs text-slate-400">Full-funnel media metrics.</p>
+              <div className="w-14 h-14 bg-indigo-500 text-white rounded-2xl flex items-center justify-center mb-6">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-1">Digital Media</h2>
+              <p className="text-xs text-slate-400">Full-funnel media metrics.</p>
             </button>
+
             <button onClick={() => selectEngine('commerce')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group">
-              <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg></div>
-              <h2 className="text-xl font-bold text-white mb-1">Commerce Tracker</h2><p className="text-xs text-slate-400">Revenue and ROAS metrics.</p>
+              <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center mb-6">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-1">Commerce Tracker</h2>
+              <p className="text-xs text-slate-400">Revenue and ROAS metrics.</p>
             </button>
+
             <button onClick={() => selectEngine('creative')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group">
-              <div className="w-14 h-14 bg-lime-500 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></div>
-              <h2 className="text-xl font-bold text-white mb-1">Top Creative</h2><p className="text-xs text-slate-400">Winning creative assets.</p>
+              <div className="w-14 h-14 bg-lime-500 text-white rounded-2xl flex items-center justify-center mb-6">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-1">Top Creative</h2>
+              <p className="text-xs text-slate-400">Winning creative assets.</p>
             </button>
+
             <button onClick={() => selectEngine('signal')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group border border-emerald-500/20">
-              <div className="w-14 h-14 bg-emerald-600 text-white rounded-2xl flex items-center justify-center mb-6"><svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg></div>
-              <h2 className="text-xl font-bold text-white mb-1">Media Signal</h2><p className="text-xs text-slate-400">TikTok Actual vs Plan.</p>
+              <div className="w-14 h-14 bg-emerald-600 text-white rounded-2xl flex items-center justify-center mb-6">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-1">Media Signal</h2>
+              <p className="text-xs text-slate-400">TikTok Actual vs Plan.</p>
             </button>
           </div>
         </div>
@@ -1710,7 +1852,7 @@ export default function DashboardApp() {
         <div className="p-5 space-y-5 flex-1">
           <p className="px-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Global Filters</p>
           
-          {/* STANDARD DATE PICKER */}
+          {/* STANDARD DATE PICKER (ENGINE TRACKERS) */}
           {currentView !== 'home' && activeEngine !== 'creative' && activeEngine !== 'signal' && (
              <div className="bg-[#111827] p-4 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
                 <div className="flex items-center justify-between mb-1">
@@ -1732,13 +1874,42 @@ export default function DashboardApp() {
              </div>
           )}
 
+          {/* HOME FILTERS */}
           {currentView === 'home' && (
             <div className="bg-[#111827] p-4 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
               <label className="block text-xs font-bold text-slate-400">Home Filters</label>
-              <select value={homeBrand} onChange={(e) => setHomeBrand(e.target.value)} className={selectClass}>
-                {homeBrandOptions.map(brand => <option key={brand} value={brand}>{brand}</option>)}
-              </select>
-              <input type="month" value={homePeriod} onChange={(e) => setHomePeriod(e.target.value)} className={isDarkMode ? dateClassDark : dateClass} />
+              <div>
+                <span className="text-[11px] text-slate-400 block mb-1">Brand</span>
+                <select value={homeBrand} onChange={(e) => setHomeBrand(e.target.value)} className={selectClass}>
+                  {homeBrandOptions.map(brand => <option key={brand} value={brand}>{brand}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-[11px] text-slate-400 font-bold">Select Months</span>
+                  <span className="text-[10px] text-indigo-400 font-semibold">{homePeriods.length} selected</span>
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-1 pr-1 bg-[#090d16] p-2 rounded-xl border border-slate-800">
+                  {availableHomeMonths.map(m => {
+                    const isSelected = homePeriods.includes(m);
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleToggleHomeMonth(m)}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+                          isSelected ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        <span>{m}</span>
+                        {isSelected && <span>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <button onClick={() => loadHomeData(true)} className="w-full bg-[#1e293b] hover:bg-indigo-600 text-white font-bold py-2.5 rounded-xl border border-slate-700 hover:border-indigo-500 transition-all text-xs">Sync Home Data</button>
             </div>
           )}
@@ -1755,40 +1926,41 @@ export default function DashboardApp() {
             </div>
           )}
 
-          <div className="space-y-4 px-2">
-            <div>
-              <label className="block text-xs font-bold text-slate-400 mb-2">Brand</label>
-              <select value={filters.brand} onChange={(e) => handleFilterChange('brand', e.target.value)} className={selectClass}>
-                {getDependentOptions(CONFIG[activeEngine || 'media'].colBrand, 'brand').map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-            {activeEngine === 'media' && (
+          {/* ENGINE-SPECIFIC SUBFILTERS */}
+          {currentView !== 'home' && (
+            <div className="space-y-4 px-2">
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2">Funnel</label>
-                <select value={filters.funnel} onChange={(e) => handleFilterChange('funnel', e.target.value)} className={selectClass}>
-                  {getDependentOptions(CONFIG.media.colFunnel, 'funnel').map(o => <option key={o} value={o}>{o}</option>)}
+                <label className="block text-xs font-bold text-slate-400 mb-2">Brand</label>
+                <select value={filters.brand} onChange={(e) => handleFilterChange('brand', e.target.value)} className={selectClass}>
+                  {getDependentOptions(CONFIG[activeEngine || 'media'].colBrand, 'brand').map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-            )}
-            {(activeEngine === 'commerce' || activeEngine === 'creative') && (
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2">Ad Type</label>
-                <select value={filters.adType} onChange={(e) => handleFilterChange('adType', e.target.value)} className={selectClass}>
-                  {getDependentOptions(CONFIG[activeEngine === 'commerce' ? 'commerce' : 'creative'].colAdType, 'adType').map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-            )}
-            {activeEngine === 'creative' && (
-              <>
-                <div><label className="block text-xs font-bold text-slate-400 mb-2">Period</label><select value={filters.period} onChange={(e) => handleFilterChange('period', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colPeriod, 'period').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                <div><label className="block text-xs font-bold text-slate-400 mb-2">Platform</label><select value={filters.platform} onChange={(e) => handleFilterChange('platform', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colPlatform, 'platform').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                <div><label className="block text-xs font-bold text-slate-400 mb-2">Format</label><select value={filters.format} onChange={(e) => handleFilterChange('format', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colFormat, 'format').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-              </>
-            )}
-            {currentView !== 'home' && (
+              {activeEngine === 'media' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-2">Funnel</label>
+                  <select value={filters.funnel} onChange={(e) => handleFilterChange('funnel', e.target.value)} className={selectClass}>
+                    {getDependentOptions(CONFIG.media.colFunnel, 'funnel').map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              )}
+              {(activeEngine === 'commerce' || activeEngine === 'creative') && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-2">Ad Type</label>
+                  <select value={filters.adType} onChange={(e) => handleFilterChange('adType', e.target.value)} className={selectClass}>
+                    {getDependentOptions(CONFIG[activeEngine === 'commerce' ? 'commerce' : 'creative'].colAdType, 'adType').map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              )}
+              {activeEngine === 'creative' && (
+                <>
+                  <div><label className="block text-xs font-bold text-slate-400 mb-2">Period</label><select value={filters.period} onChange={(e) => handleFilterChange('period', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colPeriod, 'period').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                  <div><label className="block text-xs font-bold text-slate-400 mb-2">Platform</label><select value={filters.platform} onChange={(e) => handleFilterChange('platform', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colPlatform, 'platform').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                  <div><label className="block text-xs font-bold text-slate-400 mb-2">Format</label><select value={filters.format} onChange={(e) => handleFilterChange('format', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colFormat, 'format').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                </>
+              )}
               <button onClick={resetFilters} className="w-full border border-slate-600 text-slate-300 hover:border-indigo-500 hover:bg-indigo-600 hover:text-white font-bold py-2.5 rounded-xl transition-all text-xs">Reset Filters</button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         <div className="p-6 bg-[#090d16] border-t border-slate-800/80">
           <button onClick={() => loadData(activeEngine as any, true)} className="w-full bg-[#1e293b] hover:bg-indigo-600 text-white font-bold py-3.5 rounded-xl border border-slate-700 hover:border-indigo-500 shadow-md transition-all flex justify-center items-center gap-2 text-sm tracking-wide">Sync Live Data</button>
@@ -1818,27 +1990,73 @@ export default function DashboardApp() {
           </div>
         </div>
 
-        {/* Dynamic view container with seamless enter animation */}
+        {/* Dynamic view container */}
         <div key={currentView === 'home' ? 'home' : (activeEngine || 'dashboard')} className="view-transition-container">
           {currentView === 'home' && homeSummary && (() => {
             const homeSurface = isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200';
             const homeHeading = isDarkMode ? 'text-white' : 'text-slate-900';
             const homeMuted = isDarkMode ? 'text-slate-400' : 'text-slate-500';
-            const accentColors: Record<string, string> = { 'bg-indigo-500': '#6366f1', 'bg-cyan-500': '#06b6d4', 'bg-emerald-500': '#10b981', 'bg-amber-500': '#f59e0b' };
-            const growth = (current: number, previous: number) => previous === 0 ? '-' : `${getGr(current, previous) >= 0 ? '+' : ''}${formatPct(getGr(current, previous))}`;
-            const sparkline = (values: number[], color: string) => {
-              const max = Math.max(...values, 1);
-              const min = Math.min(...values, 0);
-              const range = max - min || 1;
-              const points = values.map((value, index) => `${index * 20},${28 - ((value - min) / range) * 24}`).join(' ');
-              return <svg viewBox="0 0 100 32" preserveAspectRatio="none" className="w-24 h-8 shrink-0" aria-hidden="true"><polyline points={points} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+
+            const metricOptions = [
+              { key: 'spend', label: 'Spend', color: '#6366f1', fmt: formatIDR },
+              { key: 'commerceGmv', label: 'Commerce GMV', color: '#10b981', fmt: formatIDR },
+              { key: 'impressions', label: 'Impressions', color: '#06b6d4', fmt: formatNum },
+              { key: 'clicks', label: 'Clicks', color: '#84cc16', fmt: formatNum },
+              { key: 'engagement', label: 'Engagement', color: '#f59e0b', fmt: formatNum },
+              { key: 'orders', label: 'Orders', color: '#ec4899', fmt: formatNum },
+            ];
+
+            const activeMetricConfigs = metricOptions.filter(m => homeMomentumMetrics.includes(m.key));
+
+            const growth = (current: number, previous: number) => {
+              if (previous === 0 && current === 0) return '-';
+              const rate = getGr(current, previous);
+              return `${rate >= 0 ? '+' : ''}${formatPct(rate)}`;
             };
-            const metricCard = (label: string, value: string, change: string, accent: string, trend: number[]) => (
-              <div className={`${homeSurface} border p-5 shadow-sm rounded-2xl`}>
-                <div className="flex items-center justify-between mb-4"><span className={`text-xs font-bold uppercase tracking-widest ${homeMuted}`}>{label}</span><span className={`w-2.5 h-2.5 rounded-full ${accent}`}></span></div>
-                <div className="flex items-end justify-between gap-3"><strong className={`text-2xl font-black ${homeHeading} tracking-tight`}>{value}</strong>{sparkline(trend, accentColors[accent])}<span className={`text-xs font-bold ${change.startsWith('+') ? 'text-emerald-600' : change === '-' ? 'text-slate-400' : 'text-rose-500'}`}>{change}</span></div>
-              </div>
-            );
+
+            const metricCard = (label: string, value: string, change: string, gradId: string, hexColor: string, trendValues: number[]) => {
+              const isPositive = change.startsWith('+');
+              const isNeutral = change === '-';
+              const badgeClass = isNeutral
+                ? (isDarkMode ? 'text-slate-400' : 'text-slate-500')
+                : isPositive
+                ? 'text-emerald-500'
+                : 'text-rose-500';
+
+              const chartData = trendValues.map((v, i) => ({ val: v, i }));
+
+              return (
+                <div className={`${homeSurface} border shadow-sm rounded-2xl flex flex-col justify-between overflow-hidden h-[180px] pt-5 px-5 pb-0 relative`}>
+                  <div className="flex items-center justify-between mb-1 z-10">
+                    <span className={`text-xs font-bold uppercase tracking-wider ${homeMuted}`}>{label}</span>
+                    <span className={`text-xs font-black tracking-tight ${badgeClass}`}>
+                      {change}
+                    </span>
+                  </div>
+
+                  <div className="z-10 mb-2">
+                    <strong className={`text-[clamp(1.35rem,1.8vw,1.85rem)] font-black ${homeHeading} tracking-tight block leading-tight`}>
+                      {value}
+                    </strong>
+                  </div>
+
+                  <div className="h-16 w-full -mx-5 -mb-1 mt-auto">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={hexColor} stopOpacity={0.4} />
+                            <stop offset="100%" stopColor={hexColor} stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <Area type="monotone" dataKey="val" stroke={hexColor} strokeWidth={2.5} fillOpacity={1} fill={`url(#${gradId})`} isAnimationActive={false} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              );
+            };
+
             const mixBars = (items: { label: string; total: number }[], colors: string[]) => (
               <div className="space-y-3">{items.length === 0 ? <p className="text-sm text-slate-400">No data for this period.</p> : items.map((item, index) => (
                 <div key={item.label}>
@@ -1847,11 +2065,33 @@ export default function DashboardApp() {
                 </div>
               ))}</div>
             );
-            const funnelStack = () => {
-              const colors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-400'];
-              const max = Math.max(...homeSummary.funnelTrend.map(item => item.mix.reduce((total, mix) => total + mix.total, 0)), 1);
-              return <div className="mt-5"><div className={`h-24 flex items-end gap-2 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-100'} pb-0`}>{homeSummary.funnelTrend.map(item => { const total = item.mix.reduce((sum, mix) => sum + mix.total, 0) || 1; return <div key={item.key} className="flex-1 h-full flex items-end" title={`${item.label}: ${item.mix.map(mix => `${mix.label} ${formatIDR(mix.total)}`).join(' | ')}`}><div className="w-full flex flex-col-reverse transition-all duration-700 ease-out" style={{ height: `${Math.max(4, total / max * 100)}%` }}>{item.mix.map((mix, index) => <div key={mix.label} className={`w-full ${colors[index % colors.length]} first:rounded-b-sm last:rounded-t-sm`} style={{ height: `${mix.total / total * 100}%` }}></div>)}</div></div>; })}</div><div className={`flex justify-between pt-1 text-[9px] font-bold ${homeMuted}`}>{homeSummary.funnelTrend.map(item => <span key={item.key}>{item.label}</span>)}</div></div>;
+
+            const renderStackBars = (trendData: { key: string; label: string; mix: { label: string; total: number }[] }[]) => {
+              const stackColors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-400', 'bg-cyan-400'];
+              const max = Math.max(...trendData.map(item => item.mix.reduce((total, mix) => total + mix.total, 0)), 1);
+              return (
+                <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/60">
+                  <div className={`h-20 flex items-end gap-2 border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-200'} pb-0`}>
+                    {trendData.map(item => {
+                      const total = item.mix.reduce((sum, mix) => sum + mix.total, 0) || 1;
+                      return (
+                        <div key={item.key} className="flex-1 h-full flex items-end" title={`${item.label}: ${item.mix.map(mix => `${mix.label} ${formatIDR(mix.total)}`).join(' | ')}`}>
+                          <div className="w-full flex flex-col-reverse transition-all duration-700 ease-out" style={{ height: `${Math.max(6, (total / max) * 100)}%` }}>
+                            {item.mix.map((mix, index) => (
+                              <div key={mix.label} className={`w-full ${stackColors[index % stackColors.length]} first:rounded-b-sm last:rounded-t-sm`} style={{ height: `${(mix.total / total) * 100}%` }}></div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className={`flex justify-between pt-1.5 text-[9px] font-bold ${homeMuted}`}>
+                    {trendData.map(item => <span key={item.key}>{item.label}</span>)}
+                  </div>
+                </div>
+              );
             };
+
             const mixDonut = (items: { label: string; total: number }[], colors: string[], centerLabel: string) => {
               const total = items.reduce((sum, item) => sum + item.total, 0) || 1;
               let start = 0;
@@ -1861,106 +2101,240 @@ export default function DashboardApp() {
                 start = end;
                 return slice;
               }).join(', ');
+
               return (
-                <div className="flex items-center gap-4">
-                  <div className="w-28 h-28 rounded-full shrink-0" style={{ background: `conic-gradient(${gradient || '#e2e8f0 0 100%'})` }}>
-                    <div className={`w-16 h-16 mt-6 ml-6 rounded-full ${isDarkMode ? 'bg-[#090d16]' : 'bg-white'} flex items-center justify-center`}><span className={`text-[9px] font-black ${homeMuted}`}>{centerLabel}</span></div>
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full shrink-0 relative flex items-center justify-center shadow-inner" style={{ background: `conic-gradient(${gradient || '#e2e8f0 0 100%'})` }}>
+                    <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full ${isDarkMode ? 'bg-[#090d16]' : 'bg-white'} flex items-center justify-center shadow`}>
+                      <span className={`text-[10px] font-black uppercase tracking-wider ${homeHeading}`}>{centerLabel}</span>
+                    </div>
                   </div>
-                  <div className="space-y-1 min-w-0">
-                    {items.slice(0, 6).map((item, index) => <div key={item.label} className={`flex items-center gap-2 text-[10px] ${homeMuted}`}>
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colors[index % colors.length] }}></span>
-                      <span className="truncate">{item.label}</span>
-                      <span className="ml-auto whitespace-nowrap font-bold">{formatPct(item.total / total)} · {formatIDR(item.total)}</span>
-                    </div>)}
+                  <div className="w-full min-w-0 overflow-x-auto">
+                    <table className="w-full border-collapse text-left">
+                      <tbody>
+                        {items.slice(0, 5).map((item, index) => (
+                          <tr key={item.label} className="border-b border-transparent hover:bg-slate-500/5 transition-colors">
+                            <td className="py-1 pr-2 w-4">
+                              <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: colors[index % colors.length] }}></span>
+                            </td>
+                            <td className={`py-1 pr-2 font-bold text-xs max-w-[110px] truncate ${isDarkMode ? 'text-slate-200' : 'text-slate-700'}`}>
+                              {item.label}
+                            </td>
+                            <td className="py-1 px-2 text-right font-mono text-xs font-bold text-indigo-400">
+                              {formatPct(item.total / total)}
+                            </td>
+                            <td className={`py-1 pl-2 text-right font-mono text-xs font-semibold ${isDarkMode ? 'text-slate-300' : 'text-slate-600'}`}>
+                              {formatIDR(item.total)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );
             };
+
             return (
               <div className="max-w-[1600px] mx-auto space-y-5">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-widest text-indigo-600 mb-1">Performance snapshot</p><p className="text-sm text-slate-500 font-medium">{homeSummary.periodLabel} across paid media and commerce channels</p></div></div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                  {metricCard('Media spend', formatIDR(homeSummary.current.media.spend), growth(homeSummary.current.media.spend, homeSummary.previous.media.spend), 'bg-indigo-500', homeSummary.trend.map(item => item.mediaSpend))}
-                  {metricCard('Impressions', formatNum(homeSummary.current.media.impressions), growth(homeSummary.current.media.impressions, homeSummary.previous.media.impressions), 'bg-cyan-500', homeSummary.trend.map(item => item.mediaImpressions))}
-                  {metricCard('Commerce GMV', formatIDR(homeSummary.current.commerce.gmv), growth(homeSummary.current.commerce.gmv, homeSummary.previous.commerce.gmv), 'bg-emerald-500', homeSummary.trend.map(item => item.commerceGmv))}
-                  {metricCard('Engagement', formatNum(homeSummary.current.media.engagement), growth(homeSummary.current.media.engagement, homeSummary.previous.media.engagement), 'bg-amber-500', homeSummary.trend.map(item => item.mediaEngagement))}
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-indigo-600 mb-1">Performance snapshot</p>
+                    <p className="text-sm text-slate-500 font-medium">{homeSummary.periodLabel} across paid media and commerce channels</p>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
-                  <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm xl:col-span-3`}>
-                    <div className="flex items-center justify-between mb-5">
-                      <div>
-                        <h2 className={`text-base font-black ${homeHeading}`}>Six-month momentum</h2>
-                        <p className={`text-xs ${homeMuted} mt-1`}>Media spend and commerce GMV</p>
+
+                {/* KPI Cards: Media Spend covers all spend (Media + Commerce) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  {metricCard('Media spend', formatIDR(homeSummary.currentTotalSpend), growth(homeSummary.currentTotalSpend, homeSummary.previousTotalSpend), 'gradSpend', '#6366f1', homeSummary.trend.map(item => item.spend))}
+                  {metricCard('Impressions', formatNum(homeSummary.current.media.impressions), growth(homeSummary.current.media.impressions, homeSummary.previous.media.impressions), 'gradImp', '#06b6d4', homeSummary.trend.map(item => item.impressions))}
+                  {metricCard('Commerce GMV', formatIDR(homeSummary.current.commerce.gmv), growth(homeSummary.current.commerce.gmv, homeSummary.previous.commerce.gmv), 'gradGmv', '#10b981', homeSummary.trend.map(item => item.commerceGmv))}
+                  {metricCard('Engagement', formatNum(homeSummary.current.media.engagement), growth(homeSummary.current.media.engagement, homeSummary.previous.media.engagement), 'gradEng', '#f59e0b', homeSummary.trend.map(item => item.engagement))}
+                </div>
+
+                {/* 12-Column Grid: Equal height between Six-Month Momentum and Platform Mix */}
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
+                  <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm xl:col-span-7 flex flex-col justify-between`}>
+                    <div>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+                        <div>
+                          <h2 className={`text-base font-black ${homeHeading}`}>Six-month momentum</h2>
+                          <p className={`text-xs ${homeMuted} mt-0.5`}>Trend comparison across selected metrics</p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Multi-Metric Selection Dropdown (with merged 'Spend') */}
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setIsMomentumDropdownOpen(!isMomentumDropdownOpen)}
+                              className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-2 shadow-sm ${isDarkMode ? 'bg-slate-900 border-slate-700 text-slate-200' : 'bg-slate-100 border-slate-200 text-slate-800'}`}
+                            >
+                              <span>Metrics ({homeMomentumMetrics.length}/2)</span>
+                              <span className="text-[10px]">▼</span>
+                            </button>
+
+                            {isMomentumDropdownOpen && (
+                              <div className={`absolute right-0 mt-2 w-52 rounded-xl shadow-xl border p-2 z-50 ${isDarkMode ? 'bg-[#0f172a] border-slate-700' : 'bg-white border-slate-200'}`}>
+                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-2 py-1">Select up to 2</p>
+                                {metricOptions.map(m => {
+                                  const isChecked = homeMomentumMetrics.includes(m.key);
+                                  return (
+                                    <button
+                                      key={m.key}
+                                      type="button"
+                                      onClick={() => handleToggleMomentumMetric(m.key)}
+                                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-colors ${isChecked ? 'bg-indigo-600 text-white' : isDarkMode ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-100'}`}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: m.color }}></span>
+                                        <span>{m.label}</span>
+                                      </div>
+                                      {isChecked && <span>✓</span>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Chart Type Selector */}
+                          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                            {(['bar', 'line', 'area'] as const).map(type => (
+                              <button
+                                key={type}
+                                onClick={() => setHomeMomentumType(type)}
+                                className={`px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider transition-all ${homeMomentumType === type ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
+                              >
+                                {type}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
-                        {(['bar', 'line', 'area'] as const).map(type => (
-                          <button
-                            key={type}
-                            onClick={() => setHomeMomentumType(type)}
-                            className={`px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider transition-all ${homeMomentumType === type ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'}`}
-                          >
-                            {type}
-                          </button>
-                        ))}
+
+                      <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          {homeMomentumType === 'bar' ? (
+                            <BarChart data={homeSummary.trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
+                              <XAxis dataKey="label" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} />
+                              <YAxis yAxisId="left" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
+                              {activeMetricConfigs.length > 1 && (
+                                <YAxis yAxisId="right" orientation="right" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
+                              )}
+                              <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '12px' }} formatter={(v: any, name: any) => {
+                                const cfg = activeMetricConfigs.find(m => m.label === name);
+                                return [cfg ? cfg.fmt(Number(v)) : v, name];
+                              }} />
+                              {activeMetricConfigs.map((cfg, idx) => (
+                                <Bar key={cfg.key} yAxisId={idx === 1 ? 'right' : 'left'} dataKey={cfg.key} name={cfg.label} fill={cfg.color} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                              ))}
+                            </BarChart>
+                          ) : homeMomentumType === 'line' ? (
+                            <LineChart data={homeSummary.trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
+                              <XAxis dataKey="label" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} />
+                              <YAxis yAxisId="left" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
+                              {activeMetricConfigs.length > 1 && (
+                                <YAxis yAxisId="right" orientation="right" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
+                              )}
+                              <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '12px' }} formatter={(v: any, name: any) => {
+                                const cfg = activeMetricConfigs.find(m => m.label === name);
+                                return [cfg ? cfg.fmt(Number(v)) : v, name];
+                              }} />
+                              {activeMetricConfigs.map((cfg, idx) => (
+                                <Line key={cfg.key} yAxisId={idx === 1 ? 'right' : 'left'} type="monotone" dataKey={cfg.key} name={cfg.label} stroke={cfg.color} strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
+                              ))}
+                            </LineChart>
+                          ) : (
+                            <AreaChart data={homeSummary.trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                              <defs>
+                                {activeMetricConfigs.map(cfg => (
+                                  <linearGradient key={cfg.key} id={`areaGrad-${cfg.key}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={cfg.color} stopOpacity={0.4} />
+                                    <stop offset="95%" stopColor={cfg.color} stopOpacity={0.0} />
+                                  </linearGradient>
+                                ))}
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
+                              <XAxis dataKey="label" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} />
+                              <YAxis yAxisId="left" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
+                              {activeMetricConfigs.length > 1 && (
+                                <YAxis yAxisId="right" orientation="right" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={11} tickLine={false} axisLine={false} tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val} />
+                              )}
+                              <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '12px' }} formatter={(v: any, name: any) => {
+                                const cfg = activeMetricConfigs.find(m => m.label === name);
+                                return [cfg ? cfg.fmt(Number(v)) : v, name];
+                              }} />
+                              {activeMetricConfigs.map((cfg, idx) => (
+                                <Area key={cfg.key} yAxisId={idx === 1 ? 'right' : 'left'} type="monotone" dataKey={cfg.key} name={cfg.label} stroke={cfg.color} strokeWidth={2.5} fillOpacity={1} fill={`url(#areaGrad-${cfg.key})`} />
+                              ))}
+                            </AreaChart>
+                          )}
+                        </ResponsiveContainer>
                       </div>
-                    </div>
-                    
-                    <div className="h-52 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        {homeMomentumType === 'bar' ? (
-                          <BarChart data={homeSummary.trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
-                            <XAxis dataKey="label" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} />
-                            <YAxis stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `${(val / 1000000).toFixed(0)}M`} />
-                            <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '11px' }} formatter={(v: any) => [formatIDR(Number(v)), '']} />
-                            <Bar dataKey="mediaSpend" name="Media Spend" fill="#6366f1" radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={900} animationEasing="ease-out" />
-                            <Bar dataKey="commerceGmv" name="Commerce GMV" fill="#34d399" radius={[4, 4, 0, 0]} maxBarSize={28} animationDuration={1100} animationEasing="ease-out" />
-                          </BarChart>
-                        ) : homeMomentumType === 'line' ? (
-                          <LineChart data={homeSummary.trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
-                            <XAxis dataKey="label" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} />
-                            <YAxis stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `${(val / 1000000).toFixed(0)}M`} />
-                            <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '11px' }} formatter={(v: any) => [formatIDR(Number(v)), '']} />
-                            <Line type="monotone" dataKey="mediaSpend" name="Media Spend" stroke="#6366f1" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} animationDuration={900} />
-                            <Line type="monotone" dataKey="commerceGmv" name="Commerce GMV" stroke="#34d399" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} animationDuration={1100} />
-                          </LineChart>
-                        ) : (
-                          <AreaChart data={homeSummary.trend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <defs>
-                              <linearGradient id="mediaGradientHome" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
-                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
-                              </linearGradient>
-                              <linearGradient id="gmvGradientHome" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#34d399" stopOpacity={0.4} />
-                                <stop offset="95%" stopColor="#34d399" stopOpacity={0.0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
-                            <XAxis dataKey="label" stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} />
-                            <YAxis stroke={isDarkMode ? '#94a3b8' : '#64748b'} fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => `${(val / 1000000).toFixed(0)}M`} />
-                            <RechartsTooltip contentStyle={{ backgroundColor: isDarkMode ? '#0f172a' : '#ffffff', borderColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: '0.75rem', fontSize: '11px' }} formatter={(v: any) => [formatIDR(Number(v)), '']} />
-                            <Area type="monotone" dataKey="mediaSpend" name="Media Spend" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#mediaGradientHome)" animationDuration={900} />
-                            <Area type="monotone" dataKey="commerceGmv" name="Commerce GMV" stroke="#34d399" strokeWidth={2.5} fillOpacity={1} fill="url(#gmvGradientHome)" animationDuration={1100} />
-                          </AreaChart>
-                        )}
-                      </ResponsiveContainer>
                     </div>
 
-                    <div className={`flex gap-4 mt-4 text-[10px] font-bold ${homeMuted}`}>
-                      <span><i className="inline-block w-2 h-2 rounded-full bg-indigo-500 mr-1"></i>Media spend</span>
-                      <span><i className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1"></i>Commerce GMV</span>
+                    {/* Dynamic Chart Legend */}
+                    <div className={`flex flex-wrap gap-4 mt-3 text-[11px] font-bold ${homeMuted}`}>
+                      {activeMetricConfigs.map(cfg => (
+                        <span key={cfg.key} className="flex items-center gap-1.5">
+                          <i className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cfg.color }}></i>
+                          {cfg.label}
+                        </span>
+                      ))}
                     </div>
                   </div>
-                  
-                  <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
-                    <h2 className={`text-base font-black ${homeHeading} mb-1`}>Platform mix</h2>
-                    <p className={`text-xs ${homeMuted} mb-4`}>Investment and commerce activity</p>
-                    {mixDonut(homeSummary.platformMix, ['#6366f1', '#10b981', '#f59e0b', '#06b6d4'], 'MIX')}
+
+                  {/* Platform mix: Matched height and structure */}
+                  <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm xl:col-span-5 flex flex-col justify-between`}>
+                    <div>
+                      <h2 className={`text-base font-black ${homeHeading} mb-1`}>Platform mix</h2>
+                      <p className={`text-xs ${homeMuted} mb-4`}>Investment and commerce activity</p>
+                      {mixDonut(homeSummary.platformMix, ['#6366f1', '#10b981', '#f59e0b', '#06b6d4', '#ec4899'], 'MIX')}
+                    </div>
+                    <div className="mt-auto">
+                      {renderStackBars(homeSummary.platformTrend)}
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5"><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Funnel mix</h2><p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel stage</p>{mixDonut(homeSummary.funnelMix, ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#84cc16'], 'MIX')}{funnelStack()}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Format mix</h2><p className={`text-xs ${homeMuted} mb-4`}>Creative investment by format</p>{mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}</div><div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}><h2 className={`text-base font-black ${homeHeading} mb-1`}>Channel health</h2><p className={`text-xs ${homeMuted} mb-4`}>Core media efficiency metrics</p><div className="grid grid-cols-2 gap-3"><div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>CTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.ctr)}</strong></div><div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>VTR</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.vtr)}</strong></div><div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>ROAS</span><strong className={`block text-lg ${homeHeading} mt-1`}>{homeSummary.current.commerce.roas.toFixed(2)}x</strong></div><div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}><span className={`text-[10px] font-bold ${homeMuted}`}>Clicks</span><strong className={`block text-lg ${homeHeading} mt-1`}>{formatNum(homeSummary.current.media.clicks)}</strong></div></div></div></div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                  <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
+                    <h2 className={`text-base font-black ${homeHeading} mb-1`}>Funnel mix</h2>
+                    <p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel stage</p>
+                    {mixDonut(homeSummary.funnelMix, ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899'], 'MIX')}
+                    {renderStackBars(homeSummary.funnelTrend)}
+                  </div>
+                  <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
+                    <h2 className={`text-base font-black ${homeHeading} mb-1`}>Format mix</h2>
+                    <p className={`text-xs ${homeMuted} mb-4`}>Creative investment by format</p>
+                    {mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}
+                  </div>
+                  <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
+                    <h2 className={`text-base font-black ${homeHeading} mb-1`}>Channel health</h2>
+                    <p className={`text-xs ${homeMuted} mb-4`}>Core media efficiency metrics</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}>
+                        <span className={`text-[10px] font-bold ${homeMuted}`}>CTR</span>
+                        <strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.ctr)}</strong>
+                      </div>
+                      <div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}>
+                        <span className={`text-[10px] font-bold ${homeMuted}`}>VTR</span>
+                        <strong className={`block text-lg ${homeHeading} mt-1`}>{formatPct(homeSummary.current.media.vtr)}</strong>
+                      </div>
+                      <div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}>
+                        <span className={`text-[10px] font-bold ${homeMuted}`}>ROAS</span>
+                        <strong className={`block text-lg ${homeHeading} mt-1`}>{homeSummary.current.commerce.roas.toFixed(2)}x</strong>
+                      </div>
+                      <div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}>
+                        <span className={`text-[10px] font-bold ${homeMuted}`}>Clicks</span>
+                        <strong className={`block text-lg ${homeHeading} mt-1`}>{formatNum(homeSummary.current.media.clicks)}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             );
           })()}
@@ -2039,7 +2413,7 @@ export default function DashboardApp() {
                  </div>
               </div>
 
-              {/* Dedicated Platform Summary Table (Overall, Meta, TikTok) with SHADCN/UI Table Primitives */}
+              {/* Platform Summary Table */}
               <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                 <div className={`p-5 border-b flex justify-between items-center ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
                   <div>
@@ -2111,7 +2485,7 @@ export default function DashboardApp() {
                 </div>
               </div>
 
-              {/* Full Table with increased max height (850px) */}
+              {/* Full Table */}
               <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                 <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
                    <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Pivot Analysis Table</h2>
@@ -2211,7 +2585,7 @@ export default function DashboardApp() {
                  </div>
               </div>
 
-              {/* Adjustment 2: Full Table with increased max height (850px) */}
+              {/* Full Table with increased max height */}
               <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                 <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
                    <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform & Ad Type Pivot</h2>
