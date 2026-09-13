@@ -2448,7 +2448,7 @@ export default function DashboardApp() {
                   <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm xl:col-span-5 flex flex-col justify-between`}>
                     <div>
                       <h2 className={`text-base font-black ${homeHeading} mb-1`}>Platform mix</h2>
-                      <p className={`text-xs ${homeMuted} mb-4`}>Investment and commerce activity</p>
+                      <p className={`text-xs ${homeMuted} mb-4`}>Investment across platform</p>
                       {mixDonut(homeSummary.platformMix, ['#6366f1', '#10b981', '#f59e0b', '#06b6d4', '#ec4899'], 'MIX')}
                     </div>
                     <div className="mt-auto">
@@ -2460,17 +2460,17 @@ export default function DashboardApp() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                   <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
                     <h2 className={`text-base font-black ${homeHeading} mb-1`}>Funnel mix</h2>
-                    <p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel stage</p>
+                    <p className={`text-xs ${homeMuted} mb-3`}>Media spend by funnel</p>
                     {mixDonut(homeSummary.funnelMix, ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899'], 'MIX')}
                     {renderStackBars(homeSummary.funnelTrend)}
                   </div>
                   <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
                     <h2 className={`text-base font-black ${homeHeading} mb-1`}>Format mix</h2>
-                    <p className={`text-xs ${homeMuted} mb-4`}>Creative investment by format</p>
+                    <p className={`text-xs ${homeMuted} mb-4`}>Media investment by format</p>
                     {mixBars(homeSummary.formatMix, ['bg-violet-500','bg-blue-500','bg-teal-500','bg-orange-400'])}
                   </div>
                   <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
-                    <h2 className={`text-base font-black ${homeHeading} mb-1`}>Channel health</h2>
+                    <h2 className={`text-base font-black ${homeHeading} mb-1`}>Core Metrics</h2>
                     <p className={`text-xs ${homeMuted} mb-4`}>Core media efficiency metrics</p>
                     <div className="grid grid-cols-2 gap-3">
                       <div className={`${isDarkMode ? 'bg-[#090d16]' : 'bg-slate-50'} rounded-xl p-3`}>
@@ -2531,7 +2531,7 @@ export default function DashboardApp() {
                    <div>
                       <h2 className="text-[clamp(1.1rem,1.8vw,1.5rem)] font-black tracking-tight" id="chartTitleMedia">{dashboardContext} Historical Trend</h2>
                       <p className={`text-sm font-semibold mt-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                         {granularity === 'monthly' ? 'Displaying data for the past 3 months' : granularity === 'weekly' ? 'MTD Comparison Analytics' : 'Interactive Multi-Metric Analytics'}
+                         {granularity === 'monthly' ? 'Displaying data for the past 3 months' : granularity === 'weekly' ? 'MTD Comparison Analytics' : 'Daily Analytics'}
                       </p>
                    </div>
                    
@@ -2645,7 +2645,7 @@ export default function DashboardApp() {
               {/* Full Table */}
               <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                 <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
-                   <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Pivot Analysis Table</h2>
+                   <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Analysis Table</h2>
                    
                    <div className="flex flex-wrap gap-3 w-full md:w-auto">
                      <select value={tableColFilter1} onChange={(e) => setTableColFilter1(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-indigo-300 hover:border-indigo-500' : 'border-slate-300 text-indigo-700 hover:border-indigo-500 bg-slate-50'}`}>
