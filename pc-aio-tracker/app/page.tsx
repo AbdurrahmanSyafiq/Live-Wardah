@@ -56,9 +56,9 @@ const CONFIG = {
   signal: { sheet: "Media Signal", colBrand: "Brand", colStatus: "Status", colDateStart: "Start Date", colDateEnd: "End Date" }
 };
 
-const selectClass = "w-full bg-[#1e293b] border border-[#334155] text-slate-100 py-3 px-4 rounded-xl text-sm font-semibold shadow-inner outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none dropdown-arrow hover:border-[#475569] transition-colors";
-const dateClass = "w-full bg-white border border-slate-200 text-slate-800 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-center";
-const dateClassDark = "w-full bg-[#1e293b] border border-indigo-500/50 text-indigo-300 py-2.5 px-4 rounded-full text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer text-center";
+const selectClass = "w-full bg-[#1e293b] border border-[#334155] text-slate-100 py-2.5 px-3 rounded-xl text-xs font-semibold shadow-inner outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer appearance-none dropdown-arrow hover:border-[#475569] transition-colors";
+const dateClass = "w-full bg-white border border-slate-200 text-slate-800 py-2 px-3 rounded-xl text-xs font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-center";
+const dateClassDark = "w-full bg-[#1e293b] border border-indigo-500/50 text-indigo-300 py-2 px-3 rounded-xl text-xs font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer text-center";
 const defaultFilters = { brand: 'All', funnel: 'All', platform: 'All', adType: 'All', format: 'All', period: 'All' };
 
 interface CompileOptions {
@@ -476,7 +476,6 @@ export default function DashboardApp() {
       setState([...current, value]);
     }
   };
-
   const signalPeriods = useMemo(() => {
     if (activeEngine !== 'signal' || rawData.length === 0) return [];
     const unique = new Map<string, { start: string; end: string }>();
@@ -1671,7 +1670,6 @@ export default function DashboardApp() {
     }
     return '';
   };
-
   // --- LOGIN VIEW ---
   if (currentView === 'login') {
     return (
@@ -1843,200 +1841,273 @@ export default function DashboardApp() {
         </div>
       )}
 
-      {/* SIDEBAR */}
-      <aside className={`${isSidebarOpen ? 'w-[300px] translate-x-0' : 'w-0 -translate-x-full lg:w-0'} bg-[#090d16] border-r border-slate-800/80 h-screen fixed lg:static overflow-y-auto flex-shrink-0 transition-all duration-300 ease-in-out z-40 text-slate-300 flex flex-col`}>
-        <div className="p-6 border-b border-slate-800/80 flex justify-between items-center bg-[#090d16] sticky top-0 z-20">
-          <h1 className="text-lg font-extrabold text-white tracking-tight leading-tight">PC Brands<br/>All in One Tracker</h1>
-          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-slate-500 hover:text-white">✕</button>
+      {/* COMPACT & EXPANDABLE SIDEBAR */}
+      <aside className={`${isSidebarOpen ? 'w-[280px]' : 'w-[72px]'} bg-[#090d16] border-r border-slate-800/80 h-screen sticky top-0 overflow-y-auto overflow-x-hidden flex-shrink-0 transition-all duration-300 ease-in-out z-40 text-slate-300 flex flex-col`}>
+{/* Top Header with integrated Hamburger icon */}
+        <div className={`h-20 border-b border-slate-800/80 flex items-center bg-[#090d16] sticky top-0 z-20 transition-all ${isSidebarOpen ? 'px-5 justify-between' : 'justify-center px-0'}`}>
+          {isSidebarOpen ? (
+            <>
+              <div className="flex flex-col justify-center overflow-hidden">
+                <h1 className="text-base font-extrabold text-white tracking-tight leading-tight">
+                  PC Brands
+                </h1>
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
+                  All in One Tracker
+                </p>
+              </div>
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                aria-label="Collapse sidebar"
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors shrink-0"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              aria-label="Expand sidebar"
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          )}
         </div>
         
-        <div className="pt-6 pb-4 px-5 space-y-1.5 border-b border-slate-800/80">
-          <p className="px-3 text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Workspaces</p>
-          <button onClick={() => selectHome()} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${currentView === 'home' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l9-9 9 9M5 10v10h14V10M9 20v-6h6v6"></path></svg>General Overview
+        {/* Nav Workspaces */}
+        <div className="pt-4 pb-4 px-2 space-y-1 border-b border-slate-800/80">
+          {isSidebarOpen ? (
+            <p className="px-3 text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 transition-opacity">Workspaces</p>
+          ) : (
+            <div className="w-8 h-[1px] bg-slate-800 mx-auto my-2" />
+          )}
+
+          <button
+            onClick={() => selectHome()}
+            title="General Overview"
+            className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${
+              currentView === 'home' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'
+            }`}
+          >
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l9-9 9 9M5 10v10h14V10M9 20v-6h6v6"></path></svg>
+            {isSidebarOpen && <span className="truncate">General Overview</span>}
           </button>
-          <button onClick={() => selectEngine('media')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'media' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>Digital Media
+
+          <button
+            onClick={() => selectEngine('media')}
+            title="Digital Media"
+            className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${
+              activeEngine === 'media' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'
+            }`}
+          >
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+            {isSidebarOpen && <span className="truncate">Digital Media</span>}
           </button>
-          <button onClick={() => selectEngine('commerce')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'commerce' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>Commerce Tracker
+
+          <button
+            onClick={() => selectEngine('commerce')}
+            title="Commerce Tracker"
+            className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${
+              activeEngine === 'commerce' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'
+            }`}
+          >
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+            {isSidebarOpen && <span className="truncate">Commerce Tracker</span>}
           </button>
-          <button onClick={() => selectEngine('creative')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'creative' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>Top Creative
+
+          <button
+            onClick={() => selectEngine('creative')}
+            title="Top Creative"
+            className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${
+              activeEngine === 'creative' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'
+            }`}
+          >
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            {isSidebarOpen && <span className="truncate">Top Creative</span>}
           </button>
-          <button onClick={() => selectEngine('signal')} className={`w-full text-left px-4 py-3.5 rounded-xl text-sm flex items-center gap-3 font-semibold transition-all ${activeEngine === 'signal' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>Media Signal
+
+          <button
+            onClick={() => selectEngine('signal')}
+            title="Media Signal"
+            className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${
+              activeEngine === 'signal' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'
+            }`}
+          >
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            {isSidebarOpen && <span className="truncate">Media Signal</span>}
           </button>
         </div>
 
-        <div className="p-5 space-y-5 flex-1">
-          <p className="px-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Global Filters</p>
-          
-          {/* STANDARD DATE PICKER (ENGINE TRACKERS) */}
-          {currentView !== 'home' && activeEngine !== 'creative' && activeEngine !== 'signal' && (
-             <div className="bg-[#111827] p-4 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
+        {/* Global Filters & Context Controls */}
+        {isSidebarOpen && (
+          <div className="p-4 space-y-4 flex-1">
+            <p className="px-1 text-[10px] font-black text-slate-500 uppercase tracking-widest">Filters</p>
+            
+            {/* Standard Date Picker */}
+            {currentView !== 'home' && activeEngine !== 'creative' && activeEngine !== 'signal' && (
+              <div className="bg-[#111827] p-3 rounded-2xl border border-slate-800 space-y-2.5 shadow-inner">
                 <div className="flex items-center justify-between mb-1">
-                   <label className="text-xs font-bold text-slate-400">Date Range</label>
-                   <select value={granularity} onChange={(e) => setGranularity(e.target.value)} className="bg-transparent text-indigo-400 text-xs font-bold outline-none cursor-pointer appearance-none pr-8 text-right dropdown-arrow bg-[length:12px_12px] bg-[position:right_center]">
-                     <option value="monthly">Monthly</option><option value="weekly">Weekly MTD</option><option value="daily">Daily</option>
-                   </select>
+                  <label className="text-xs font-bold text-slate-400">Date Range</label>
+                  <select value={granularity} onChange={(e) => setGranularity(e.target.value)} className="bg-transparent text-indigo-400 text-xs font-bold outline-none cursor-pointer appearance-none pr-6 text-right dropdown-arrow bg-[length:10px_10px] bg-[position:right_center]">
+                    <option value="monthly">Monthly</option><option value="weekly">Weekly MTD</option><option value="daily">Daily</option>
+                  </select>
                 </div>
                 
                 {granularity === 'monthly' && <input type="month" value={dateMonth} onChange={(e) => setDateMonth(e.target.value)} className={isDarkMode ? dateClassDark : dateClass} />}
                 {granularity === 'weekly' && <input type="date" value={dateWeekly} onChange={(e) => setDateWeekly(e.target.value)} className={isDarkMode ? dateClassDark : dateClass} />}
                 {granularity === 'daily' && (
-                  <div className="grid grid-cols-[1fr_auto_1fr] gap-1.5 items-center w-full">
-                     <input type="date" value={dateDailyStart} onChange={(e) => setDateDailyStart(e.target.value)} className={`${isDarkMode ? dateClassDark : dateClass} !px-1 !text-xs w-full min-w-0`} />
-                     <span className="text-slate-500 font-bold text-center">-</span>
-                     <input type="date" value={dateDailyEnd} onChange={(e) => setDateDailyEnd(e.target.value)} className={`${isDarkMode ? dateClassDark : dateClass} !px-1 !text-xs w-full min-w-0`} />
+                  <div className="grid grid-cols-[1fr_auto_1fr] gap-1 items-center w-full">
+                    <input type="date" value={dateDailyStart} onChange={(e) => setDateDailyStart(e.target.value)} className={`${isDarkMode ? dateClassDark : dateClass} !px-1 !text-xs w-full min-w-0`} />
+                    <span className="text-slate-500 font-bold text-center">-</span>
+                    <input type="date" value={dateDailyEnd} onChange={(e) => setDateDailyEnd(e.target.value)} className={`${isDarkMode ? dateClassDark : dateClass} !px-1 !text-xs w-full min-w-0`} />
                   </div>
                 )}
-             </div>
-          )}
-
-          {/* HOME FILTERS */}
-          {currentView === 'home' && (
-            <div className="bg-[#111827] p-4 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
-              <label className="block text-xs font-bold text-slate-400">Home Filters</label>
-              <div>
-                <span className="text-[11px] text-slate-400 block mb-1">Brand</span>
-                <select value={homeBrand} onChange={(e) => setHomeBrand(e.target.value)} className={selectClass}>
-                  {homeBrandOptions.map(brand => <option key={brand} value={brand}>{brand}</option>)}
-                </select>
               </div>
+            )}
 
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-[11px] text-slate-400 font-bold">Select Months</span>
-                  <span className="text-[10px] text-indigo-400 font-semibold">{homePeriods.length} selected</span>
-                </div>
-                <div className="max-h-40 overflow-y-auto space-y-1 pr-1 bg-[#090d16] p-2 rounded-xl border border-slate-800">
-                  {availableHomeMonths.map(m => {
-                    const isSelected = homePeriods.includes(m);
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => handleToggleHomeMonth(m)}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
-                          isSelected ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                        }`}
-                      >
-                        <span>{m}</span>
-                        {isSelected && <span>✓</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <button onClick={() => loadHomeData(true)} className="w-full bg-[#1e293b] hover:bg-indigo-600 text-white font-bold py-2.5 rounded-xl border border-slate-700 hover:border-indigo-500 transition-all text-xs">Sync Home Data</button>
-            </div>
-          )}
-
-          {/* PERIOD FILTER FOR MEDIA SIGNAL */}
-          {activeEngine === 'signal' && (
-            <div className="space-y-4 px-2">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2">Period Range</label>
-                <select value={selectedSignalPeriod} onChange={(e) => setSelectedSignalPeriod(e.target.value)} className={selectClass}>
-                  {signalPeriods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-                </select>
-              </div>
-            </div>
-          )}
-
-          {/* ENGINE-SPECIFIC SUBFILTERS */}
-          {currentView !== 'home' && (
-            <div className="space-y-4 px-2">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-2">Brand</label>
-                <select value={filters.brand} onChange={(e) => handleFilterChange('brand', e.target.value)} className={selectClass}>
-                  {getDependentOptions(CONFIG[activeEngine || 'media'].colBrand, 'brand').map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              </div>
-              {activeEngine === 'media' && (
+            {/* Home Filters */}
+            {currentView === 'home' && (
+              <div className="bg-[#111827] p-3.5 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
+                <label className="block text-xs font-bold text-slate-400">Home Filters</label>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-2">Funnel</label>
-                  <select value={filters.funnel} onChange={(e) => handleFilterChange('funnel', e.target.value)} className={selectClass}>
-                    {getDependentOptions(CONFIG.media.colFunnel, 'funnel').map(o => <option key={o} value={o}>{o}</option>)}
+                  <span className="text-[11px] text-slate-400 block mb-1">Brand</span>
+                  <select value={homeBrand} onChange={(e) => setHomeBrand(e.target.value)} className={selectClass}>
+                    {homeBrandOptions.map(brand => <option key={brand} value={brand}>{brand}</option>)}
                   </select>
                 </div>
-              )}
-              {(activeEngine === 'commerce' || activeEngine === 'creative') && (
+
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-2">Ad Type</label>
-                  <select value={filters.adType} onChange={(e) => handleFilterChange('adType', e.target.value)} className={selectClass}>
-                    {getDependentOptions(CONFIG[activeEngine === 'commerce' ? 'commerce' : 'creative'].colAdType, 'adType').map(o => <option key={o} value={o}>{o}</option>)}
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[11px] text-slate-400 font-bold">Select Months</span>
+                    <span className="text-[10px] text-indigo-400 font-semibold">{homePeriods.length} selected</span>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto space-y-1 pr-1 bg-[#090d16] p-2 rounded-xl border border-slate-800">
+                    {availableHomeMonths.map(m => {
+                      const isSelected = homePeriods.includes(m);
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => handleToggleHomeMonth(m)}
+                          className={`w-full text-left px-2 py-1 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+                            isSelected ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                          }`}
+                        >
+                          <span>{m}</span>
+                          {isSelected && <span>✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <button onClick={() => loadHomeData(true)} className="w-full bg-[#1e293b] hover:bg-indigo-600 text-white font-bold py-2 rounded-xl border border-slate-700 hover:border-indigo-500 transition-all text-xs">Sync Home Data</button>
+              </div>
+            )}
+
+            {/* Signal Range Filter */}
+            {activeEngine === 'signal' && (
+              <div className="space-y-3 px-1">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Period Range</label>
+                  <select value={selectedSignalPeriod} onChange={(e) => setSelectedSignalPeriod(e.target.value)} className={selectClass}>
+                    {signalPeriods.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
                   </select>
                 </div>
-              )}
-              {activeEngine === 'creative' && (
-                <>
-                  <div><label className="block text-xs font-bold text-slate-400 mb-2">Period</label><select value={filters.period} onChange={(e) => handleFilterChange('period', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colPeriod, 'period').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                  <div><label className="block text-xs font-bold text-slate-400 mb-2">Platform</label><select value={filters.platform} onChange={(e) => handleFilterChange('platform', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colPlatform, 'platform').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                  <div><label className="block text-xs font-bold text-slate-400 mb-2">Format</label><select value={filters.format} onChange={(e) => handleFilterChange('format', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colFormat, 'format').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
-                </>
-              )}
-              <button onClick={resetFilters} className="w-full border border-slate-600 text-slate-300 hover:border-indigo-500 hover:bg-indigo-600 hover:text-white font-bold py-2.5 rounded-xl transition-all text-xs">Reset Filters</button>
-            </div>
-          )}
-        </div>
-        <div className="p-6 bg-[#090d16] border-t border-slate-800/80">
-          <button onClick={() => loadData(activeEngine as any, true)} className="w-full bg-[#1e293b] hover:bg-indigo-600 text-white font-bold py-3.5 rounded-xl border border-slate-700 hover:border-indigo-500 shadow-md transition-all flex justify-center items-center gap-2 text-sm tracking-wide">Sync Live Data</button>
-        </div>
+              </div>
+            )}
+
+            {/* Engine Subfilters */}
+            {currentView !== 'home' && (
+              <div className="space-y-3 px-1">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">Brand</label>
+                  <select value={filters.brand} onChange={(e) => handleFilterChange('brand', e.target.value)} className={selectClass}>
+                    {getDependentOptions(CONFIG[activeEngine || 'media'].colBrand, 'brand').map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+                {activeEngine === 'media' && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 mb-1.5">Funnel</label>
+                    <select value={filters.funnel} onChange={(e) => handleFilterChange('funnel', e.target.value)} className={selectClass}>
+                      {getDependentOptions(CONFIG.media.colFunnel, 'funnel').map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                )}
+                {(activeEngine === 'commerce' || activeEngine === 'creative') && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 mb-1.5">Ad Type</label>
+                    <select value={filters.adType} onChange={(e) => handleFilterChange('adType', e.target.value)} className={selectClass}>
+                      {getDependentOptions(CONFIG[activeEngine === 'commerce' ? 'commerce' : 'creative'].colAdType, 'adType').map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                )}
+                {activeEngine === 'creative' && (
+                  <>
+                    <div><label className="block text-xs font-bold text-slate-400 mb-1.5">Period</label><select value={filters.period} onChange={(e) => handleFilterChange('period', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colPeriod, 'period').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                    <div><label className="block text-xs font-bold text-slate-400 mb-1.5">Platform</label><select value={filters.platform} onChange={(e) => handleFilterChange('platform', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colPlatform, 'platform').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                    <div><label className="block text-xs font-bold text-slate-400 mb-1.5">Format</label><select value={filters.format} onChange={(e) => handleFilterChange('format', e.target.value)} className={selectClass}>{getDependentOptions(CONFIG.creative.colFormat, 'format').map(o => <option key={o} value={o}>{o}</option>)}</select></div>
+                  </>
+                )}
+                <button onClick={resetFilters} className="w-full border border-slate-600 text-slate-300 hover:border-indigo-500 hover:bg-indigo-600 hover:text-white font-bold py-2 rounded-xl transition-all text-xs">Reset Filters</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isSidebarOpen && (
+          <div className="p-4 bg-[#090d16] border-t border-slate-800/80 mt-auto">
+            <button onClick={() => loadData(activeEngine as any, true)} className="w-full bg-[#1e293b] hover:bg-indigo-600 text-white font-bold py-3 rounded-xl border border-slate-700 hover:border-indigo-500 shadow-md transition-all flex justify-center items-center gap-2 text-xs tracking-wide">Sync Live Data</button>
+          </div>
+        )}
       </aside>
 
-      <main className="flex-1 p-3 sm:p-4 lg:p-6 h-screen overflow-y-auto w-full transition-all duration-300 relative">
-        <div className="flex items-start justify-between mb-5 sm:mb-6">
-          <div className="flex flex-col items-start gap-3">
-            <div className="flex items-center gap-3">
-              <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} aria-label="Toggle sidebar" className={`p-2.5 rounded-xl shadow-sm border transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-600'}`}>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-              </button>
-            </div>
-            <h1 className={`text-[clamp(1.25rem,2.5vw,1.875rem)] font-extrabold tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 h-screen overflow-y-auto w-full transition-all duration-300 relative">
+        {/* Title Header with direct alignment to the content below */}
+        <div className="flex items-center justify-between mb-5 w-full">
+          <div>
+            <h1 className={`text-2xl lg:text-3xl font-black tracking-tight leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
               {currentView === 'home' ? 'General Overview' : activeEngine === 'signal' ? 'TikTok Media Signal Tracker' : activeEngine === 'media' ? 'Digital Media' : activeEngine === 'commerce' ? 'Commerce Tracker' : 'Top Creative'}
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <button onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'} className={`p-2.5 rounded-xl shadow-sm border transition-colors ${isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-600'}`}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={isFullscreen ? 'M9 3v6H3m12-6v6h6M9 21v-6H3m12 6v-6h6' : 'M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 15v3a2 2 0 0 0 2 2h3'}></path></svg>
             </button>
 
-            {/* Flat-Icon Pill Slider Dark Mode Toggle */}
+            {/* Single Dark Mode Icon Button */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-              className={`relative inline-flex h-9 w-20 items-center rounded-full transition-colors duration-300 focus:outline-none p-1 shadow-inner ${
-                isDarkMode ? 'bg-[#2b2d31] border border-slate-700' : 'bg-white border border-slate-300'
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              className={`p-2.5 rounded-xl shadow-sm border transition-colors ${
+                isDarkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  : 'bg-white border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-slate-50'
               }`}
             >
-              <span
-                className={`inline-flex h-7 w-7 transform items-center justify-center rounded-full shadow-md transition-transform duration-300 ease-in-out ${
-                  isDarkMode
-                    ? 'translate-x-0 bg-white text-[#2b2d31]'
-                    : 'translate-x-11 bg-[#111827] text-white'
-                }`}
-              >
-                {isDarkMode ? (
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="4.5" />
-                    <path stroke="currentColor" strokeWidth="2" strokeLinecap="round" d="M12 2v2m0 16v2M2 12h2m16 0h2m-3.05-6.95l-1.41 1.41m-11.08 11.08l-1.41 1.41m0-13.9l1.41 1.41m11.08 11.08l1.41 1.41" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M12.3 2a10 10 0 0 0-.19 14 10 10 0 0 0 11.89 4 10.23 10.23 0 0 1-5.5 1.5A10.5 10.5 0 0 1 8 11a10.4 10.4 0 0 1 4.3-9z" />
-                  </svg>
-                )}
-              </span>
+              {isDarkMode ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="4" strokeWidth="2" />
+                  <path strokeLinecap="round" strokeWidth="2" d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41m14.14-14.14l-1.41 1.41" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
             </button>
           </div>
         </div>
 
-        {/* Dynamic view container */}
-        <div key={currentView === 'home' ? 'home' : (activeEngine || 'dashboard')} className="view-transition-container">
+        {/* Dynamic view container with full width */}
+        <div key={currentView === 'home' ? 'home' : (activeEngine || 'dashboard')} className="view-transition-container w-full">
           {currentView === 'home' && homeSummary && (() => {
             const homeSurface = isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200';
             const homeHeading = isDarkMode ? 'text-white' : 'text-slate-900';
@@ -2228,7 +2299,7 @@ export default function DashboardApp() {
             };
 
             return (
-              <div className="max-w-[1600px] mx-auto space-y-5">
+              <div className="w-full space-y-5">
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-2">
                   <div>
                     <p className="text-xs font-black uppercase tracking-widest text-indigo-600 mb-1">Performance snapshot</p>
@@ -2427,7 +2498,7 @@ export default function DashboardApp() {
 
           {/* --- VIEW 1: DIGITAL MEDIA --- */}
           {activeEngine === 'media' && (
-            <div className="max-w-[1600px] mx-auto space-y-6">
+            <div className="w-full space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
                 <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg transition-all cursor-pointer hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
                     <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Media</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg></div></div>
@@ -2599,7 +2670,7 @@ export default function DashboardApp() {
 
           {/* --- VIEW 2: COMMERCE TRACKER --- */}
           {activeEngine === 'commerce' && (
-            <div className="max-w-[1600px] mx-auto">
+            <div className="w-full">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
                 <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
                     <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Commerce</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg></div></div>
@@ -2671,7 +2742,7 @@ export default function DashboardApp() {
                  </div>
               </div>
 
-              {/* Full Table with increased max height */}
+              {/* Full Table */}
               <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
                 <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
                    <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform & Ad Type Pivot</h2>
@@ -2698,7 +2769,7 @@ export default function DashboardApp() {
 
           {/* --- VIEW 3: TOP CREATIVE TRACKER --- */}
           {activeEngine === 'creative' && (
-            <div className="max-w-[1600px] mx-auto">
+            <div className="w-full">
               <div className="space-y-4">
                 {creativeData.length === 0 ? (
                   <div className="bg-white p-12 rounded-3xl border border-slate-200 shadow-sm text-center"><p className="text-slate-500 font-bold">No creative data found for the selected filters.</p></div>
@@ -2789,7 +2860,7 @@ export default function DashboardApp() {
 
           {/* --- VIEW 4: MEDIA SIGNAL TRACKER --- */}
           {activeEngine === 'signal' && signalCompiled && (
-            <div className="max-w-[1600px] mx-auto space-y-6">
+            <div className="w-full space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-indigo-600 p-5 rounded-3xl text-white shadow-lg">
                   <p className="text-xs font-bold uppercase tracking-wider text-indigo-200 mb-1">Total Ad Spend</p>
