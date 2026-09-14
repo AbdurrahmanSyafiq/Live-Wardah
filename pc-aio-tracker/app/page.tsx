@@ -328,7 +328,6 @@ export default function DashboardApp() {
       }
     } catch (err) { setLoginError('Server communication failed.'); }
   };
-
   const loadData = async (engine: 'media' | 'commerce' | 'creative' | 'signal', forceSync = false) => {
     setDashboardContext('Overall'); setCreativePage(1); setTableColFilter1('All'); setTableColFilter2('All');
     
@@ -881,7 +880,6 @@ export default function DashboardApp() {
       shopee: { ...totals.shopee, roas: calcRoas(totals.shopee.gmv, totals.shopee.exp), pRoas: calcRoas(totals.shopee.pGmv, totals.shopee.pExp), roasNum: totals.shopee.exp>0?totals.shopee.gmv/totals.shopee.exp:0, pRoasNum: totals.shopee.pExp>0?totals.shopee.pGmv/totals.shopee.pExp:0 }
     };
   }, [curData, prevData, activeEngine]);
-
   const homeBrandOptions = useMemo(() => {
     const brands = new Set<string>();
     homeMediaData.forEach(row => {
@@ -1432,6 +1430,141 @@ export default function DashboardApp() {
     return tbody;
   }, [ctxCurData, ctxPrevData, granularity, activeEngine, isDarkMode, getGrHTML]);
 
+  // --- PLATFORM SUMMARY BODY GENERATOR (COMMERCE TRACKER) ---
+  const generateCommercePlatformSummaryBodyHTML = useCallback(() => {
+    if (activeEngine !== 'commerce') return '';
+
+    const filterPlatform = (rows: any[], plat: 'Overall' | 'TikTok' | 'Shopee') => {
+      if (plat === 'Overall') return rows;
+      return rows.filter(r => {
+        const p = String(r[CONFIG.commerce.colPlatform] || '').toLowerCase();
+        if (plat === 'TikTok') return p.includes('tiktok');
+        return p.includes('shopee');
+      });
+    };
+
+    const calcSum = (rows: any[]) => {
+      let exp = 0, gmv = 0, orders = 0;
+      rows.forEach(r => {
+        exp += parseNum(r['Expense']);
+        gmv += parseNum(r['GMV']);
+        orders += parseNum(r['Items Sold'] || r['Item sold'] || r['items_sold'] || r['Orders']);
+      });
+      return {
+        exp,
+        orders,
+        gmv,
+        cpa: orders > 0 ? exp / orders : 0,
+        roas: exp > 0 ? gmv / exp : 0
+      };
+    };
+
+    const platforms: ('Overall' | 'TikTok' | 'Shopee')[] = ['Overall', 'TikTok', 'Shopee'];
+    const metricNames = [
+      { name: 'Expense', key: 'exp', fmt: formatIDR, isInv: false },
+      { name: 'Orders', key: 'orders', fmt: formatNum, isInv: false },
+      { name: 'GMV', key: 'gmv', fmt: formatIDR, isInv: false },
+      { name: 'CPA', key: 'cpa', fmt: formatIDR, isInv: true },
+      { name: 'ROAS', key: 'roas', fmt: (v: number) => (v || 0).toFixed(2) + 'x', isInv: false }
+    ];
+
+    let tbody = '';
+
+    if (granularity === 'monthly') {
+      platforms.forEach(plat => {
+        const curTotals = calcSum(filterPlatform(ctxCurData, plat));
+        const prevTotals = calcSum(filterPlatform(ctxPrevData, plat));
+
+        metricNames.forEach((m, i) => {
+          const curV = (curTotals as any)[m.key];
+          const prevV = (prevTotals as any)[m.key];
+          let rowCls = i % 2 === 0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50');
+          if (i === 0) rowCls += ' group-start';
+          if (i === metricNames.length - 1) rowCls += ' group-end';
+
+          tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
+          if (i === 0) {
+            tbody += `<td rowspan="${metricNames.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${plat}</td>`;
+          }
+          tbody += `<td class="px-4 py-3 sticky-col-2 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.name}</td>`;
+          tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(curV)}</td>`;
+          tbody += `<td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(prevV)}</td>`;
+          tbody += getGrHTML(curV, prevV, m.isInv);
+          tbody += `</tr>`;
+        });
+      });
+    } else if (granularity === 'weekly') {
+      let weeksFound = new Set<string>(); ctxCurData.forEach(r => weeksFound.add(r.bucket)); ctxPrevData.forEach(r => weeksFound.add(r.bucket));
+      let weeks = Array.from(weeksFound).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
+
+      platforms.forEach(plat => {
+        const curRows = filterPlatform(ctxCurData, plat);
+        const prevRows = filterPlatform(ctxPrevData, plat);
+        const curTotal = calcSum(curRows);
+        const prevTotal = calcSum(prevRows);
+
+        metricNames.forEach((m, i) => {
+          let rowCls = i % 2 === 0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50');
+          if (i === 0) rowCls += ' group-start';
+          if (i === metricNames.length - 1) rowCls += ' group-end';
+
+          tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
+          if (i === 0) {
+            tbody += `<td rowspan="${metricNames.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${plat}</td>`;
+          }
+          tbody += `<td class="px-4 py-3 sticky-col-2 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.name}</td>`;
+
+          let curCumulRows: any[] = [];
+          let prevCumulRows: any[] = [];
+
+          weeks.forEach(w => {
+            curCumulRows = curCumulRows.concat(curRows.filter(r => r.bucket === w));
+            prevCumulRows = prevCumulRows.concat(prevRows.filter(r => r.bucket === w));
+            const wc = (calcSum(curCumulRows) as any)[m.key];
+            const wp = (calcSum(prevCumulRows) as any)[m.key];
+
+            tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-l ${isDarkMode ? 'border-slate-700' : 'border-slate-200'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(wc)}</td>
+                      <td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(wp)}</td>
+                      ${getGrHTML(wc, wp, m.isInv)}`;
+          });
+
+          const curTotVal = (curTotal as any)[m.key];
+          const prevTotVal = (prevTotal as any)[m.key];
+          tbody += `<td class="px-4 py-3 text-right font-mono border-l ${isDarkMode ? 'border-indigo-500 text-indigo-300 bg-indigo-950/50' : 'border-slate-200 text-indigo-700 bg-indigo-50/50'} font-bold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(curTotVal)}</td>
+                    <td class="px-4 py-3 text-right font-mono font-medium text-slate-500 ${isDarkMode ? 'bg-indigo-950/50' : 'bg-indigo-50/50'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(prevTotVal)}</td>
+                    ${getGrHTML(curTotVal, prevTotVal, m.isInv)}</tr>`;
+        });
+      });
+    } else if (granularity === 'daily') {
+      let daysFound = new Set<string>(); ctxCurData.forEach(r => daysFound.add(r.bucket)); let days = Array.from(daysFound).sort();
+
+      platforms.forEach(plat => {
+        const platRows = filterPlatform(ctxCurData, plat);
+        const totalSum = calcSum(platRows);
+
+        metricNames.forEach((m, i) => {
+          let rowCls = i % 2 === 0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50');
+          if (i === 0) rowCls += ' group-start';
+          if (i === metricNames.length - 1) rowCls += ' group-end';
+
+          tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
+          if (i === 0) {
+            tbody += `<td rowspan="${metricNames.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${plat}</td>`;
+          }
+          tbody += `<td class="px-4 py-3 sticky-col-2 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.name}</td>`;
+
+          days.forEach(d => {
+            const daySum = calcSum(platRows.filter(r => r.bucket === d));
+            tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt((daySum as any)[m.key])}</td>`;
+          });
+          tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-indigo-300 bg-indigo-950/50 border-l border-indigo-800/50' : 'text-indigo-700 bg-indigo-50/50 border-l border-indigo-100'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt((totalSum as any)[m.key])}</td></tr>`;
+        });
+      });
+    }
+
+    return tbody;
+  }, [ctxCurData, ctxPrevData, granularity, activeEngine, isDarkMode, getGrHTML]);
+
   // --- MANUAL TABLE RENDERER FOR MEDIA & COMMERCE ---
   const generateTableHTML = useCallback(() => {
     if (activeEngine === 'creative' || activeEngine === 'signal') return { head: '', body: '', uniqueDim1: [], uniqueDim2: [] };
@@ -1843,7 +1976,7 @@ export default function DashboardApp() {
 
       {/* COMPACT & EXPANDABLE SIDEBAR */}
       <aside className={`${isSidebarOpen ? 'w-[280px]' : 'w-[72px]'} bg-[#090d16] border-r border-slate-800/80 h-screen sticky top-0 overflow-y-auto overflow-x-hidden flex-shrink-0 transition-all duration-300 ease-in-out z-40 text-slate-300 flex flex-col`}>
-{/* Top Header with integrated Hamburger icon */}
+        {/* Top Header with integrated Hamburger icon */}
         <div className={`h-20 border-b border-slate-800/80 flex items-center bg-[#090d16] sticky top-0 z-20 transition-all ${isSidebarOpen ? 'px-5 justify-between' : 'justify-center px-0'}`}>
           {isSidebarOpen ? (
             <>
@@ -2740,6 +2873,78 @@ export default function DashboardApp() {
                  >
                    <canvas ref={chartRef}></canvas>
                  </div>
+              </div>
+
+              {/* Platform Summary Table */}
+              <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+                <div className={`p-5 border-b flex justify-between items-center ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
+                  <div>
+                    <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform Summary Rollup</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">Core performance across platforms (Expense, Orders, GMV, CPA, ROAS)</p>
+                  </div>
+                </div>
+                <div className="overflow-auto max-h-[400px] relative w-full">
+                  <Table className={isDarkMode ? 'text-slate-200' : 'text-slate-700'}>
+                    <TableHeader>
+                      {granularity === 'monthly' && (
+                        <TableRow className="border-b border-slate-700 bg-[#090d16]">
+                          <TableHead className="sticky-col text-slate-100 bg-[#090d16]">Platform</TableHead>
+                          <TableHead className="sticky-col-2 text-slate-100 bg-[#090d16]">Metric</TableHead>
+                          <TableHead className="text-right text-white bg-[#090d16] sticky top-0 border-b border-slate-700">This Month</TableHead>
+                          <TableHead className="text-right text-slate-400 bg-[#090d16] sticky top-0 border-b border-slate-700">Prev Month</TableHead>
+                          <TableHead className="text-right text-white bg-[#090d16] sticky top-0 border-b border-slate-700">GR%</TableHead>
+                        </TableRow>
+                      )}
+
+                      {granularity === 'weekly' && (() => {
+                        let weeksFound = new Set<string>(); ctxCurData.forEach(r => weeksFound.add(r.bucket)); ctxPrevData.forEach(r => weeksFound.add(r.bucket));
+                        let weeks = Array.from(weeksFound).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
+                        return (
+                          <TableRow className="border-b border-slate-700 bg-[#090d16]">
+                            <TableHead className="sticky-col text-slate-100 bg-[#090d16]">Platform</TableHead>
+                            <TableHead className="sticky-col-2 text-slate-100 bg-[#090d16]">Metric</TableHead>
+                            {weeks.map(w => {
+                              const weekNum = parseInt(w.replace('W', ''));
+                              let curD = new Date(globalDates.curStart); curD.setDate(curD.getDate() + (weekNum * 7) - 1); if (curD > globalDates.curMtdEnd) curD = new Date(globalDates.curMtdEnd);
+                              let prevD = new Date(globalDates.prevStart); prevD.setDate(prevD.getDate() + (weekNum * 7) - 1); if (prevD > globalDates.prevMtdEnd) prevD = new Date(globalDates.prevMtdEnd);
+                              const fmtStr = (d: Date) => `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
+                              return (
+                                <React.Fragment key={w}>
+                                  <TableHead className="text-right bg-[#090d16] border-l border-slate-700 text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD {fmtStr(curD)}</TableHead>
+                                  <TableHead className="text-right text-slate-400 bg-[#090d16] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD {fmtStr(prevD)}</TableHead>
+                                  <TableHead className="text-right bg-[#090d16] text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">GR%</TableHead>
+                                </React.Fragment>
+                              );
+                            })}
+                            <TableHead className="text-right border-l border-indigo-500 text-indigo-300 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Cur</TableHead>
+                            <TableHead className="text-right text-slate-400 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Prev</TableHead>
+                            <TableHead className="text-right text-indigo-300 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Total GR%</TableHead>
+                          </TableRow>
+                        );
+                      })()}
+
+                      {granularity === 'daily' && (() => {
+                        let daysFound = new Set<string>(); ctxCurData.forEach(r => daysFound.add(r.bucket)); let days = Array.from(daysFound).sort();
+                        return (
+                          <TableRow className="border-b border-slate-700 bg-[#090d16]">
+                            <TableHead className="sticky-col text-slate-100 bg-[#090d16]">Platform</TableHead>
+                            <TableHead className="sticky-col-2 text-slate-100 bg-[#090d16]">Metric</TableHead>
+                            {days.map(d => {
+                              const parts = d.split('-'); const dt = new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]));
+                              return (
+                                <TableHead key={d} className="text-right text-white bg-[#090d16] sticky top-0 border-b border-slate-700 whitespace-nowrap">
+                                  {dt.getDate()} {dt.toLocaleString('en-GB', { month: 'short' })}
+                                </TableHead>
+                              );
+                            })}
+                            <TableHead className="text-right text-indigo-300 border-l border-slate-700 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Period Total</TableHead>
+                          </TableRow>
+                        );
+                      })()}
+                    </TableHeader>
+                    <TableBody dangerouslySetInnerHTML={{ __html: generateCommercePlatformSummaryBodyHTML() }} />
+                  </Table>
+                </div>
               </div>
 
               {/* Full Table */}
