@@ -52,6 +52,7 @@ TableCell.displayName = "TableCell";
 const CONFIG = {
   media: { sheet: "Media API", colDate: "Date", colBrand: "Brand", colPlatform: "Platform", colFunnel: "Funnel", colAdType: "KPI", colFormat: "Format", colConsiSize: "Result" },
   commerce: { sheet: "Commerce", colDate: "Date", colBrand: "Brand fx", colPlatform: "Platform", colAdType: "Ad Type" },
+  cirDaily: { sheet: "CIR DAILY", colDate: "Date", colBrand: "Brand", colPlatform: "Platform", colGmvSales: "GMV Sales" },
   creative: { sheet: "Creative Raw", colPeriod: "Period", colBrand: "Brand", colPlatform: "Platform", colAdType: "Ad Type", colFormat: "Format" },
   signal: { sheet: "Media Signal", colBrand: "Brand", colStatus: "Status", colDateStart: "Start Date", colDateEnd: "End Date" }
 };
@@ -190,6 +191,7 @@ export default function DashboardApp() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const dataCache = useRef<Record<string, any[]>>({});
   const [rawData, setRawData] = useState<any[]>([]);
+  const [cirData, setCirData] = useState<any[]>([]);
   const [extraSheetsData, setExtraSheetsData] = useState<{ mediaApi: any[]; commerce: any[] }>({ mediaApi: [], commerce: [] });
   const [homeMediaData, setHomeMediaData] = useState<any[]>([]);
   const [homeCommerceData, setHomeCommerceData] = useState<any[]>([]);
@@ -262,6 +264,32 @@ export default function DashboardApp() {
     return (cur - prev) / prev;
   };
 
+  const getRowVal = (row: any, candidates: string[]) => {
+    if (!row) return 0;
+    for (const cand of candidates) {
+      const key = Object.keys(row).find(
+        k => k.trim().toLowerCase() === cand.trim().toLowerCase()
+      );
+      if (key !== undefined && row[key] !== undefined && row[key] !== '') {
+        return parseNum(row[key]);
+      }
+    }
+    return 0;
+  };
+
+  const getRowStr = (row: any, candidates: string[]) => {
+    if (!row) return '';
+    for (const cand of candidates) {
+      const key = Object.keys(row).find(
+        k => k.trim().toLowerCase() === cand.trim().toLowerCase()
+      );
+      if (key !== undefined && row[key] !== undefined) {
+        return String(row[key]).trim();
+      }
+    }
+    return '';
+  };
+
   const parseSheetDate = (dateStr: any) => {
     if (!dateStr) return null;
     if (typeof dateStr === 'number') return new Date(Math.round((dateStr - 25569) * 86400 * 1000));
@@ -269,8 +297,26 @@ export default function DashboardApp() {
     const parts = str.split(/[\/\-]/);
     if (parts.length === 3) {
       let year, month, day;
-      if (parts[0].length === 4) { year = parseInt(parts[0], 10); month = parseInt(parts[1], 10) - 1; day = parseInt(parts[2].split(' ')[0], 10); } 
-      else { day = parseInt(parts[0], 10); month = parseInt(parts[1], 10) - 1; year = parseInt(parts[2].split(' ')[0], 10); }
+      if (parts[0].length === 4) { 
+        year = parseInt(parts[0], 10); 
+        month = parseInt(parts[1], 10) - 1; 
+        day = parseInt(parts[2].split(' ')[0], 10); 
+      } else { 
+        const p1 = parseInt(parts[0], 10);
+        const p2 = parseInt(parts[1], 10);
+        const p3 = parseInt(parts[2].split(' ')[0], 10);
+        
+        // Supports D/M/YYYY or M/D/YYYY
+        if (p1 > 12) {
+          day = p1;
+          month = p2 - 1;
+          year = p3;
+        } else {
+          day = p1;
+          month = p2 - 1;
+          year = p3;
+        }
+      }
       const d = new Date(year, month, day);
       if (!isNaN(d.getTime())) return d;
     }
@@ -328,11 +374,15 @@ export default function DashboardApp() {
       }
     } catch (err) { setLoginError('Server communication failed.'); }
   };
+
   const loadData = async (engine: 'media' | 'commerce' | 'creative' | 'signal', forceSync = false) => {
     setDashboardContext('Overall'); setCreativePage(1); setTableColFilter1('All'); setTableColFilter2('All');
     
     if (forceSync) {
       dataCache.current[CONFIG[engine].sheet] = undefined as any;
+      if (engine === 'commerce') {
+        dataCache.current['CIR DAILY'] = undefined as any;
+      }
       if (engine === 'signal') {
         dataCache.current['Media API'] = undefined as any;
         dataCache.current['Commerce'] = undefined as any;
@@ -356,7 +406,14 @@ export default function DashboardApp() {
         return [];
       };
 
-      if (engine === 'signal') {
+      if (engine === 'commerce') {
+        const [commerceData, cirDailyData] = await Promise.all([
+          fetchSheet("Commerce"),
+          fetchSheet("CIR DAILY")
+        ]);
+        setRawData(commerceData);
+        setCirData(cirDailyData);
+      } else if (engine === 'signal') {
         const [signalData, mediaApiData, commerceData] = await Promise.all([
           fetchSheet("Media Signal"),
           fetchSheet("Media API"),
@@ -475,6 +532,7 @@ export default function DashboardApp() {
       setState([...current, value]);
     }
   };
+
   const signalPeriods = useMemo(() => {
     if (activeEngine !== 'signal' || rawData.length === 0) return [];
     const unique = new Map<string, { start: string; end: string }>();
@@ -496,7 +554,6 @@ export default function DashboardApp() {
 
     return list.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
   }, [rawData, activeEngine]);
-
   useEffect(() => {
     if (activeEngine === 'signal' && signalPeriods.length > 0 && !selectedSignalPeriod) {
       setSelectedSignalPeriod(signalPeriods[0].key);
@@ -764,7 +821,7 @@ export default function DashboardApp() {
     const cfg = CONFIG[activeEngine];
 
     const filteredBase = rawData.filter(row => {
-      if (filters.brand !== 'All' && String(row[cfg.colBrand]) !== filters.brand) return false;
+      if (filters.brand !== 'All' && getRowStr(row, [cfg.colBrand, 'Brand']).toLowerCase() !== filters.brand.toLowerCase()) return false;
       if (activeEngine === 'media' && filters.funnel !== 'All' && String(row[cfg.colFunnel]) !== filters.funnel) return false;
       if (activeEngine === 'commerce' && filters.adType !== 'All' && String(row[cfg.colAdType]) !== filters.adType) return false;
       if (activeEngine === 'creative') {
@@ -791,7 +848,7 @@ export default function DashboardApp() {
     }
 
     filteredBase.forEach(row => {
-      const rowDate = parseSheetDate(row[cfg.colDate]);
+      const rowDate = parseSheetDate(row[cfg.colDate] || row['Date']);
       if (!rowDate) return;
       rowDate.setHours(0,0,0,0);
       row.parsedDate = rowDate;
@@ -817,6 +874,46 @@ export default function DashboardApp() {
 
     return { curData: cData, prevData: pData, chartData: chData, creativeData: [], globalDates: dates };
   }, [rawData, filters, activeEngine, granularity, dateMonth, dateWeekly, dateDailyStart, dateDailyEnd, getMediaDates]);
+
+  // --- CIR DAILY FILTERED BASE FOR COMMERCE TRACKER ---
+  const { curCirData, prevCirData } = useMemo(() => {
+    if (activeEngine !== 'commerce' || !cirData || cirData.length === 0) return { curCirData: [], prevCirData: [] };
+
+    const filtered = cirData.filter(row => {
+      const brand = getRowStr(row, ['Brand', 'brand']);
+      if (filters.brand !== 'All' && brand.toLowerCase() !== filters.brand.toLowerCase()) return false;
+      return true;
+    });
+
+    let cCir: any[] = [];
+    let pCir: any[] = [];
+    let dates = globalDates;
+
+    filtered.forEach(row => {
+      const dateVal = row['Date'] || row['date'] || Object.values(row)[0];
+      const rowDate = parseSheetDate(dateVal);
+      if (!rowDate || isNaN(rowDate.getTime())) return;
+      rowDate.setHours(0, 0, 0, 0);
+      row.parsedDate = rowDate;
+
+      if (granularity === 'monthly' && dates) {
+        if (rowDate >= dates.curStart && rowDate <= dates.curMonthEnd) { row.bucket = "Month"; cCir.push(row); }
+        if (rowDate >= dates.prevStart && rowDate <= dates.prevMonthEnd) { row.bucket = "Month"; pCir.push(row); }
+      } else if (granularity === 'weekly' && dates) {
+        if (rowDate >= dates.curStart && rowDate <= dates.curMtdEnd) { row.bucket = "W" + getWeekBucket(rowDate, dates.curStart); cCir.push(row); }
+        if (rowDate >= dates.prevStart && rowDate <= dates.prevMtdEnd) { row.bucket = "W" + getWeekBucket(rowDate, dates.prevStart); pCir.push(row); }
+      } else if (granularity === 'daily' && dateDailyStart && dateDailyEnd) {
+        const s = dateDailyStart.split('-'); const dStart = new Date(Number(s[0]), Number(s[1])-1, Number(s[2]));
+        const e = dateDailyEnd.split('-'); const dEnd = new Date(Number(e[0]), Number(e[1])-1, Number(e[2]), 23, 59, 59);
+        if (rowDate >= dStart && rowDate <= dEnd) {
+          row.bucket = `${rowDate.getFullYear()}-${String(rowDate.getMonth()+1).padStart(2,'0')}-${String(rowDate.getDate()).padStart(2,'0')}`;
+          cCir.push(row);
+        }
+      }
+    });
+
+    return { curCirData: cCir, prevCirData: pCir };
+  }, [cirData, activeEngine, filters.brand, granularity, globalDates, dateDailyStart, dateDailyEnd]);
 
   const { ctxCurData, ctxPrevData, ctxChartData } = useMemo(() => {
     if (dashboardContext === 'Overall' || activeEngine === 'creative' || activeEngine === 'signal') return { ctxCurData: curData, ctxPrevData: prevData, ctxChartData: chartData };
@@ -854,11 +951,17 @@ export default function DashboardApp() {
   }, [curData, prevData, activeEngine]);
 
   const commerceKPIs = useMemo(() => {
-    let totals = { overall: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 }, tiktok: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 }, shopee: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 } };
+    let totals = {
+      overall: { exp: 0, gmv: 0, gmvSales: 0, pExp: 0, pGmv: 0, pGmvSales: 0 },
+      tiktok: { exp: 0, gmv: 0, gmvSales: 0, pExp: 0, pGmv: 0, pGmvSales: 0 },
+      shopee: { exp: 0, gmv: 0, gmvSales: 0, pExp: 0, pGmv: 0, pGmvSales: 0 }
+    };
+
     const calc = (data: any[], isPrev: boolean) => {
       if (activeEngine !== 'commerce') return;
       data.forEach(row => {
-        const e = parseNum(row["Expense"]); const g = parseNum(row["GMV"]);
+        const e = parseNum(row["Expense"]);
+        const g = parseNum(row["GMV"]);
         const plat = String(row[CONFIG.commerce.colPlatform] || "").toLowerCase();
 
         if (isPrev) {
@@ -872,14 +975,51 @@ export default function DashboardApp() {
         }
       });
     };
-    calc(curData, false); calc(prevData, true);
-    const calcRoas = (g: number, e: number) => e > 0 ? (g / e).toFixed(2) + 'x' : '0.00x';
-    return {
-      overall: { ...totals.overall, roas: calcRoas(totals.overall.gmv, totals.overall.exp), pRoas: calcRoas(totals.overall.pGmv, totals.overall.pExp), roasNum: totals.overall.exp>0?totals.overall.gmv/totals.overall.exp:0, pRoasNum: totals.overall.pExp>0?totals.overall.pGmv/totals.overall.pExp:0 },
-      tiktok: { ...totals.tiktok, roas: calcRoas(totals.tiktok.gmv, totals.tiktok.exp), pRoas: calcRoas(totals.tiktok.pGmv, totals.tiktok.pExp), roasNum: totals.tiktok.exp>0?totals.tiktok.gmv/totals.tiktok.exp:0, pRoasNum: totals.tiktok.pExp>0?totals.tiktok.pGmv/totals.tiktok.pExp:0 },
-      shopee: { ...totals.shopee, roas: calcRoas(totals.shopee.gmv, totals.shopee.exp), pRoas: calcRoas(totals.shopee.pGmv, totals.shopee.pExp), roasNum: totals.shopee.exp>0?totals.shopee.gmv/totals.shopee.exp:0, pRoasNum: totals.shopee.pExp>0?totals.shopee.pGmv/totals.shopee.pExp:0 }
+
+    const calcCir = (data: any[], isPrev: boolean) => {
+      data.forEach(row => {
+        const s = getRowVal(row, ['GMV Sales', 'GMV sales', 'gmv_sales', 'gmv sales']);
+        const plat = getRowStr(row, ['Platform', 'platform']).toLowerCase();
+        if (isPrev) {
+          totals.overall.pGmvSales += s;
+          if (plat.includes('tiktok')) totals.tiktok.pGmvSales += s;
+          else if (plat.includes('shopee')) totals.shopee.pGmvSales += s;
+        } else {
+          totals.overall.gmvSales += s;
+          if (plat.includes('tiktok')) totals.tiktok.gmvSales += s;
+          else if (plat.includes('shopee')) totals.shopee.gmvSales += s;
+        }
+      });
     };
-  }, [curData, prevData, activeEngine]);
+
+    calc(curData, false); calc(prevData, true);
+    calcCir(curCirData, false); calcCir(prevCirData, true);
+
+    const calcRoas = (g: number, e: number) => e > 0 ? (g / e).toFixed(2) + 'x' : '0.00x';
+    const calcCirRate = (s: number, e: number) => e > 0 ? (s / e).toFixed(2) + 'x' : '0.00x';
+    const calcAdsContrib = (g: number, s: number) => s > 0 ? (g / s) : 0;
+
+    const buildStats = (target: any) => ({
+      ...target,
+      roas: calcRoas(target.gmv, target.exp),
+      pRoas: calcRoas(target.pGmv, target.pExp),
+      roasNum: target.exp > 0 ? target.gmv / target.exp : 0,
+      pRoasNum: target.pExp > 0 ? target.pGmv / target.pExp : 0,
+      cir: calcCirRate(target.gmvSales, target.exp),
+      pCir: calcCirRate(target.pGmvSales, target.pExp),
+      cirNum: target.exp > 0 ? target.gmvSales / target.exp : 0,
+      pCirNum: target.pExp > 0 ? target.pGmvSales / target.pExp : 0,
+      adsContrib: calcAdsContrib(target.gmv, target.gmvSales),
+      pAdsContrib: calcAdsContrib(target.pGmv, target.pGmvSales)
+    });
+
+    return {
+      overall: buildStats(totals.overall),
+      tiktok: buildStats(totals.tiktok),
+      shopee: buildStats(totals.shopee)
+    };
+  }, [curData, prevData, curCirData, prevCirData, activeEngine]);
+
   const homeBrandOptions = useMemo(() => {
     const brands = new Set<string>();
     homeMediaData.forEach(row => {
@@ -968,7 +1108,7 @@ export default function DashboardApp() {
       return ranges.some(r => date >= r.start && date <= r.end);
     };
 
-    const matchesBrand = (value: any) => homeBrand === 'All' || String(value || '').trim() === homeBrand;
+    const matchesBrand = (value: any) => homeBrand === 'All' || String(value || '').trim().toLowerCase() === homeBrand.toLowerCase();
     const mediaRows = homeMediaData.filter(row => matchesBrand(row['Brand']));
     const commerceRows = homeCommerceData.filter(row => matchesBrand(row['Brand fx']));
 
@@ -1430,32 +1570,39 @@ export default function DashboardApp() {
     return tbody;
   }, [ctxCurData, ctxPrevData, granularity, activeEngine, isDarkMode, getGrHTML]);
 
-  // --- PLATFORM SUMMARY BODY GENERATOR (COMMERCE TRACKER) ---
+  // --- PLATFORM SUMMARY BODY GENERATOR (COMMERCE TRACKER - WITH CIR DAILY METRICS) ---
   const generateCommercePlatformSummaryBodyHTML = useCallback(() => {
     if (activeEngine !== 'commerce') return '';
 
     const filterPlatform = (rows: any[], plat: 'Overall' | 'TikTok' | 'Shopee') => {
       if (plat === 'Overall') return rows;
       return rows.filter(r => {
-        const p = String(r[CONFIG.commerce.colPlatform] || '').toLowerCase();
+        const p = String(r[CONFIG.commerce.colPlatform] || r['Platform'] || '').toLowerCase();
         if (plat === 'TikTok') return p.includes('tiktok');
         return p.includes('shopee');
       });
     };
 
-    const calcSum = (rows: any[]) => {
-      let exp = 0, gmv = 0, orders = 0;
-      rows.forEach(r => {
+    const calcSum = (commRows: any[], cirRows: any[]) => {
+      let exp = 0, gmv = 0, orders = 0, gmvSales = 0;
+      commRows.forEach(r => {
         exp += parseNum(r['Expense']);
         gmv += parseNum(r['GMV']);
         orders += parseNum(r['Items Sold'] || r['Item sold'] || r['items_sold'] || r['Orders']);
       });
+      cirRows.forEach(r => {
+        gmvSales += getRowVal(r, ['GMV Sales', 'GMV sales', 'gmv_sales', 'gmv sales']);
+      });
+
       return {
         exp,
         orders,
         gmv,
-        cpa: orders > 0 ? exp / orders : 0,
-        roas: exp > 0 ? gmv / exp : 0
+        gmvSales,
+        cir: exp > 0 ? gmvSales / exp : 0,
+        roas: exp > 0 ? gmv / exp : 0,
+        adsContrib: gmvSales > 0 ? gmv / gmvSales : 0,
+        cpa: orders > 0 ? exp / orders : 0
       };
     };
 
@@ -1463,17 +1610,20 @@ export default function DashboardApp() {
     const metricNames = [
       { name: 'Expense', key: 'exp', fmt: formatIDR, isInv: false },
       { name: 'Orders', key: 'orders', fmt: formatNum, isInv: false },
-      { name: 'GMV', key: 'gmv', fmt: formatIDR, isInv: false },
-      { name: 'CPA', key: 'cpa', fmt: formatIDR, isInv: true },
-      { name: 'ROAS', key: 'roas', fmt: (v: number) => (v || 0).toFixed(2) + 'x', isInv: false }
+      { name: 'GMV (Ads)', key: 'gmv', fmt: formatIDR, isInv: false },
+      { name: 'GMV Overall', key: 'gmvSales', fmt: formatIDR, isInv: false },
+      { name: 'CIR', key: 'cir', fmt: (v: number) => (v || 0).toFixed(2) + 'x', isInv: false },
+      { name: 'ROAS', key: 'roas', fmt: (v: number) => (v || 0).toFixed(2) + 'x', isInv: false },
+      { name: 'Ads Contribution', key: 'adsContrib', fmt: formatPct, isInv: false },
+      { name: 'CPA', key: 'cpa', fmt: formatIDR, isInv: true }
     ];
 
     let tbody = '';
 
     if (granularity === 'monthly') {
       platforms.forEach(plat => {
-        const curTotals = calcSum(filterPlatform(ctxCurData, plat));
-        const prevTotals = calcSum(filterPlatform(ctxPrevData, plat));
+        const curTotals = calcSum(filterPlatform(ctxCurData, plat), filterPlatform(curCirData, plat));
+        const prevTotals = calcSum(filterPlatform(ctxPrevData, plat), filterPlatform(prevCirData, plat));
 
         metricNames.forEach((m, i) => {
           const curV = (curTotals as any)[m.key];
@@ -1494,14 +1644,21 @@ export default function DashboardApp() {
         });
       });
     } else if (granularity === 'weekly') {
-      let weeksFound = new Set<string>(); ctxCurData.forEach(r => weeksFound.add(r.bucket)); ctxPrevData.forEach(r => weeksFound.add(r.bucket));
-      let weeks = Array.from(weeksFound).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
+      let weeksFound = new Set<string>(); 
+      ctxCurData.forEach(r => weeksFound.add(r.bucket)); 
+      ctxPrevData.forEach(r => weeksFound.add(r.bucket));
+      curCirData.forEach(r => weeksFound.add(r.bucket));
+      prevCirData.forEach(r => weeksFound.add(r.bucket));
+      let weeks = Array.from(weeksFound).filter(w => w && w.startsWith('W')).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
 
       platforms.forEach(plat => {
         const curRows = filterPlatform(ctxCurData, plat);
         const prevRows = filterPlatform(ctxPrevData, plat);
-        const curTotal = calcSum(curRows);
-        const prevTotal = calcSum(prevRows);
+        const curCirRows = filterPlatform(curCirData, plat);
+        const prevCirRows = filterPlatform(prevCirData, plat);
+
+        const curTotal = calcSum(curRows, curCirRows);
+        const prevTotal = calcSum(prevRows, prevCirRows);
 
         metricNames.forEach((m, i) => {
           let rowCls = i % 2 === 0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50');
@@ -1514,14 +1671,19 @@ export default function DashboardApp() {
           }
           tbody += `<td class="px-4 py-3 sticky-col-2 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.name}</td>`;
 
-          let curCumulRows: any[] = [];
-          let prevCumulRows: any[] = [];
+          let curCumulComm: any[] = [];
+          let prevCumulComm: any[] = [];
+          let curCumulCir: any[] = [];
+          let prevCumulCir: any[] = [];
 
           weeks.forEach(w => {
-            curCumulRows = curCumulRows.concat(curRows.filter(r => r.bucket === w));
-            prevCumulRows = prevCumulRows.concat(prevRows.filter(r => r.bucket === w));
-            const wc = (calcSum(curCumulRows) as any)[m.key];
-            const wp = (calcSum(prevCumulRows) as any)[m.key];
+            curCumulComm = curCumulComm.concat(curRows.filter(r => r.bucket === w));
+            prevCumulComm = prevCumulComm.concat(prevRows.filter(r => r.bucket === w));
+            curCumulCir = curCumulCir.concat(curCirRows.filter(r => r.bucket === w));
+            prevCumulCir = prevCumulCir.concat(prevCirRows.filter(r => r.bucket === w));
+
+            const wc = (calcSum(curCumulComm, curCumulCir) as any)[m.key];
+            const wp = (calcSum(prevCumulComm, prevCumulCir) as any)[m.key];
 
             tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-l ${isDarkMode ? 'border-slate-700' : 'border-slate-200'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(wc)}</td>
                       <td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(wp)}</td>
@@ -1536,11 +1698,15 @@ export default function DashboardApp() {
         });
       });
     } else if (granularity === 'daily') {
-      let daysFound = new Set<string>(); ctxCurData.forEach(r => daysFound.add(r.bucket)); let days = Array.from(daysFound).sort();
+      let daysFound = new Set<string>(); 
+      ctxCurData.forEach(r => daysFound.add(r.bucket)); 
+      curCirData.forEach(r => daysFound.add(r.bucket));
+      let days = Array.from(daysFound).filter(Boolean).sort();
 
       platforms.forEach(plat => {
-        const platRows = filterPlatform(ctxCurData, plat);
-        const totalSum = calcSum(platRows);
+        const platCommRows = filterPlatform(ctxCurData, plat);
+        const platCirRows = filterPlatform(curCirData, plat);
+        const totalSum = calcSum(platCommRows, platCirRows);
 
         metricNames.forEach((m, i) => {
           let rowCls = i % 2 === 0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50');
@@ -1554,7 +1720,10 @@ export default function DashboardApp() {
           tbody += `<td class="px-4 py-3 sticky-col-2 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.name}</td>`;
 
           days.forEach(d => {
-            const daySum = calcSum(platRows.filter(r => r.bucket === d));
+            const daySum = calcSum(
+              platCommRows.filter(r => r.bucket === d),
+              platCirRows.filter(r => r.bucket === d)
+            );
             tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt((daySum as any)[m.key])}</td>`;
           });
           tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-indigo-300 bg-indigo-950/50 border-l border-indigo-800/50' : 'text-indigo-700 bg-indigo-50/50 border-l border-indigo-100'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt((totalSum as any)[m.key])}</td></tr>`;
@@ -1563,7 +1732,7 @@ export default function DashboardApp() {
     }
 
     return tbody;
-  }, [ctxCurData, ctxPrevData, granularity, activeEngine, isDarkMode, getGrHTML]);
+  }, [ctxCurData, ctxPrevData, curCirData, prevCirData, granularity, activeEngine, isDarkMode, getGrHTML]);
 
   // --- MANUAL TABLE RENDERER FOR MEDIA & COMMERCE ---
   const generateTableHTML = useCallback(() => {
@@ -1785,7 +1954,6 @@ export default function DashboardApp() {
 
     return { head: thead, body: tbody, uniqueDim1: Array.from(dim1Set).sort(), uniqueDim2: Array.from(dim2Set).sort() };
   }, [ctxCurData, ctxPrevData, granularity, activeEngine, globalDates, tableColFilter1, tableColFilter2, isDarkMode, getGrHTML]);
-
   const getDrivePreviewLink = (url: string) => {
     if (!url || typeof url !== 'string') return '';
     if (url.includes('/preview')) return url;
@@ -1803,6 +1971,7 @@ export default function DashboardApp() {
     }
     return '';
   };
+
   // --- LOGIN VIEW ---
   if (currentView === 'login') {
     return (
@@ -1976,7 +2145,6 @@ export default function DashboardApp() {
 
       {/* COMPACT & EXPANDABLE SIDEBAR */}
       <aside className={`${isSidebarOpen ? 'w-[280px]' : 'w-[72px]'} bg-[#090d16] border-r border-slate-800/80 h-screen sticky top-0 overflow-y-auto overflow-x-hidden flex-shrink-0 transition-all duration-300 ease-in-out z-40 text-slate-300 flex flex-col`}>
-        {/* Top Header with integrated Hamburger icon */}
         <div className={`h-20 border-b border-slate-800/80 flex items-center bg-[#090d16] sticky top-0 z-20 transition-all ${isSidebarOpen ? 'px-5 justify-between' : 'justify-center px-0'}`}>
           {isSidebarOpen ? (
             <>
@@ -2201,7 +2369,6 @@ export default function DashboardApp() {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 h-screen overflow-y-auto w-full transition-all duration-300 relative">
-        {/* Title Header with direct alignment to the content below */}
         <div className="flex items-center justify-between mb-5 w-full">
           <div>
             <h1 className={`text-2xl lg:text-3xl font-black tracking-tight leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
@@ -2214,7 +2381,6 @@ export default function DashboardApp() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={isFullscreen ? 'M9 3v6H3m12-6v6h6M9 21v-6H3m12 6v-6h6' : 'M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 15v3a2 2 0 0 0 2 2h3'}></path></svg>
             </button>
 
-            {/* Single Dark Mode Icon Button */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -2239,7 +2405,6 @@ export default function DashboardApp() {
           </div>
         </div>
 
-        {/* Dynamic view container with full width */}
         <div key={currentView === 'home' ? 'home' : (activeEngine || 'dashboard')} className="view-transition-container w-full">
           {currentView === 'home' && homeSummary && (() => {
             const homeSurface = isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200';
@@ -2801,32 +2966,46 @@ export default function DashboardApp() {
             </div>
           )}
 
-          {/* --- VIEW 2: COMMERCE TRACKER --- */}
+          {/* --- VIEW 2: COMMERCE TRACKER (WITH 3 ADDITIONAL CIR METRICS) --- */}
           {activeEngine === 'commerce' && (
             <div className="w-full">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
+                {/* Overall Commerce Card */}
                 <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
-                    <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Commerce</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg></div></div>
-                    <div className="space-y-4">
-                       <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.exp)}</span>{renderGR(commerceKPIs.overall.exp, commerceKPIs.overall.pExp, false)}</div></div>
-                       <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.gmv)}</span>{renderGR(commerceKPIs.overall.gmv, commerceKPIs.overall.pGmv, false)}</div></div>
-                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-300 leading-none">{commerceKPIs.overall.roas}</span>{renderGR(commerceKPIs.overall.roasNum, commerceKPIs.overall.pRoasNum, false)}</div></div>
+                    <div className="flex justify-between items-center mb-6"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Commerce</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg></div></div>
+                    <div className="space-y-3">
+                       <div className="flex justify-between items-end border-b border-indigo-500 pb-2"><span className="text-xs font-bold text-indigo-200">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatIDR(commerceKPIs.overall.exp)}</span>{renderGR(commerceKPIs.overall.exp, commerceKPIs.overall.pExp, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-indigo-500 pb-2"><span className="text-xs font-bold text-indigo-200">GMV Ads</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatIDR(commerceKPIs.overall.gmv)}</span>{renderGR(commerceKPIs.overall.gmv, commerceKPIs.overall.pGmv, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-indigo-500 pb-2"><span className="text-xs font-bold text-indigo-200">GMV Overall</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatIDR(commerceKPIs.overall.gmvSales)}</span>{renderGR(commerceKPIs.overall.gmvSales, commerceKPIs.overall.pGmvSales, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-indigo-500 pb-2"><span className="text-xs font-bold text-indigo-200">CIR</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-emerald-300">{commerceKPIs.overall.cir}</span>{renderGR(commerceKPIs.overall.cirNum, commerceKPIs.overall.pCirNum, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-indigo-500 pb-2"><span className="text-xs font-bold text-indigo-200">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-emerald-300">{commerceKPIs.overall.roas}</span>{renderGR(commerceKPIs.overall.roasNum, commerceKPIs.overall.pRoasNum, false)}</div></div>
+                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">Ads Contribution</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatPct(commerceKPIs.overall.adsContrib)}</span>{renderGR(commerceKPIs.overall.adsContrib, commerceKPIs.overall.pAdsContrib, false)}</div></div>
                     </div>
                  </div>
+
+                 {/* TikTok Shop Card */}
                  <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
-                    <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok Shop</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
-                    <div className="space-y-4">
-                       <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.exp)}</span>{renderGR(commerceKPIs.tiktok.exp, commerceKPIs.tiktok.pExp, false)}</div></div>
-                       <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.gmv)}</span>{renderGR(commerceKPIs.tiktok.gmv, commerceKPIs.tiktok.pGmv, false)}</div></div>
-                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-400 leading-none">{commerceKPIs.tiktok.roas}</span>{renderGR(commerceKPIs.tiktok.roasNum, commerceKPIs.tiktok.pRoasNum, false)}</div></div>
+                    <div className="flex justify-between items-center mb-6"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok Shop</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
+                    <div className="space-y-3">
+                       <div className="flex justify-between items-end border-b border-slate-600 pb-2"><span className="text-xs font-bold text-slate-400">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatIDR(commerceKPIs.tiktok.exp)}</span>{renderGR(commerceKPIs.tiktok.exp, commerceKPIs.tiktok.pExp, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-slate-600 pb-2"><span className="text-xs font-bold text-slate-400">GMV Ads</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatIDR(commerceKPIs.tiktok.gmv)}</span>{renderGR(commerceKPIs.tiktok.gmv, commerceKPIs.tiktok.pGmv, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-slate-600 pb-2"><span className="text-xs font-bold text-slate-400">GMV Overall</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatIDR(commerceKPIs.tiktok.gmvSales)}</span>{renderGR(commerceKPIs.tiktok.gmvSales, commerceKPIs.tiktok.pGmvSales, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-slate-600 pb-2"><span className="text-xs font-bold text-slate-400">CIR</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-emerald-400">{commerceKPIs.tiktok.cir}</span>{renderGR(commerceKPIs.tiktok.cirNum, commerceKPIs.tiktok.pCirNum, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-slate-600 pb-2"><span className="text-xs font-bold text-slate-400">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-emerald-400">{commerceKPIs.tiktok.roas}</span>{renderGR(commerceKPIs.tiktok.roasNum, commerceKPIs.tiktok.pRoasNum, false)}</div></div>
+                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">Ads Contribution</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatPct(commerceKPIs.tiktok.adsContrib)}</span>{renderGR(commerceKPIs.tiktok.adsContrib, commerceKPIs.tiktok.pAdsContrib, false)}</div></div>
                     </div>
                  </div>
+
+                 {/* Shopee Card */}
                  <div onClick={() => setDashboardContext('Shopee')} className={`bg-orange-500 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Shopee' ? 'ring-4 ring-orange-300 shadow-orange-500/40' : ''}`}>
-                    <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-orange-100 uppercase tracking-widest">Shopee</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 109.59 122.88" fill="currentColor"><path d="M74.98,91.98C76.15,82.36,69.96,76.22,53.6,71c-7.92-2.7-11.66-6.24-11.57-11.12 c0.33-5.4,5.36-9.34,12.04-9.47c4.63,0.09,9.77,1.22,14.76,4.56c0.59,0.37,1.01,0.32,1.35-0.2c0.46-0.74,1.61-2.53,2-3.17 c0.26-0.42,0.31-0.96-0.35-1.44c-0.95-0.7-3.6-2.13-5.03-2.72c-3.88-1.62-8.23-2.64-12.86-2.63c-9.77,0.04-17.47,6.22-18.12,14.47 c-0.42,5.95,2.53,10.79,8.86,14.47c1.34,0.78,8.6,3.67,11.49,4.57c9.08,2.83,13.8,7.9,12.69,13.81c-1.01,5.36-6.65,8.83-14.43,8.93 c-6.17-0.24-11.71-2.75-16.02-6.1c-0.11-0.08-0.65-0.5-0.72-0.56c-0.53-0.42-1.11-0.39-1.47,0.15c-0.26,0.4-1.92,2.8-2.34,3.43 c-0.39,0.55-0.18,0.86,0.23,1.2c1.8,1.5,4.18,3.14,5.81,3.97c4.47,2.28,9.32,3.53,14.48,3.72c3.32,0.22,7.5-0.49,10.63-1.81 C70.63,102.67,74.25,97.92,74.98,91.98L74.98,91.98z M54.79,7.18c-10.59,0-19.22,9.98-19.62,22.47h39.25 C74.01,17.16,65.38,7.18,54.79,7.18L54.79,7.18z M94.99,122.88l-0.41,0l-80.82-0.01h0c-5.5-0.21-9.54-4.66-10.09-10.19l-0.05-1 l-3.61-79.5v0C0,32.12,0,32.06,0,32c0-1.28,1.03-2.33,2.3-2.35l0,0h25.48C28.41,13.15,40.26,0,54.79,0s26.39,13.15,27.01,29.65 h25.4h0.04c1.3,0,2.35,1.05,2.35,2.35c0,0.04,0,0.08,0,0.12v0l-3.96,79.81l-0.04,0.68C105.12,118.21,100.59,122.73,94.99,122.88 L94.99,122.88z"/></svg></div></div>
-                    <div className="space-y-4">
-                       <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.exp)}</span>{renderGR(commerceKPIs.shopee.exp, commerceKPIs.shopee.pExp, false)}</div></div>
-                       <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.gmv)}</span>{renderGR(commerceKPIs.shopee.gmv, commerceKPIs.shopee.pGmv, false)}</div></div>
-                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-orange-100">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-200 leading-none">{commerceKPIs.shopee.roas}</span>{renderGR(commerceKPIs.shopee.roasNum, commerceKPIs.shopee.pRoasNum, false)}</div></div>
+                    <div className="flex justify-between items-center mb-6"><h3 className="text-sm font-black text-orange-100 uppercase tracking-widest">Shopee</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 109.59 122.88" fill="currentColor"><path d="M74.98,91.98C76.15,82.36,69.96,76.22,53.6,71c-7.92-2.7-11.66-6.24-11.57-11.12 c0.33-5.4,5.36-9.34,12.04-9.47c4.63,0.09,9.77,1.22,14.76,4.56c0.59,0.37,1.01,0.32,1.35-0.2c0.46-0.74,1.61-2.53,2-3.17 c0.26-0.42,0.31-0.96-0.35-1.44c-0.95-0.7-3.6-2.13-5.03-2.72c-3.88-1.62-8.23-2.64-12.86-2.63c-9.77,0.04-17.47,6.22-18.12,14.47 c-0.42,5.95,2.53,10.79,8.86,14.47c1.34,0.78,8.6,3.67,11.49,4.57c9.08,2.83,13.8,7.9,12.69,13.81c-1.01,5.36-6.65,8.83-14.43,8.93 c-6.17-0.24-11.71-2.75-16.02-6.1c-0.11-0.08-0.65-0.5-0.72-0.56c-0.53-0.42-1.11-0.39-1.47,0.15c-0.26,0.4-1.92,2.8-2.34,3.43 c-0.39,0.55-0.18,0.86,0.23,1.2c1.8,1.5,4.18,3.14,5.81,3.97c4.47,2.28,9.32,3.53,14.48,3.72c3.32,0.22,7.5-0.49,10.63-1.81 C70.63,102.67,74.25,97.92,74.98,91.98L74.98,91.98z M54.79,7.18c-10.59,0-19.22,9.98-19.62,22.47h39.25 C74.01,17.16,65.38,7.18,54.79,7.18L54.79,7.18z M94.99,122.88l-0.41,0l-80.82-0.01h0c-5.5-0.21-9.54-4.66-10.09-10.19l-0.05-1 l-3.61-79.5v0C0,32.12,0,32.06,0,32c0-1.28,1.03-2.33,2.3-2.35l0,0h25.48C28.41,13.15,40.26,0,54.79,0s26.39,13.15,27.01,29.65 h25.4h0.04c1.3,0,2.35,1.05,2.35,2.35c0,0.04,0,0.08,0,0.12v0l-3.96,79.81l-0.04,0.68C105.12,118.21,100.59,122.73,94.99,122.88 L94.99,122.88z"/></svg></div></div>
+                    <div className="space-y-3">
+                       <div className="flex justify-between items-end border-b border-orange-400 pb-2"><span className="text-xs font-bold text-orange-100">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatIDR(commerceKPIs.shopee.exp)}</span>{renderGR(commerceKPIs.shopee.exp, commerceKPIs.shopee.pExp, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-orange-400 pb-2"><span className="text-xs font-bold text-orange-100">GMV Ads</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatIDR(commerceKPIs.shopee.gmv)}</span>{renderGR(commerceKPIs.shopee.gmv, commerceKPIs.shopee.pGmv, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-orange-400 pb-2"><span className="text-xs font-bold text-orange-100">GMV Overall</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatIDR(commerceKPIs.shopee.gmvSales)}</span>{renderGR(commerceKPIs.shopee.gmvSales, commerceKPIs.shopee.pGmvSales, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-orange-400 pb-2"><span className="text-xs font-bold text-orange-100">CIR</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-emerald-200">{commerceKPIs.shopee.cir}</span>{renderGR(commerceKPIs.shopee.cirNum, commerceKPIs.shopee.pCirNum, false)}</div></div>
+                       <div className="flex justify-between items-end border-b border-orange-400 pb-2"><span className="text-xs font-bold text-orange-100">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-emerald-200">{commerceKPIs.shopee.roas}</span>{renderGR(commerceKPIs.shopee.roasNum, commerceKPIs.shopee.pRoasNum, false)}</div></div>
+                       <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-orange-100">Ads Contribution</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-sm lg:text-base text-white">{formatPct(commerceKPIs.shopee.adsContrib)}</span>{renderGR(commerceKPIs.shopee.adsContrib, commerceKPIs.shopee.pAdsContrib, false)}</div></div>
                     </div>
                  </div>
               </div>
@@ -2880,10 +3059,10 @@ export default function DashboardApp() {
                 <div className={`p-5 border-b flex justify-between items-center ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
                   <div>
                     <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform Summary Rollup</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Core performance across platforms (Expense, Orders, GMV, CPA, ROAS)</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Core performance across platforms (Expense, Orders, GMV, GMV Overall, CIR, ROAS, Ads Contribution, CPA)</p>
                   </div>
                 </div>
-                <div className="overflow-auto max-h-[400px] relative w-full">
+                <div className="overflow-auto max-h-[460px] relative w-full">
                   <Table className={isDarkMode ? 'text-slate-200' : 'text-slate-700'}>
                     <TableHeader>
                       {granularity === 'monthly' && (
@@ -2897,8 +3076,12 @@ export default function DashboardApp() {
                       )}
 
                       {granularity === 'weekly' && (() => {
-                        let weeksFound = new Set<string>(); ctxCurData.forEach(r => weeksFound.add(r.bucket)); ctxPrevData.forEach(r => weeksFound.add(r.bucket));
-                        let weeks = Array.from(weeksFound).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
+                        let weeksFound = new Set<string>(); 
+                        ctxCurData.forEach(r => weeksFound.add(r.bucket)); 
+                        ctxPrevData.forEach(r => weeksFound.add(r.bucket));
+                        curCirData.forEach(r => weeksFound.add(r.bucket));
+                        prevCirData.forEach(r => weeksFound.add(r.bucket));
+                        let weeks = Array.from(weeksFound).filter(w => w && w.startsWith('W')).sort((a, b) => parseInt(a.replace('W','')) - parseInt(b.replace('W','')));
                         return (
                           <TableRow className="border-b border-slate-700 bg-[#090d16]">
                             <TableHead className="sticky-col text-slate-100 bg-[#090d16]">Platform</TableHead>
@@ -2924,7 +3107,10 @@ export default function DashboardApp() {
                       })()}
 
                       {granularity === 'daily' && (() => {
-                        let daysFound = new Set<string>(); ctxCurData.forEach(r => daysFound.add(r.bucket)); let days = Array.from(daysFound).sort();
+                        let daysFound = new Set<string>(); 
+                        ctxCurData.forEach(r => daysFound.add(r.bucket)); 
+                        curCirData.forEach(r => daysFound.add(r.bucket));
+                        let days = Array.from(daysFound).filter(Boolean).sort();
                         return (
                           <TableRow className="border-b border-slate-700 bg-[#090d16]">
                             <TableHead className="sticky-col text-slate-100 bg-[#090d16]">Platform</TableHead>
