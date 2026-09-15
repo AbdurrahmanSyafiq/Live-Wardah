@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
     // --- 2. DATA ENGINE ---
     if (action === 'getData') {
-      const allowedSheets = ["Media API", "Commerce", "Creative Raw", "Media Signal"];
+      const allowedSheets = ["Media API", "Commerce", "Creative Raw", "Media Signal","CIR DAILY"];
       
       if (!allowedSheets.includes(sheetName)) {
         return NextResponse.json({ error: `Unauthorized or invalid sheet name: ${sheetName}` }, { status: 400 });

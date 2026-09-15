@@ -24,6 +24,7 @@ export default function DashboardApp() {
 
   const dataCache = useRef<Record<string, any[]>>({});
   const [rawData, setRawData] = useState<any[]>([]);
+  const [cirDailyData, setCirDailyData] = useState<any[]>([]);
   const [extraSheetsData, setExtraSheetsData] = useState<{ mediaApi: any[]; commerce: any[] }>({ mediaApi: [], commerce: [] });
   const [homeMediaData, setHomeMediaData] = useState<any[]>([]);
   const [homeCommerceData, setHomeCommerceData] = useState<any[]>([]);
@@ -81,6 +82,9 @@ export default function DashboardApp() {
     
     if (forceSync) {
       dataCache.current[CONFIG[engine].sheet] = undefined as any;
+      if (engine === 'commerce') {
+        dataCache.current['CIR DAILY'] = undefined as any;
+      }
       if (engine === 'signal') {
         dataCache.current['Media API'] = undefined as any;
         dataCache.current['Commerce'] = undefined as any;
@@ -104,7 +108,14 @@ export default function DashboardApp() {
         return [];
       };
 
-      if (engine === 'signal') {
+      if (engine === 'commerce') {
+        const [commData, cirData] = await Promise.all([
+          fetchSheet(CONFIG.commerce.sheet),
+          fetchSheet("CIR DAILY")
+        ]);
+        setRawData(commData);
+        setCirDailyData(cirData);
+      } else if (engine === 'signal') {
         const [signalData, mediaApiData, commerceData] = await Promise.all([
           fetchSheet("Media Signal"),
           fetchSheet("Media API"),
@@ -565,6 +576,60 @@ export default function DashboardApp() {
     return { curData: cData, prevData: pData, chartData: chData, creativeData: [], globalDates: dates };
   }, [rawData, filters, activeEngine, granularity, dateMonth, dateWeekly, dateDailyStart, dateDailyEnd]);
 
+  // --- CIR DAILY DATA PIPELINE ---
+  const { cirCurData, cirPrevData } = useMemo(() => {
+    if (activeEngine !== 'commerce' || !cirDailyData.length) return { cirCurData: [], cirPrevData: [] };
+
+    const filteredCir = cirDailyData.filter(row => {
+  if (filters.brand !== 'All') {
+    const rowBrand = String(row['Brand fx'] || row['Brand'] || '').trim().toLowerCase();
+    if (rowBrand !== filters.brand.trim().toLowerCase()) return false;
+  }
+  return true;
+});
+
+    let cData: any[] = [];
+    let pData: any[] = [];
+    let dates: any = null;
+    let dStart: any = null;
+    let dEnd: any = null;
+
+    if (granularity === 'monthly' && dateMonth) {
+      const p = dateMonth.split('-');
+      dates = getMediaDates(new Date(Number(p[0]), Number(p[1]), 0), 'monthly');
+    } else if (granularity === 'weekly' && dateWeekly) {
+      const p = dateWeekly.split('-');
+      dates = getMediaDates(new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])), 'weekly');
+    } else if (granularity === 'daily' && dateDailyStart && dateDailyEnd) {
+      const s = dateDailyStart.split('-');
+      dStart = new Date(Number(s[0]), Number(s[1]) - 1, Number(s[2]));
+      const e = dateDailyEnd.split('-');
+      dEnd = new Date(Number(e[0]), Number(e[1]) - 1, Number(e[2]), 23, 59, 59);
+    }
+
+    filteredCir.forEach(row => {
+      const rowDate = parseSheetDate(row['Date']);
+      if (!rowDate) return;
+      rowDate.setHours(0, 0, 0, 0);
+      row.parsedDate = rowDate;
+
+      if (granularity === 'monthly' && dates) {
+        if (rowDate >= dates.curStart && rowDate <= dates.curMonthEnd) { row.bucket = "Month"; cData.push(row); }
+        if (rowDate >= dates.prevStart && rowDate <= dates.prevMonthEnd) { row.bucket = "Month"; pData.push(row); }
+      } else if (granularity === 'weekly' && dates) {
+        if (rowDate >= dates.curStart && rowDate <= dates.curMtdEnd) { row.bucket = "W" + getWeekBucket(rowDate, dates.curStart); cData.push(row); }
+        if (rowDate >= dates.prevStart && rowDate <= dates.prevMtdEnd) { row.bucket = "W" + getWeekBucket(rowDate, dates.prevStart); pData.push(row); }
+      } else if (granularity === 'daily' && dStart && dEnd) {
+        if (rowDate >= dStart && rowDate <= dEnd) {
+          row.bucket = `${rowDate.getFullYear()}-${String(rowDate.getMonth() + 1).padStart(2, '0')}-${String(rowDate.getDate()).padStart(2, '0')}`;
+          cData.push(row);
+        }
+      }
+    });
+
+    return { cirCurData: cData, cirPrevData: pData };
+  }, [cirDailyData, filters.brand, activeEngine, granularity, dateMonth, dateWeekly, dateDailyStart, dateDailyEnd]);
+
   const { ctxCurData, ctxPrevData, ctxChartData } = useMemo(() => {
     if (dashboardContext === 'Overall' || activeEngine === 'creative' || activeEngine === 'signal') return { ctxCurData: curData, ctxPrevData: prevData, ctxChartData: chartData };
     const match = dashboardContext.toLowerCase();
@@ -1022,6 +1087,8 @@ export default function DashboardApp() {
               ctxCurData={ctxCurData}
               ctxPrevData={ctxPrevData}
               ctxChartData={ctxChartData}
+              cirCurData={cirCurData}
+              cirPrevData={cirPrevData}
               globalDates={globalDates}
               tableColFilter1={tableColFilter1}
               setTableColFilter1={setTableColFilter1}

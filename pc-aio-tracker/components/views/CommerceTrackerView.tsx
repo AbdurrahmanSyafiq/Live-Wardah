@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo } from 'react';
 import Chart from 'chart.js/auto';
 import { Table, TableHeader, TableRow, TableHead, TableBody } from '@/components/tables/PlatformTable';
 import { formatIDR, formatNum, formatPct, renderGR, parseNum, getGrHTML } from '@/lib/formatters';
@@ -17,6 +17,8 @@ interface CommerceTrackerViewProps {
   ctxCurData: any[];
   ctxPrevData: any[];
   ctxChartData: any[];
+  cirCurData: any[];
+  cirPrevData: any[];
   globalDates: any;
   tableColFilter1: string;
   setTableColFilter1: (v: string) => void;
@@ -37,6 +39,8 @@ export default function CommerceTrackerView({
   ctxCurData,
   ctxPrevData,
   ctxChartData,
+  cirCurData,
+  cirPrevData,
   globalDates,
   tableColFilter1,
   setTableColFilter1,
@@ -45,6 +49,47 @@ export default function CommerceTrackerView({
 }: CommerceTrackerViewProps) {
   const chartRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstance = useRef<Chart | null>(null);
+
+  // --- TOP CARDS METRICS (INCORPORATING CIR DAILY) ---
+  const enhancedKPIs = useMemo(() => {
+    const filterCir = (rows: any[], plat: 'overall' | 'tiktok' | 'shopee') => {
+      if (plat === 'overall') return rows;
+      return rows.filter(r => {
+        const p = String(r['Platform'] || '').toLowerCase();
+        if (plat === 'tiktok') return p.includes('tiktok');
+        return p.includes('shopee');
+      });
+    };
+
+    const sumGmvSales = (rows: any[]) => rows.reduce((acc, r) => acc + parseNum(r['GMV Sales']), 0);
+
+    const platforms = ['overall', 'tiktok', 'shopee'] as const;
+    const result: Record<string, any> = {};
+
+    platforms.forEach(plat => {
+      const base = commerceKPIs[plat] || { exp: 0, gmv: 0, pExp: 0, pGmv: 0, roas: '0.00x', roasNum: 0, pRoasNum: 0 };
+      const curGmvSales = sumGmvSales(filterCir(cirCurData, plat));
+      const prevGmvSales = sumGmvSales(filterCir(cirPrevData, plat));
+
+      const curCir = curGmvSales > 0 ? base.exp / curGmvSales : 0;
+      const prevCir = prevGmvSales > 0 ? base.pExp / prevGmvSales : 0;
+
+      const curAdsContrib = curGmvSales > 0 ? base.gmv / curGmvSales : 0;
+      const prevAdsContrib = prevGmvSales > 0 ? base.pGmv / prevGmvSales : 0;
+
+      result[plat] = {
+        ...base,
+        gmvSales: curGmvSales,
+        pGmvSales: prevGmvSales,
+        cir: curCir,
+        pCir: prevCir,
+        adsContrib: curAdsContrib,
+        pAdsContrib: prevAdsContrib
+      };
+    });
+
+    return result;
+  }, [commerceKPIs, cirCurData, cirPrevData]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -163,6 +208,7 @@ export default function CommerceTrackerView({
     return () => { if (chartInstance.current) chartInstance.current.destroy(); };
   }, [ctxChartData, ctxCurData, ctxPrevData, globalDates, chartMetricsComm, granularity, isDarkMode, chartTypeEngine]);
 
+  // --- PLATFORM SUMMARY BODY GENERATOR (WITH GMV SALES, CIR%, ADS CONTRIBUTION) ---
   const generateCommercePlatformSummaryBodyHTML = useCallback(() => {
     const filterPlatform = (rows: any[], plat: 'Overall' | 'TikTok' | 'Shopee') => {
       if (plat === 'Overall') return rows;
@@ -173,17 +219,30 @@ export default function CommerceTrackerView({
       });
     };
 
-    const calcSum = (rows: any[]) => {
+    const filterCirPlatform = (rows: any[], plat: 'Overall' | 'TikTok' | 'Shopee') => {
+      if (plat === 'Overall') return rows;
+      return rows.filter(r => {
+        const p = String(r['Platform'] || '').toLowerCase();
+        if (plat === 'TikTok') return p.includes('tiktok');
+        return p.includes('shopee');
+      });
+    };
+
+    const calcSum = (rows: any[], cirRows: any[]) => {
       let exp = 0, gmv = 0, orders = 0;
       rows.forEach(r => {
         exp += parseNum(r['Expense']);
         gmv += parseNum(r['GMV']);
         orders += parseNum(r['Items Sold'] || r['Item sold'] || r['items_sold'] || r['Orders']);
       });
+      const gmvSales = cirRows.reduce((acc, r) => acc + parseNum(r['GMV Sales']), 0);
       return {
         exp,
         orders,
         gmv,
+        gmvSales,
+        cir: gmvSales > 0 ? exp / gmvSales : 0,
+        adsContrib: gmvSales > 0 ? gmv / gmvSales : 0,
         cpa: orders > 0 ? exp / orders : 0,
         roas: exp > 0 ? gmv / exp : 0
       };
@@ -194,6 +253,9 @@ export default function CommerceTrackerView({
       { name: 'Expense', key: 'exp', fmt: formatIDR, isInv: false },
       { name: 'Orders', key: 'orders', fmt: formatNum, isInv: false },
       { name: 'GMV', key: 'gmv', fmt: formatIDR, isInv: false },
+      { name: 'GMV Sales', key: 'gmvSales', fmt: formatIDR, isInv: false },
+      { name: 'CIR', key: 'cir', fmt: formatPct, isInv: true },
+      { name: 'Ads Contribution', key: 'adsContrib', fmt: formatPct, isInv: false },
       { name: 'CPA', key: 'cpa', fmt: formatIDR, isInv: true },
       { name: 'ROAS', key: 'roas', fmt: (v: number) => (v || 0).toFixed(2) + 'x', isInv: false }
     ];
@@ -202,8 +264,8 @@ export default function CommerceTrackerView({
 
     if (granularity === 'monthly') {
       platforms.forEach(plat => {
-        const curTotals = calcSum(filterPlatform(ctxCurData, plat));
-        const prevTotals = calcSum(filterPlatform(ctxPrevData, plat));
+        const curTotals = calcSum(filterPlatform(ctxCurData, plat), filterCirPlatform(cirCurData, plat));
+        const prevTotals = calcSum(filterPlatform(ctxPrevData, plat), filterCirPlatform(cirPrevData, plat));
 
         metricNames.forEach((m, i) => {
           const curV = (curTotals as any)[m.key];
@@ -230,8 +292,10 @@ export default function CommerceTrackerView({
       platforms.forEach(plat => {
         const curRows = filterPlatform(ctxCurData, plat);
         const prevRows = filterPlatform(ctxPrevData, plat);
-        const curTotal = calcSum(curRows);
-        const prevTotal = calcSum(prevRows);
+        const curCirRows = filterCirPlatform(cirCurData, plat);
+        const prevCirRows = filterCirPlatform(cirPrevData, plat);
+        const curTotal = calcSum(curRows, curCirRows);
+        const prevTotal = calcSum(prevRows, prevCirRows);
 
         metricNames.forEach((m, i) => {
           let rowCls = i % 2 === 0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50');
@@ -246,12 +310,17 @@ export default function CommerceTrackerView({
 
           let curCumulRows: any[] = [];
           let prevCumulRows: any[] = [];
+          let curCirCumulRows: any[] = [];
+          let prevCirCumulRows: any[] = [];
 
           weeks.forEach(w => {
             curCumulRows = curCumulRows.concat(curRows.filter(r => r.bucket === w));
             prevCumulRows = prevCumulRows.concat(prevRows.filter(r => r.bucket === w));
-            const wc = (calcSum(curCumulRows) as any)[m.key];
-            const wp = (calcSum(prevCumulRows) as any)[m.key];
+            curCirCumulRows = curCirCumulRows.concat(curCirRows.filter(r => r.bucket === w));
+            prevCirCumulRows = prevCirCumulRows.concat(prevCirRows.filter(r => r.bucket === w));
+
+            const wc = (calcSum(curCumulRows, curCirCumulRows) as any)[m.key];
+            const wp = (calcSum(prevCumulRows, prevCirCumulRows) as any)[m.key];
 
             tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-l ${isDarkMode ? 'border-slate-700' : 'border-slate-200'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(wc)}</td>
                       <td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt(wp)}</td>
@@ -270,7 +339,8 @@ export default function CommerceTrackerView({
 
       platforms.forEach(plat => {
         const platRows = filterPlatform(ctxCurData, plat);
-        const totalSum = calcSum(platRows);
+        const platCirRows = filterCirPlatform(cirCurData, plat);
+        const totalSum = calcSum(platRows, platCirRows);
 
         metricNames.forEach((m, i) => {
           let rowCls = i % 2 === 0 ? (isDarkMode ? 'bg-slate-800' : 'bg-white') : (isDarkMode ? 'bg-[#1e293b]' : 'bg-slate-50');
@@ -284,7 +354,7 @@ export default function CommerceTrackerView({
           tbody += `<td class="px-4 py-3 sticky-col-2 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.name}</td>`;
 
           days.forEach(d => {
-            const daySum = calcSum(platRows.filter(r => r.bucket === d));
+            const daySum = calcSum(platRows.filter(r => r.bucket === d), platCirRows.filter(r => r.bucket === d));
             tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt((daySum as any)[m.key])}</td>`;
           });
           tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-indigo-300 bg-indigo-950/50 border-l border-indigo-800/50' : 'text-indigo-700 bg-indigo-50/50 border-l border-indigo-100'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${m.fmt((totalSum as any)[m.key])}</td></tr>`;
@@ -293,8 +363,9 @@ export default function CommerceTrackerView({
     }
 
     return tbody;
-  }, [ctxCurData, ctxPrevData, granularity, globalDates, isDarkMode]);
+  }, [ctxCurData, ctxPrevData, cirCurData, cirPrevData, granularity, globalDates, isDarkMode]);
 
+  // --- ANALYSIS PIVOT TABLE ---
   const generateTableHTML = useCallback(() => {
     const cnf = CONFIG.commerce;
     const getBaseMetrics = () => ({ exp:0, imp:0, clicks:0, orders:0, gmv:0, liveViews:0 });
@@ -520,33 +591,172 @@ export default function CommerceTrackerView({
 
   return (
     <div className="w-full">
+      {/* 3 TOP KPI CARDS WITH CIR & ADS CONTRIBUTION */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
+        {/* OVERALL CARD */}
         <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
-          <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Commerce</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg></div></div>
-          <div className="space-y-4">
-            <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.exp)}</span>{renderGR(commerceKPIs.overall.exp, commerceKPIs.overall.pExp, false, isDarkMode)}</div></div>
-            <div className="flex justify-between items-end border-b border-indigo-500 pb-3"><span className="text-xs font-bold text-indigo-200">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.overall.gmv)}</span>{renderGR(commerceKPIs.overall.gmv, commerceKPIs.overall.pGmv, false, isDarkMode)}</div></div>
-            <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-indigo-200">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-300 leading-none">{commerceKPIs.overall.roas}</span>{renderGR(commerceKPIs.overall.roasNum, commerceKPIs.overall.pRoasNum, false, isDarkMode)}</div></div>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">Overall Commerce</h3>
+            <div className="p-2.5 bg-white/20 rounded-xl">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-end border-b border-indigo-500/80 pb-2.5">
+              <span className="text-xs font-bold text-indigo-200">Expense</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatIDR(enhancedKPIs.overall.exp)}</span>
+                {renderGR(enhancedKPIs.overall.exp, enhancedKPIs.overall.pExp, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-indigo-500/80 pb-2.5">
+              <span className="text-xs font-bold text-indigo-200">GMV (Ads)</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatIDR(enhancedKPIs.overall.gmv)}</span>
+                {renderGR(enhancedKPIs.overall.gmv, enhancedKPIs.overall.pGmv, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-indigo-500/80 pb-2.5">
+              <span className="text-xs font-bold text-indigo-200">GMV Sales</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatIDR(enhancedKPIs.overall.gmvSales)}</span>
+                {renderGR(enhancedKPIs.overall.gmvSales, enhancedKPIs.overall.pGmvSales, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-indigo-500/80 pb-2.5">
+              <span className="text-xs font-bold text-indigo-200">CIR %</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-amber-300 leading-none">{formatPct(enhancedKPIs.overall.cir)}</span>
+                {renderGR(enhancedKPIs.overall.cir, enhancedKPIs.overall.pCir, true, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-indigo-500/80 pb-2.5">
+              <span className="text-xs font-bold text-indigo-200">Ads Contribution</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatPct(enhancedKPIs.overall.adsContrib)}</span>
+                {renderGR(enhancedKPIs.overall.adsContrib, enhancedKPIs.overall.pAdsContrib, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end pt-1">
+              <span className="text-xs font-bold text-indigo-200">ROAS</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-emerald-300 leading-none">{enhancedKPIs.overall.roas}</span>
+                {renderGR(enhancedKPIs.overall.roasNum, enhancedKPIs.overall.pRoasNum, false, isDarkMode)}
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* TIKTOK SHOP CARD */}
         <div onClick={() => setDashboardContext('TikTok')} className={`bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'TikTok' ? 'ring-4 ring-slate-400 shadow-slate-900/40' : ''}`}>
-          <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok Shop</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg></div></div>
-          <div className="space-y-4">
-            <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.exp)}</span>{renderGR(commerceKPIs.tiktok.exp, commerceKPIs.tiktok.pExp, false, isDarkMode)}</div></div>
-            <div className="flex justify-between items-end border-b border-slate-600 pb-3"><span className="text-xs font-bold text-slate-400">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.tiktok.gmv)}</span>{renderGR(commerceKPIs.tiktok.gmv, commerceKPIs.tiktok.pGmv, false, isDarkMode)}</div></div>
-            <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-slate-400">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-400 leading-none">{commerceKPIs.tiktok.roas}</span>{renderGR(commerceKPIs.tiktok.roasNum, commerceKPIs.tiktok.pRoasNum, false, isDarkMode)}</div></div>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">TikTok Shop</h3>
+            <div className="p-2.5 bg-white/20 rounded-xl">
+              <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-end border-b border-slate-600/80 pb-2.5">
+              <span className="text-xs font-bold text-slate-400">Expense</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatIDR(enhancedKPIs.tiktok.exp)}</span>
+                {renderGR(enhancedKPIs.tiktok.exp, enhancedKPIs.tiktok.pExp, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-slate-600/80 pb-2.5">
+              <span className="text-xs font-bold text-slate-400">GMV (Ads)</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatIDR(enhancedKPIs.tiktok.gmv)}</span>
+                {renderGR(enhancedKPIs.tiktok.gmv, enhancedKPIs.tiktok.pGmv, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-slate-600/80 pb-2.5">
+              <span className="text-xs font-bold text-slate-400">GMV Sales</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatIDR(enhancedKPIs.tiktok.gmvSales)}</span>
+                {renderGR(enhancedKPIs.tiktok.gmvSales, enhancedKPIs.tiktok.pGmvSales, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-slate-600/80 pb-2.5">
+              <span className="text-xs font-bold text-slate-400">CIR %</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-amber-300 leading-none">{formatPct(enhancedKPIs.tiktok.cir)}</span>
+                {renderGR(enhancedKPIs.tiktok.cir, enhancedKPIs.tiktok.pCir, true, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-slate-600/80 pb-2.5">
+              <span className="text-xs font-bold text-slate-400">Ads Contribution</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatPct(enhancedKPIs.tiktok.adsContrib)}</span>
+                {renderGR(enhancedKPIs.tiktok.adsContrib, enhancedKPIs.tiktok.pAdsContrib, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end pt-1">
+              <span className="text-xs font-bold text-slate-400">ROAS</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-emerald-400 leading-none">{enhancedKPIs.tiktok.roas}</span>
+                {renderGR(enhancedKPIs.tiktok.roasNum, enhancedKPIs.tiktok.pRoasNum, false, isDarkMode)}
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* SHOPEE CARD */}
         <div onClick={() => setDashboardContext('Shopee')} className={`bg-orange-500 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Shopee' ? 'ring-4 ring-orange-300 shadow-orange-500/40' : ''}`}>
-          <div className="flex justify-between items-center mb-8"><h3 className="text-sm font-black text-orange-100 uppercase tracking-widest">Shopee</h3><div className="p-2.5 bg-white/20 rounded-xl"><svg className="w-5 h-5 text-white" viewBox="0 0 109.59 122.88" fill="currentColor"><path d="M74.98,91.98C76.15,82.36,69.96,76.22,53.6,71c-7.92-2.7-11.66-6.24-11.57-11.12 c0.33-5.4,5.36-9.34,12.04-9.47c4.63,0.09,9.77,1.22,14.76,4.56c0.59,0.37,1.01,0.32,1.35-0.2c0.46-0.74,1.61-2.53,2-3.17 c0.26-0.42,0.31-0.96-0.35-1.44c-0.95-0.7-3.6-2.13-5.03-2.72c-3.88-1.62-8.23-2.64-12.86-2.63c-9.77,0.04-17.47,6.22-18.12,14.47 c-0.42,5.95,2.53,10.79,8.86,14.47c1.34,0.78,8.6,3.67,11.49,4.57c9.08,2.83,13.8,7.9,12.69,13.81c-1.01,5.36-6.65,8.83-14.43,8.93 c-6.17-0.24-11.71-2.75-16.02-6.1c-0.11-0.08-0.65-0.5-0.72-0.56c-0.53-0.42-1.11-0.39-1.47,0.15c-0.26,0.4-1.92,2.8-2.34,3.43 c-0.39,0.55-0.18,0.86,0.23,1.2c1.8,1.5,4.18,3.14,5.81,3.97c4.47,2.28,9.32,3.53,14.48,3.72c3.32,0.22,7.5-0.49,10.63-1.81 C70.63,102.67,74.25,97.92,74.98,91.98L74.98,91.98z M54.79,7.18c-10.59,0-19.22,9.98-19.62,22.47h39.25 C74.01,17.16,65.38,7.18,54.79,7.18L54.79,7.18z M94.99,122.88l-0.41,0l-80.82-0.01h0c-5.5-0.21-9.54-4.66-10.09-10.19l-0.05-1 l-3.61-79.5v0C0,32.12,0,32.06,0,32c0-1.28,1.03-2.33,2.3-2.35l0,0h25.48C28.41,13.15,40.26,0,54.79,0s26.39,13.15,27.01,29.65 h25.4h0.04c1.3,0,2.35,1.05,2.35,2.35c0,0.04,0,0.08,0,0.12v0l-3.96,79.81l-0.04,0.68C105.12,118.21,100.59,122.73,94.99,122.88 L94.99,122.88z"/></svg></div></div>
-          <div className="space-y-4">
-            <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">Expense</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.exp)}</span>{renderGR(commerceKPIs.shopee.exp, commerceKPIs.shopee.pExp, false, isDarkMode)}</div></div>
-            <div className="flex justify-between items-end border-b border-orange-400 pb-3"><span className="text-xs font-bold text-orange-100">GMV</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-white leading-none">{formatIDR(commerceKPIs.shopee.gmv)}</span>{renderGR(commerceKPIs.shopee.gmv, commerceKPIs.shopee.pGmv, false, isDarkMode)}</div></div>
-            <div className="flex justify-between items-end pt-1"><span className="text-xs font-bold text-orange-100">ROAS</span><div className="text-right flex items-center justify-end gap-2"><span className="font-black text-[clamp(1.1rem,2vw,1.5rem)] text-emerald-200 leading-none">{commerceKPIs.shopee.roas}</span>{renderGR(commerceKPIs.shopee.roasNum, commerceKPIs.shopee.pRoasNum, false, isDarkMode)}</div></div>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-sm font-black text-orange-100 uppercase tracking-widest">Shopee</h3>
+            <div className="p-2.5 bg-white/20 rounded-xl">
+              <svg className="w-5 h-5 text-white" viewBox="0 0 109.59 122.88" fill="currentColor"><path d="M74.98,91.98C76.15,82.36,69.96,76.22,53.6,71c-7.92-2.7-11.66-6.24-11.57-11.12 c0.33-5.4,5.36-9.34,12.04-9.47c4.63,0.09,9.77,1.22,14.76,4.56c0.59,0.37,1.01,0.32,1.35-0.2c0.46-0.74,1.61-2.53,2-3.17 c0.26-0.42,0.31-0.96-0.35-1.44c-0.95-0.7-3.6-2.13-5.03-2.72c-3.88-1.62-8.23-2.64-12.86-2.63c-9.77,0.04-17.47,6.22-18.12,14.47 c-0.42,5.95,2.53,10.79,8.86,14.47c1.34,0.78,8.6,3.67,11.49,4.57c9.08,2.83,13.8,7.9,12.69,13.81c-1.01,5.36-6.65,8.83-14.43,8.93 c-6.17-0.24-11.71-2.75-16.02-6.1c-0.11-0.08-0.65-0.5-0.72-0.56c-0.53-0.42-1.11-0.39-1.47,0.15c-0.26,0.4-1.92,2.8-2.34,3.43 c-0.39,0.55-0.18,0.86,0.23,1.2c1.8,1.5,4.18,3.14,5.81,3.97c4.47,2.28,9.32,3.53,14.48,3.72c3.32,0.22,7.5-0.49,10.63-1.81 C70.63,102.67,74.25,97.92,74.98,91.98L74.98,91.98z M54.79,7.18c-10.59,0-19.22,9.98-19.62,22.47h39.25 C74.01,17.16,65.38,7.18,54.79,7.18L54.79,7.18z M94.99,122.88l-0.41,0l-80.82-0.01h0c-5.5-0.21-9.54-4.66-10.09-10.19l-0.05-1 l-3.61-79.5v0C0,32.12,0,32.06,0,32c0-1.28,1.03-2.33,2.3-2.35l0,0h25.48C28.41,13.15,40.26,0,54.79,0s26.39,13.15,27.01,29.65 h25.4h0.04c1.3,0,2.35,1.05,2.35,2.35c0,0.04,0,0.08,0,0.12v0l-3.96,79.81l-0.04,0.68C105.12,118.21,100.59,122.73,94.99,122.88 L94.99,122.88z"/></svg>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-end border-b border-orange-400/80 pb-2.5">
+              <span className="text-xs font-bold text-orange-100">Expense</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatIDR(enhancedKPIs.shopee.exp)}</span>
+                {renderGR(enhancedKPIs.shopee.exp, enhancedKPIs.shopee.pExp, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-orange-400/80 pb-2.5">
+              <span className="text-xs font-bold text-orange-100">GMV (Ads)</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatIDR(enhancedKPIs.shopee.gmv)}</span>
+                {renderGR(enhancedKPIs.shopee.gmv, enhancedKPIs.shopee.pGmv, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-orange-400/80 pb-2.5">
+              <span className="text-xs font-bold text-orange-100">GMV Sales</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatIDR(enhancedKPIs.shopee.gmvSales)}</span>
+                {renderGR(enhancedKPIs.shopee.gmvSales, enhancedKPIs.shopee.pGmvSales, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-orange-400/80 pb-2.5">
+              <span className="text-xs font-bold text-orange-100">CIR %</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-amber-200 leading-none">{formatPct(enhancedKPIs.shopee.cir)}</span>
+                {renderGR(enhancedKPIs.shopee.cir, enhancedKPIs.shopee.pCir, true, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end border-b border-orange-400/80 pb-2.5">
+              <span className="text-xs font-bold text-orange-100">Ads Contribution</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none">{formatPct(enhancedKPIs.shopee.adsContrib)}</span>
+                {renderGR(enhancedKPIs.shopee.adsContrib, enhancedKPIs.shopee.pAdsContrib, false, isDarkMode)}
+              </div>
+            </div>
+            <div className="flex justify-between items-end pt-1">
+              <span className="text-xs font-bold text-orange-100">ROAS</span>
+              <div className="text-right flex items-center justify-end gap-2">
+                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-emerald-200 leading-none">{enhancedKPIs.shopee.roas}</span>
+                {renderGR(enhancedKPIs.shopee.roasNum, enhancedKPIs.shopee.pRoasNum, false, isDarkMode)}
+              </div>
+            </div>
           </div>
         </div>
       </div>
       
+      {/* HISTORICAL TREND CHART */}
       <div className={`p-5 sm:p-6 lg:p-7 rounded-3xl border shadow-sm mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'}`}>
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-7 gap-4">
           <div>
@@ -588,14 +798,15 @@ export default function CommerceTrackerView({
         </div>
       </div>
 
+      {/* PLATFORM SUMMARY TABLE */}
       <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
         <div className={`p-5 border-b flex justify-between items-center ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
           <div>
             <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform Summary Rollup</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Core performance across platforms (Expense, Orders, GMV, CPA, ROAS)</p>
+            <p className="text-xs text-slate-400 mt-0.5">Core performance across platforms (Expense, Orders, GMV, GMV Sales, CIR, Ads Contrib, CPA, ROAS)</p>
           </div>
         </div>
-        <div className="overflow-auto max-h-[400px] relative w-full">
+        <div className="overflow-auto max-h-[440px] relative w-full">
           <Table className={isDarkMode ? 'text-slate-200' : 'text-slate-700'}>
             <TableHeader>
               {granularity === 'monthly' && (
@@ -657,6 +868,7 @@ export default function CommerceTrackerView({
         </div>
       </div>
 
+      {/* ANALYSIS PIVOT TABLE */}
       <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
         <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
           <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform & Ad Type Pivot</h2>
