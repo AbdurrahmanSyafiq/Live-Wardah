@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import Chart from 'chart.js/auto';
 import { Table, TableHeader, TableRow, TableHead, TableBody } from '@/components/tables/PlatformTable';
 import { formatIDR, formatNum, formatPct, renderGR, parseNum, getGrHTML } from '@/lib/formatters';
 import { CONFIG } from '@/lib/config';
+import SkuPerformanceModal from './SkuPerformanceModal';
 
 interface CommerceTrackerViewProps {
   commerceKPIs: any;
@@ -25,6 +26,20 @@ interface CommerceTrackerViewProps {
   tableColFilter2: string;
   setTableColFilter2: (v: string) => void;
 }
+
+const getColVal = (row: any, ...keys: string[]) => {
+  if (!row) return '';
+  for (const k of keys) {
+    const target = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const found = Object.keys(row).find(
+      existing => existing.toLowerCase().replace(/[^a-z0-9]/g, '') === target
+    );
+    if (found !== undefined && row[found] !== undefined && row[found] !== '') {
+      return row[found];
+    }
+  }
+  return '';
+};
 
 export default function CommerceTrackerView({
   commerceKPIs,
@@ -50,26 +65,68 @@ export default function CommerceTrackerView({
   const chartRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstance = useRef<Chart | null>(null);
 
-  // --- TOP CARDS METRICS (INCORPORATING CIR DAILY) ---
+  // --- POPUP DRILL-DOWN STATE ---
+  const [drillModalOpen, setDrillModalOpen] = useState(false);
+  const [drillRows, setDrillRows] = useState<any[]>([]);
+  const [drillTitle, setDrillTitle] = useState('');
+  const [drillSubtitle, setDrillSubtitle] = useState('');
+
+  // Wire up flexible drilldown scoping (by specific day, MTD week, or full range)
+  useEffect(() => {
+    (window as any).__openSkuDrillDown = (platform: string, adType: string, dateBucket?: string, dateLabel?: string) => {
+      const subset = ctxCurData.filter(r => {
+        const pMatch = !platform || platform === 'All' || String(r[CONFIG.commerce.colPlatform]).toLowerCase().includes(platform.toLowerCase());
+        const aMatch = !adType || adType === 'All' || String(r[CONFIG.commerce.colAdType]).toLowerCase() === adType.toLowerCase();
+        
+        // Match specific date bucket if provided
+        let dMatch = true;
+        if (dateBucket && dateBucket !== 'all') {
+          if (dateBucket.startsWith('mtd_up_to_')) {
+            const upToWeek = parseInt(dateBucket.replace('mtd_up_to_', ''));
+            const rWeek = parseInt(String(r.bucket || '').replace('W', ''));
+            dMatch = !isNaN(rWeek) && rWeek <= upToWeek;
+          } else {
+            dMatch = r.bucket === dateBucket;
+          }
+        }
+        return pMatch && aMatch && dMatch;
+      });
+
+      const scopeTitle = dateLabel ? `${platform} - ${adType} (${dateLabel})` : `${platform} - ${adType}`;
+      setDrillRows(subset);
+      setDrillTitle(`PID & SKU Performance: ${scopeTitle}`);
+      setDrillSubtitle(`${subset.length} matched ad records in selected scope`);
+      setDrillModalOpen(true);
+    };
+
+    return () => {
+      delete (window as any).__openSkuDrillDown;
+    };
+  }, [ctxCurData]);
+
   const enhancedKPIs = useMemo(() => {
     const filterCir = (rows: any[], plat: 'overall' | 'tiktok' | 'shopee') => {
       if (plat === 'overall') return rows;
       return rows.filter(r => {
-        const p = String(r['Platform'] || '').toLowerCase();
+        const p = String(getColVal(r, 'Platform') || '').toLowerCase();
         if (plat === 'tiktok') return p.includes('tiktok');
         return p.includes('shopee');
       });
     };
 
-    const sumGmvSales = (rows: any[]) => rows.reduce((acc, r) => acc + parseNum(r['GMV Sales']), 0);
+    const sumGmvSales = (rows: any[]) =>
+      rows.reduce((acc, r) => acc + parseNum(getColVal(r, 'GMV Sales', 'gmv_sales', 'sales')), 0);
 
     const platforms = ['overall', 'tiktok', 'shopee'] as const;
     const result: Record<string, any> = {};
 
     platforms.forEach(plat => {
       const base = commerceKPIs[plat] || { exp: 0, gmv: 0, pExp: 0, pGmv: 0, roas: '0.00x', roasNum: 0, pRoasNum: 0 };
-      const curGmvSales = sumGmvSales(filterCir(cirCurData, plat));
-      const prevGmvSales = sumGmvSales(filterCir(cirPrevData, plat));
+      const curCirMatched = filterCir(cirCurData, plat);
+      const prevCirMatched = filterCir(cirPrevData, plat);
+
+      const curGmvSales = sumGmvSales(curCirMatched);
+      const prevGmvSales = sumGmvSales(prevCirMatched);
 
       const curCir = curGmvSales > 0 ? base.exp / curGmvSales : 0;
       const prevCir = prevGmvSales > 0 ? base.pExp / prevGmvSales : 0;
@@ -208,7 +265,6 @@ export default function CommerceTrackerView({
     return () => { if (chartInstance.current) chartInstance.current.destroy(); };
   }, [ctxChartData, ctxCurData, ctxPrevData, globalDates, chartMetricsComm, granularity, isDarkMode, chartTypeEngine]);
 
-  // --- PLATFORM SUMMARY BODY GENERATOR (WITH GMV SALES, CIR%, ADS CONTRIBUTION) ---
   const generateCommercePlatformSummaryBodyHTML = useCallback(() => {
     const filterPlatform = (rows: any[], plat: 'Overall' | 'TikTok' | 'Shopee') => {
       if (plat === 'Overall') return rows;
@@ -222,7 +278,7 @@ export default function CommerceTrackerView({
     const filterCirPlatform = (rows: any[], plat: 'Overall' | 'TikTok' | 'Shopee') => {
       if (plat === 'Overall') return rows;
       return rows.filter(r => {
-        const p = String(r['Platform'] || '').toLowerCase();
+        const p = String(getColVal(r, 'Platform') || '').toLowerCase();
         if (plat === 'TikTok') return p.includes('tiktok');
         return p.includes('shopee');
       });
@@ -235,7 +291,7 @@ export default function CommerceTrackerView({
         gmv += parseNum(r['GMV']);
         orders += parseNum(r['Items Sold'] || r['Item sold'] || r['items_sold'] || r['Orders']);
       });
-      const gmvSales = cirRows.reduce((acc, r) => acc + parseNum(r['GMV Sales']), 0);
+      const gmvSales = cirRows.reduce((acc, r) => acc + parseNum(getColVal(r, 'GMV Sales', 'gmv_sales', 'sales')), 0);
       return {
         exp,
         orders,
@@ -252,9 +308,9 @@ export default function CommerceTrackerView({
     const metricNames = [
       { name: 'Expense', key: 'exp', fmt: formatIDR, isInv: false },
       { name: 'Orders', key: 'orders', fmt: formatNum, isInv: false },
-      { name: 'GMV', key: 'gmv', fmt: formatIDR, isInv: false },
+      { name: 'GMV (Ads)', key: 'gmv', fmt: formatIDR, isInv: false },
       { name: 'GMV Sales', key: 'gmvSales', fmt: formatIDR, isInv: false },
-      { name: 'CIR', key: 'cir', fmt: formatPct, isInv: true },
+      { name: 'CIR %', key: 'cir', fmt: formatPct, isInv: true },
       { name: 'Ads Contribution', key: 'adsContrib', fmt: formatPct, isInv: false },
       { name: 'CPA', key: 'cpa', fmt: formatIDR, isInv: true },
       { name: 'ROAS', key: 'roas', fmt: (v: number) => (v || 0).toFixed(2) + 'x', isInv: false }
@@ -365,7 +421,7 @@ export default function CommerceTrackerView({
     return tbody;
   }, [ctxCurData, ctxPrevData, cirCurData, cirPrevData, granularity, globalDates, isDarkMode]);
 
-  // --- ANALYSIS PIVOT TABLE ---
+  // --- ANALYSIS PIVOT TABLE WITH DATE-SPECIFIC DRILL-DOWN ---
   const generateTableHTML = useCallback(() => {
     const cnf = CONFIG.commerce;
     const getBaseMetrics = () => ({ exp:0, imp:0, clicks:0, orders:0, gmv:0, liveViews:0 });
@@ -383,7 +439,7 @@ export default function CommerceTrackerView({
       const m = [
         { name: "Expense", raw: g.exp, fmt: formatIDR(g.exp), isInv: false },
         { name: "Orders", raw: g.orders, fmt: formatNum(g.orders), isInv: false },
-        { name: "GMV", raw: g.gmv, fmt: formatIDR(g.gmv), isInv: false },
+        { name: "GMV (Ads)", raw: g.gmv, fmt: formatIDR(g.gmv), isInv: false },
         { name: "CPA", raw: g.orders>0?(g.exp/g.orders):0, fmt: formatIDR(g.orders>0?(g.exp/g.orders):0), isInv: true },
         { name: "ROAS", raw: g.exp>0?(g.gmv/g.exp):0, fmt: (g.exp>0?(g.gmv/g.exp):0).toFixed(2)+"x", isInv: false }
       ];
@@ -415,7 +471,7 @@ export default function CommerceTrackerView({
         <th class="sticky-col ${thClass}">Platform</th>
         <th class="sticky-col-2 ${thClass}">Ad Type</th>
         <th class="sticky-col-3 ${thClass}">Metric</th>
-        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">This Month</th>
+        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">This Month (Click)</th>
         <th class="px-4 py-4 text-right font-bold text-slate-400 bg-[#0f172a] sticky top-0 border-b border-slate-700">Prev Month</th>
         <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">GR%</th>
       </tr>`;
@@ -446,11 +502,11 @@ export default function CommerceTrackerView({
 
           tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
           if (i === 0) {
-            tbody += `<td rowspan="${mCur.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${g.dim1}</td>`;
-            tbody += `<td rowspan="${mCur.length}" class="px-4 py-3 sticky-col-2 font-medium ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-white'} align-top whitespace-normal break-words">${g.dim2}</td>`;
+            tbody += `<td rowspan="${mCur.length}" onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', 'all', 'Month Full')" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words cursor-pointer hover:text-indigo-500">${g.dim1}</td>`;
+            tbody += `<td rowspan="${mCur.length}" onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', 'all', 'Month Full')" class="px-4 py-3 sticky-col-2 font-medium ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-white'} align-top whitespace-normal break-words cursor-pointer hover:text-indigo-500">${g.dim2}</td>`;
           }
           tbody += `<td class="px-4 py-3 sticky-col-3 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.name}</td>`;
-          tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-slate-200' : 'text-slate-800'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.fmt}</td>`;
+          tbody += `<td onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', 'all', 'This Month')" title="Click to drill down SKUs" class="px-4 py-3 text-right font-mono font-bold cursor-pointer hover:text-indigo-500 hover:underline ${isDarkMode ? 'text-slate-200' : 'text-slate-800'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.fmt}</td>`;
           tbody += `<td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mp.fmt}</td>`;
           tbody += getGrHTML(mc.raw, mp.raw, mc.isInv, isDarkMode);
           tbody += '</tr>';
@@ -471,7 +527,7 @@ export default function CommerceTrackerView({
         let curD = new Date(globalDates.curStart); curD.setDate(curD.getDate() + (weekNum * 7) - 1); if (curD > globalDates.curMtdEnd) curD = new Date(globalDates.curMtdEnd);
         let prevD = new Date(globalDates.prevStart); prevD.setDate(prevD.getDate() + (weekNum * 7) - 1); if (prevD > globalDates.prevMtdEnd) prevD = new Date(globalDates.prevMtdEnd);
         const fmtStr = (d: Date) => `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })}`;
-        thead += `<th class="px-4 py-4 text-right bg-[#0f172a] border-l border-slate-700 font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(curD)}</th>
+        thead += `<th class="px-4 py-4 text-right bg-[#0f172a] border-l border-slate-700 font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(curD)} (Click)</th>
                   <th class="px-4 py-4 text-right text-slate-400 bg-[#0f172a] font-bold sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(prevD)}</th>
                   <th class="px-4 py-4 text-right bg-[#0f172a] font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">GR%</th>`;
       });
@@ -518,18 +574,22 @@ export default function CommerceTrackerView({
           if (i === curTotM.length - 1) rowCls += ' group-end';
           tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
           if (i === 0) {
-            tbody += `<td rowspan="${curTotM.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${g.dim1}</td>`;
-            tbody += `<td rowspan="${curTotM.length}" class="px-4 py-3 sticky-col-2 font-medium ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-white'} align-top whitespace-normal break-words">${g.dim2}</td>`;
+            tbody += `<td rowspan="${curTotM.length}" onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', 'all', 'Total Period')" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words cursor-pointer hover:text-indigo-500">${g.dim1}</td>`;
+            tbody += `<td rowspan="${curTotM.length}" onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', 'all', 'Total Period')" class="px-4 py-3 sticky-col-2 font-medium ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-white'} align-top whitespace-normal break-words cursor-pointer hover:text-indigo-500">${g.dim2}</td>`;
           }
           tbody += `<td class="px-4 py-3 sticky-col-3 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.name}</td>`;
           weeks.forEach(w => {
+            const weekNum = parseInt(w.replace('W', ''));
+            let curD = new Date(globalDates.curStart); curD.setDate(curD.getDate() + (weekNum * 7) - 1); if (curD > globalDates.curMtdEnd) curD = new Date(globalDates.curMtdEnd);
+            const dateLabel = `MTD ${curD.getDate()} ${curD.toLocaleString('en-GB', { month: 'short' })}`;
             const wc = weekM[w].cur[i], wp = weekM[w].prev[i];
-            tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-l ${isDarkMode ? 'border-slate-700' : 'border-slate-200'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${wc.fmt}</td>
+
+            tbody += `<td onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', 'mtd_up_to_${weekNum}', '${dateLabel}')" title="Click to drill down SKUs up to ${dateLabel}" class="px-4 py-3 text-right font-mono font-semibold cursor-pointer hover:text-indigo-500 hover:underline border-l ${isDarkMode ? 'border-slate-700' : 'border-slate-200'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${wc.fmt}</td>
                       <td class="px-4 py-3 text-right font-mono font-medium text-slate-400 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${wp.fmt}</td>
                       ${getGrHTML(wc.raw, wp.raw, wc.isInv, isDarkMode)}`;
           });
           const mp = prevTotM[i];
-          tbody += `<td class="px-4 py-3 text-right font-mono border-l ${isDarkMode ? 'border-indigo-500 text-indigo-300 bg-indigo-950/50' : 'border-slate-200 text-indigo-700 bg-indigo-50/50'} font-bold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.fmt}</td>
+          tbody += `<td onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', 'all', 'MTD Total')" title="Click to drill down SKUs" class="px-4 py-3 text-right font-mono cursor-pointer hover:underline border-l ${isDarkMode ? 'border-indigo-500 text-indigo-300 bg-indigo-950/50' : 'border-slate-200 text-indigo-700 bg-indigo-50/50'} font-bold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.fmt}</td>
                     <td class="px-4 py-3 text-right font-mono font-medium text-slate-500 ${isDarkMode ? 'bg-indigo-950/50' : 'bg-indigo-50/50'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mp.fmt}</td>
                     ${getGrHTML(mc.raw, mp.raw, mc.isInv, isDarkMode)}</tr>`;
         });
@@ -574,12 +634,19 @@ export default function CommerceTrackerView({
           if (i === totM.length - 1) rowCls += ' group-end';
           tbody += `<tr class="${rowCls} hover:${isDarkMode ? 'bg-indigo-900/30' : 'bg-indigo-50/50'} transition-colors">`;
           if (i === 0) {
-            tbody += `<td rowspan="${totM.length}" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words">${g.dim1}</td>`;
-            tbody += `<td rowspan="${totM.length}" class="px-4 py-3 sticky-col-2 font-medium ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-white'} align-top whitespace-normal break-words">${g.dim2}</td>`;
+            tbody += `<td rowspan="${totM.length}" onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', 'all', 'Period Total')" class="px-4 py-3 sticky-col font-bold ${isDarkMode ? 'text-slate-200 bg-slate-800' : 'text-slate-900 bg-white'} align-top whitespace-normal break-words cursor-pointer hover:text-indigo-500">${g.dim1}</td>`;
+            tbody += `<td rowspan="${totM.length}" onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', 'all', 'Period Total')" class="px-4 py-3 sticky-col-2 font-medium ${isDarkMode ? 'text-slate-400 bg-slate-800' : 'text-slate-600 bg-white'} align-top whitespace-normal break-words cursor-pointer hover:text-indigo-500">${g.dim2}</td>`;
           }
           tbody += `<td class="px-4 py-3 sticky-col-3 ${isDarkMode ? 'text-slate-300 bg-slate-800' : 'text-slate-700 bg-white'} font-medium tracking-wide border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.name}</td>`;
-          days.forEach(d => { tbody += `<td class="px-4 py-3 text-right font-mono font-semibold border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${dayM[d][i].fmt}</td>`; });
-          tbody += `<td class="px-4 py-3 text-right font-mono font-bold ${isDarkMode ? 'text-indigo-300 bg-indigo-950/50 border-l border-indigo-800/50' : 'text-indigo-700 bg-indigo-50/50 border-l border-indigo-100'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.fmt}</td></tr>`;
+          
+          // Each day cell is specifically clickable for that exact day
+          days.forEach(d => {
+            const parts = d.split('-'); const dt = new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]));
+            const dateLabel = `${dt.getDate()} ${dt.toLocaleString('en-GB', { month: 'short' })}`;
+            tbody += `<td onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', '${d}', '${dateLabel}')" title="Click to view SKUs for ${dateLabel}" class="px-4 py-3 text-right font-mono font-semibold cursor-pointer hover:text-indigo-500 hover:underline border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${dayM[d][i].fmt}</td>`;
+          });
+
+          tbody += `<td onclick="window.__openSkuDrillDown('${g.dim1}', '${g.dim2}', 'all', 'Period Total')" title="Click to view SKUs for whole period" class="px-4 py-3 text-right font-mono font-bold cursor-pointer hover:underline ${isDarkMode ? 'text-indigo-300 bg-indigo-950/50 border-l border-indigo-800/50' : 'text-indigo-700 bg-indigo-50/50 border-l border-indigo-100'} border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}">${mc.fmt}</td></tr>`;
         });
       });
     }
@@ -591,7 +658,7 @@ export default function CommerceTrackerView({
 
   return (
     <div className="w-full">
-      {/* 3 TOP KPI CARDS WITH CIR & ADS CONTRIBUTION */}
+      {/* 3 TOP KPI CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
         {/* OVERALL CARD */}
         <div onClick={() => setDashboardContext('Overall')} className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === 'Overall' ? 'ring-4 ring-indigo-300 shadow-indigo-600/40' : ''}`}>
@@ -868,10 +935,13 @@ export default function CommerceTrackerView({
         </div>
       </div>
 
-      {/* ANALYSIS PIVOT TABLE */}
+      {/* ANALYSIS PIVOT TABLE WITH SPECIFIC DRILL-DOWNS */}
       <div className={`rounded-3xl border shadow-sm overflow-hidden mb-6 ${isDarkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
         <div className={`p-5 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 ${isDarkMode ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-white'}`}>
-          <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform & Ad Type Pivot</h2>
+          <div>
+            <h2 className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>Platform & Ad Type Pivot</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">Click any metric cell to inspect SKUs for that specific date cut-off[cite: 14, 17]</p>
+          </div>
           <div className="flex flex-wrap gap-3 w-full md:w-auto">
             <select value={tableColFilter1} onChange={(e) => setTableColFilter1(e.target.value)} className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? 'border-slate-600 text-indigo-300 hover:border-indigo-500' : 'border-slate-300 text-indigo-700 hover:border-indigo-500 bg-slate-50'}`}>
               <option value="All">All Platforms / Ad Types</option>
@@ -890,6 +960,16 @@ export default function CommerceTrackerView({
           </table>
         </div>
       </div>
+
+      {/* SKU DRILL-DOWN MODAL */}
+      <SkuPerformanceModal
+        isOpen={drillModalOpen}
+        onClose={() => setDrillModalOpen(false)}
+        rows={drillRows}
+        title={drillTitle}
+        subtitle={drillSubtitle}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 }

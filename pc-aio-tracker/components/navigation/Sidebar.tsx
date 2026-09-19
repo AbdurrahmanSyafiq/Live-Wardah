@@ -5,9 +5,9 @@ interface SidebarProps {
   isSidebarOpen: boolean;
   setIsSidebarOpen: (v: boolean) => void;
   currentView: 'login' | 'welcome' | 'home' | 'dashboard';
-  activeEngine: 'media' | 'commerce' | 'creative' | 'signal' | null;
+  activeEngine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku' | null;
   onSelectHome: () => void;
-  onSelectEngine: (engine: 'media' | 'commerce' | 'creative' | 'signal') => void;
+  onSelectEngine: (engine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku') => void;
   isDarkMode: boolean;
   granularity: string;
   setGranularity: (v: string) => void;
@@ -95,6 +95,11 @@ export default function Sidebar(props: SidebarProps) {
         <button onClick={() => onSelectEngine('commerce')} title="Commerce Tracker" className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${activeEngine === 'commerce' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
           {isSidebarOpen && <span className="truncate">Commerce Tracker</span>}
+        </button>
+
+        <button onClick={() => onSelectEngine('sku')} title="PID & SKU Performance" className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${activeEngine === 'sku' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
+          <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+          {isSidebarOpen && <span className="truncate">PID & SKU Analytics</span>}
         </button>
 
         <button onClick={() => onSelectEngine('creative')} title="Top Creative" className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${activeEngine === 'creative' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
@@ -187,7 +192,7 @@ export default function Sidebar(props: SidebarProps) {
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1.5">Brand</label>
                 <select value={filters.brand} onChange={(e) => onFilterChange('brand', e.target.value)} className={selectClass}>
-                  {getDependentOptions(CONFIG[activeEngine || 'media'].colBrand, 'brand').map(o => <option key={o} value={o}>{o}</option>)}
+                  {getDependentOptions(CONFIG[activeEngine === 'sku' ? 'commerce' : (activeEngine || 'media')].colBrand, 'brand').map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
               {activeEngine === 'media' && (

@@ -11,12 +11,27 @@ import Sidebar from '@/components/navigation/Sidebar';
 import GeneralOverviewView from '@/components/views/GeneralOverviewView';
 import DigitalMediaView from '@/components/views/DigitalMediaView';
 import CommerceTrackerView from '@/components/views/CommerceTrackerView';
+import SkuPerformanceView from '@/components/views/SkuPerformanceView';
 import TopCreativeView from '@/components/views/TopCreativeView';
 import MediaSignalView from '@/components/views/MediaSignalView';
 
+const getColVal = (row: any, ...keys: string[]) => {
+  if (!row) return '';
+  for (const k of keys) {
+    const target = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const found = Object.keys(row).find(
+      existing => existing.toLowerCase().replace(/[^a-z0-9]/g, '') === target
+    );
+    if (found !== undefined && row[found] !== undefined && row[found] !== '') {
+      return row[found];
+    }
+  }
+  return '';
+};
+
 export default function DashboardApp() {
   const [currentView, setCurrentView] = useState<'login' | 'welcome' | 'home' | 'dashboard'>('login');
-  const [activeEngine, setActiveEngine] = useState<'media' | 'commerce' | 'creative' | 'signal' | null>(null);
+  const [activeEngine, setActiveEngine] = useState<'media' | 'commerce' | 'creative' | 'signal' | 'sku' | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -75,15 +90,17 @@ export default function DashboardApp() {
     setHomePeriods([yyyy_mm]);
   }, []);
 
-  const loadData = async (engine: 'media' | 'commerce' | 'creative' | 'signal', forceSync = false) => {
+  const loadData = async (engine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku', forceSync = false) => {
     setDashboardContext('Overall');
     setTableColFilter1('All');
     setTableColFilter2('All');
     
     if (forceSync) {
-      dataCache.current[CONFIG[engine].sheet] = undefined as any;
-      if (engine === 'commerce') {
+      if (engine === 'sku' || engine === 'commerce') {
+        dataCache.current[CONFIG.commerce.sheet] = undefined as any;
         dataCache.current['CIR DAILY'] = undefined as any;
+      } else {
+        dataCache.current[CONFIG[engine].sheet] = undefined as any;
       }
       if (engine === 'signal') {
         dataCache.current['Media API'] = undefined as any;
@@ -101,7 +118,7 @@ export default function DashboardApp() {
           body: JSON.stringify({ action: 'getData', sheetName })
         });
         const result = await res.json();
-        if (result.success) {
+        if (result.success && Array.isArray(result.data)) {
           dataCache.current[sheetName] = result.data;
           return result.data;
         }
@@ -115,6 +132,9 @@ export default function DashboardApp() {
         ]);
         setRawData(commData);
         setCirDailyData(cirData);
+      } else if (engine === 'sku') {
+        const commData = await fetchSheet(CONFIG.commerce.sheet);
+        setRawData(commData);
       } else if (engine === 'signal') {
         const [signalData, mediaApiData, commerceData] = await Promise.all([
           fetchSheet("Media Signal"),
@@ -127,13 +147,14 @@ export default function DashboardApp() {
         const data = await fetchSheet(CONFIG[engine].sheet);
         setRawData(data);
       }
-    } catch {
+    } catch (err) {
+      console.error(err);
       alert("Network error loading sheet data.");
     }
     setIsLoading(false);
   };
 
-  const selectEngine = (engine: 'media' | 'commerce' | 'creative' | 'signal') => {
+  const selectEngine = (engine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku') => {
     setActiveEngine(engine);
     setCurrentView('dashboard');
     loadData(engine);
@@ -197,7 +218,8 @@ export default function DashboardApp() {
 
   const getDependentOptions = (colName: string, filterKeyToExclude: string) => {
     if (!rawData || rawData.length === 0) return ['All'];
-    const cfg = CONFIG[activeEngine || 'media'] as any;
+    const activeCfgKey = activeEngine === 'sku' ? 'commerce' : (activeEngine || 'media');
+    const cfg = CONFIG[activeCfgKey] as any;
     
     let filtered = rawData;
     if (filterKeyToExclude !== 'brand' && filters.brand !== 'All') filtered = filtered.filter(r => String(r[cfg.colBrand]) === filters.brand);
@@ -519,7 +541,8 @@ export default function DashboardApp() {
 
   const { curData, prevData, chartData, creativeData, globalDates } = useMemo(() => {
     if (!activeEngine || activeEngine === 'signal' || rawData.length === 0) return { curData: [], prevData: [], chartData: [], creativeData: [], globalDates: null };
-    const cfg = CONFIG[activeEngine];
+    const activeCfgKey = activeEngine === 'sku' ? 'commerce' : activeEngine;
+    const cfg = CONFIG[activeCfgKey];
 
     const filteredBase = rawData.filter(row => {
       if (filters.brand !== 'All' && String(row[cfg.colBrand]) !== filters.brand) return false;
@@ -576,17 +599,19 @@ export default function DashboardApp() {
     return { curData: cData, prevData: pData, chartData: chData, creativeData: [], globalDates: dates };
   }, [rawData, filters, activeEngine, granularity, dateMonth, dateWeekly, dateDailyStart, dateDailyEnd]);
 
-  // --- CIR DAILY DATA PIPELINE ---
+  // --- CIR DAILY DATA PIPELINE (WITH BRAND FX / BRAND COMPATIBILITY) ---
   const { cirCurData, cirPrevData } = useMemo(() => {
-    if (activeEngine !== 'commerce' || !cirDailyData.length) return { cirCurData: [], cirPrevData: [] };
+    if (activeEngine !== 'commerce' || !cirDailyData || cirDailyData.length === 0) {
+      return { cirCurData: [], cirPrevData: [] };
+    }
 
     const filteredCir = cirDailyData.filter(row => {
-  if (filters.brand !== 'All') {
-    const rowBrand = String(row['Brand fx'] || row['Brand'] || '').trim().toLowerCase();
-    if (rowBrand !== filters.brand.trim().toLowerCase()) return false;
-  }
-  return true;
-});
+      if (filters.brand !== 'All') {
+        const rowBrand = String(row['Brand fx'] || row['Brand'] || '').trim().toLowerCase();
+        if (rowBrand !== filters.brand.trim().toLowerCase()) return false;
+      }
+      return true;
+    });
 
     let cData: any[] = [];
     let pData: any[] = [];
@@ -608,21 +633,35 @@ export default function DashboardApp() {
     }
 
     filteredCir.forEach(row => {
-      const rowDate = parseSheetDate(row['Date']);
+      const rawDateStr = getColVal(row, 'Date', 'Tanggal');
+      const rowDate = parseSheetDate(rawDateStr);
       if (!rowDate) return;
       rowDate.setHours(0, 0, 0, 0);
-      row.parsedDate = rowDate;
+
+      const rowCopy = { ...row, parsedDate: rowDate };
 
       if (granularity === 'monthly' && dates) {
-        if (rowDate >= dates.curStart && rowDate <= dates.curMonthEnd) { row.bucket = "Month"; cData.push(row); }
-        if (rowDate >= dates.prevStart && rowDate <= dates.prevMonthEnd) { row.bucket = "Month"; pData.push(row); }
+        if (rowDate >= dates.curStart && rowDate <= dates.curMonthEnd) {
+          rowCopy.bucket = "Month";
+          cData.push(rowCopy);
+        }
+        if (rowDate >= dates.prevStart && rowDate <= dates.prevMonthEnd) {
+          rowCopy.bucket = "Month";
+          pData.push(rowCopy);
+        }
       } else if (granularity === 'weekly' && dates) {
-        if (rowDate >= dates.curStart && rowDate <= dates.curMtdEnd) { row.bucket = "W" + getWeekBucket(rowDate, dates.curStart); cData.push(row); }
-        if (rowDate >= dates.prevStart && rowDate <= dates.prevMtdEnd) { row.bucket = "W" + getWeekBucket(rowDate, dates.prevStart); pData.push(row); }
+        if (rowDate >= dates.curStart && rowDate <= dates.curMtdEnd) {
+          rowCopy.bucket = "W" + getWeekBucket(rowDate, dates.curStart);
+          cData.push(rowCopy);
+        }
+        if (rowDate >= dates.prevStart && rowDate <= dates.prevMtdEnd) {
+          rowCopy.bucket = "W" + getWeekBucket(rowDate, dates.prevStart);
+          pData.push(rowCopy);
+        }
       } else if (granularity === 'daily' && dStart && dEnd) {
         if (rowDate >= dStart && rowDate <= dEnd) {
-          row.bucket = `${rowDate.getFullYear()}-${String(rowDate.getMonth() + 1).padStart(2, '0')}-${String(rowDate.getDate()).padStart(2, '0')}`;
-          cData.push(row);
+          rowCopy.bucket = `${rowDate.getFullYear()}-${String(rowDate.getMonth() + 1).padStart(2, '0')}-${String(rowDate.getDate()).padStart(2, '0')}`;
+          cData.push(rowCopy);
         }
       }
     });
@@ -631,7 +670,9 @@ export default function DashboardApp() {
   }, [cirDailyData, filters.brand, activeEngine, granularity, dateMonth, dateWeekly, dateDailyStart, dateDailyEnd]);
 
   const { ctxCurData, ctxPrevData, ctxChartData } = useMemo(() => {
-    if (dashboardContext === 'Overall' || activeEngine === 'creative' || activeEngine === 'signal') return { ctxCurData: curData, ctxPrevData: prevData, ctxChartData: chartData };
+    if (dashboardContext === 'Overall' || activeEngine === 'creative' || activeEngine === 'signal' || activeEngine === 'sku') {
+      return { ctxCurData: curData, ctxPrevData: prevData, ctxChartData: chartData };
+    }
     const match = dashboardContext.toLowerCase();
     const filterFn = (row: any) => {
       const p = String(row[CONFIG[activeEngine as 'media'|'commerce'].colPlatform] || "").toLowerCase();
@@ -668,7 +709,7 @@ export default function DashboardApp() {
   const commerceKPIs = useMemo(() => {
     let totals = { overall: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 }, tiktok: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 }, shopee: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 } };
     const calc = (data: any[], isPrev: boolean) => {
-      if (activeEngine !== 'commerce') return;
+      if (activeEngine !== 'commerce' && activeEngine !== 'sku') return;
       data.forEach(row => {
         const e = parseNum(row["Expense"]); const g = parseNum(row["GMV"]);
         const plat = String(row[CONFIG.commerce.colPlatform] || "").toLowerCase();
@@ -1006,7 +1047,17 @@ export default function DashboardApp() {
         <div className="flex items-center justify-between mb-5 w-full">
           <div>
             <h1 className={`text-2xl lg:text-3xl font-black tracking-tight leading-none ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-              {currentView === 'home' ? 'General Overview' : activeEngine === 'signal' ? 'TikTok Media Signal Tracker' : activeEngine === 'media' ? 'Digital Media' : activeEngine === 'commerce' ? 'Commerce Tracker' : 'Top Creative'}
+              {currentView === 'home'
+                ? 'General Overview'
+                : activeEngine === 'signal'
+                ? 'TikTok Media Signal Tracker'
+                : activeEngine === 'media'
+                ? 'Digital Media'
+                : activeEngine === 'commerce'
+                ? 'Commerce Tracker'
+                : activeEngine === 'sku'
+                ? 'PID & SKU Performance'
+                : 'Top Creative'}
             </h1>
           </div>
 
@@ -1094,6 +1145,16 @@ export default function DashboardApp() {
               setTableColFilter1={setTableColFilter1}
               tableColFilter2={tableColFilter2}
               setTableColFilter2={setTableColFilter2}
+            />
+          )}
+
+          {activeEngine === 'sku' && (
+            <SkuPerformanceView
+              ctxCurData={ctxCurData}
+              isDarkMode={isDarkMode}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              brandOptions={getDependentOptions(CONFIG.commerce.colBrand, 'brand')}
             />
           )}
 
