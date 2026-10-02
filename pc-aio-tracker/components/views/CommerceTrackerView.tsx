@@ -1023,7 +1023,7 @@ export default function CommerceTrackerView({
         {/* OVERALL CARD */}
         <div
           onClick={() => setDashboardContext("Overall")}
-          className={`bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === "Overall" ? "ring-4 ring-indigo-300 shadow-indigo-600/40" : ""}`}>
+          className={`[container-type:inline-size] min-w-0 bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === "Overall" ? "ring-4 ring-indigo-300 shadow-indigo-600/40" : ""}`}>
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">
               Overall Commerce
@@ -1043,12 +1043,12 @@ export default function CommerceTrackerView({
             </div>
           </div>
           <div className="space-y-3">
-            <div className="border-b border-indigo-500/80 pb-2.5">
-              <span className="text-xs font-bold text-indigo-200 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-indigo-500/80 pb-2.5">
+              <span className="text-xs font-bold text-indigo-200 leading-tight">
                 Expense
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatIDR(enhancedKPIs.overall.exp)}
                 </span>
                 {renderGR(
@@ -1059,12 +1059,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-indigo-500/80 pb-2.5">
-              <span className="text-xs font-bold text-indigo-200 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-indigo-500/80 pb-2.5">
+              <span className="text-xs font-bold text-indigo-200 leading-tight">
                 GMV (Ads)
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatIDR(enhancedKPIs.overall.gmv)}
                 </span>
                 {renderGR(
@@ -1075,12 +1075,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-indigo-500/80 pb-2.5">
-              <span className="text-xs font-bold text-indigo-200 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-indigo-500/80 pb-2.5">
+              <span className="text-xs font-bold text-indigo-200 leading-tight">
                 GMV Sales
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatIDR(enhancedKPIs.overall.gmvSales)}
                 </span>
                 {renderGR(
@@ -1091,12 +1091,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-indigo-500/80 pb-2.5">
-              <span className="text-xs font-bold text-indigo-200 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-indigo-500/80 pb-2.5">
+              <span className="text-xs font-bold text-indigo-200 leading-tight">
                 CIR %
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-amber-300 leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-amber-300 leading-none">
                   {formatPct(enhancedKPIs.overall.cir)}
                 </span>
                 {renderGR(
@@ -1107,12 +1107,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-indigo-500/80 pb-2.5">
-              <span className="text-xs font-bold text-indigo-200 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-indigo-500/80 pb-2.5">
+              <span className="text-xs font-bold text-indigo-200 leading-tight">
                 Ads Contribution
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatPct(enhancedKPIs.overall.adsContrib)}
                 </span>
                 {renderGR(
@@ -1123,12 +1123,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="pt-1">
-              <span className="text-xs font-bold text-indigo-200 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 pt-1">
+              <span className="text-xs font-bold text-indigo-200 leading-tight">
                 ROAS
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-emerald-300 leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-emerald-300 leading-none">
                   {enhancedKPIs.overall.roas}
                 </span>
                 {renderGR(
@@ -1145,7 +1145,7 @@ export default function CommerceTrackerView({
         {/* TIKTOK SHOP CARD */}
         <div
           onClick={() => setDashboardContext("TikTok")}
-          className={`bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === "TikTok" ? "ring-4 ring-slate-400 shadow-slate-900/40" : ""}`}>
+          className={`[container-type:inline-size] min-w-0 bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === "TikTok" ? "ring-4 ring-slate-400 shadow-slate-900/40" : ""}`}>
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">
               TikTok Shop
@@ -1160,12 +1160,12 @@ export default function CommerceTrackerView({
             </div>
           </div>
           <div className="space-y-3">
-            <div className="border-b border-slate-600/80 pb-2.5">
-              <span className="text-xs font-bold text-slate-400 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-600/80 pb-2.5">
+              <span className="text-xs font-bold text-slate-400 leading-tight">
                 Expense
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatIDR(enhancedKPIs.tiktok.exp)}
                 </span>
                 {renderGR(
@@ -1176,12 +1176,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-slate-600/80 pb-2.5">
-              <span className="text-xs font-bold text-slate-400 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-600/80 pb-2.5">
+              <span className="text-xs font-bold text-slate-400 leading-tight">
                 GMV (Ads)
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatIDR(enhancedKPIs.tiktok.gmv)}
                 </span>
                 {renderGR(
@@ -1192,12 +1192,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-slate-600/80 pb-2.5">
-              <span className="text-xs font-bold text-slate-400 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-600/80 pb-2.5">
+              <span className="text-xs font-bold text-slate-400 leading-tight">
                 GMV Sales
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatIDR(enhancedKPIs.tiktok.gmvSales)}
                 </span>
                 {renderGR(
@@ -1208,12 +1208,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-slate-600/80 pb-2.5">
-              <span className="text-xs font-bold text-slate-400 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-600/80 pb-2.5">
+              <span className="text-xs font-bold text-slate-400 leading-tight">
                 CIR %
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-amber-300 leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-amber-300 leading-none">
                   {formatPct(enhancedKPIs.tiktok.cir)}
                 </span>
                 {renderGR(
@@ -1224,12 +1224,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-slate-600/80 pb-2.5">
-              <span className="text-xs font-bold text-slate-400 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-600/80 pb-2.5">
+              <span className="text-xs font-bold text-slate-400 leading-tight">
                 Ads Contribution
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatPct(enhancedKPIs.tiktok.adsContrib)}
                 </span>
                 {renderGR(
@@ -1240,12 +1240,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="pt-1">
-              <span className="text-xs font-bold text-slate-400 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 pt-1">
+              <span className="text-xs font-bold text-slate-400 leading-tight">
                 ROAS
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-emerald-400 leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-emerald-400 leading-none">
                   {enhancedKPIs.tiktok.roas}
                 </span>
                 {renderGR(
@@ -1262,7 +1262,7 @@ export default function CommerceTrackerView({
         {/* SHOPEE CARD */}
         <div
           onClick={() => setDashboardContext("Shopee")}
-          className={`bg-orange-500 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === "Shopee" ? "ring-4 ring-orange-300 shadow-orange-500/40" : ""}`}>
+          className={`[container-type:inline-size] min-w-0 bg-orange-500 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === "Shopee" ? "ring-4 ring-orange-300 shadow-orange-500/40" : ""}`}>
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-black text-orange-100 uppercase tracking-widest">
               Shopee
@@ -1277,12 +1277,12 @@ export default function CommerceTrackerView({
             </div>
           </div>
           <div className="space-y-3">
-            <div className="border-b border-orange-400/80 pb-2.5">
-              <span className="text-xs font-bold text-orange-100 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-orange-400/80 pb-2.5">
+              <span className="text-xs font-bold text-orange-100 leading-tight">
                 Expense
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatIDR(enhancedKPIs.shopee.exp)}
                 </span>
                 {renderGR(
@@ -1293,12 +1293,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-orange-400/80 pb-2.5">
-              <span className="text-xs font-bold text-orange-100 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-orange-400/80 pb-2.5">
+              <span className="text-xs font-bold text-orange-100 leading-tight">
                 GMV (Ads)
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatIDR(enhancedKPIs.shopee.gmv)}
                 </span>
                 {renderGR(
@@ -1309,12 +1309,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-orange-400/80 pb-2.5">
-              <span className="text-xs font-bold text-orange-100 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-orange-400/80 pb-2.5">
+              <span className="text-xs font-bold text-orange-100 leading-tight">
                 GMV Sales
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatIDR(enhancedKPIs.shopee.gmvSales)}
                 </span>
                 {renderGR(
@@ -1325,12 +1325,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-orange-400/80 pb-2.5">
-              <span className="text-xs font-bold text-orange-100 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-orange-400/80 pb-2.5">
+              <span className="text-xs font-bold text-orange-100 leading-tight">
                 CIR %
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-amber-200 leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-amber-200 leading-none">
                   {formatPct(enhancedKPIs.shopee.cir)}
                 </span>
                 {renderGR(
@@ -1341,12 +1341,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="border-b border-orange-400/80 pb-2.5">
-              <span className="text-xs font-bold text-orange-100 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-orange-400/80 pb-2.5">
+              <span className="text-xs font-bold text-orange-100 leading-tight">
                 Ads Contribution
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-white leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
                   {formatPct(enhancedKPIs.shopee.adsContrib)}
                 </span>
                 {renderGR(
@@ -1357,12 +1357,12 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="pt-1">
-              <span className="text-xs font-bold text-orange-100 block mb-1">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 pt-1">
+              <span className="text-xs font-bold text-orange-100 leading-tight">
                 ROAS
               </span>
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-black text-[clamp(1.05rem,1.8vw,1.35rem)] text-emerald-200 leading-none truncate">
+              <div className="flex items-center gap-2 justify-self-end min-w-0">
+                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-emerald-200 leading-none">
                   {enhancedKPIs.shopee.roas}
                 </span>
                 {renderGR(
@@ -1590,6 +1590,10 @@ export default function CommerceTrackerView({
               className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? "text-white" : "text-slate-800"}`}>
               Platform & Ad Type Pivot
             </h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Click any metric cell to inspect SKUs for that specific date
+              cut-off[cite: 14, 17]
+            </p>
           </div>
           <div className="flex flex-wrap gap-3 w-full md:w-auto">
             <select
