@@ -10,6 +10,11 @@ export const parseNum = (val: any): number => {
 export const formatIDR = (num: number): string => 
   (Number(num) || 0).toLocaleString('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 
+export const formatCurrency = (num: number, symbol?: string): string => {
+  const formatted = (Number(num) || 0).toLocaleString('id-ID', { maximumFractionDigits: 0 });
+  return symbol !== undefined ? `${symbol} ${formatted}` : formatIDR(num);
+};
+
 export const formatNum = (num: number): string => 
   (Number(num) || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 

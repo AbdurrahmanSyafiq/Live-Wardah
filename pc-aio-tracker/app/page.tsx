@@ -14,6 +14,7 @@ import CommerceTrackerView from '@/components/views/CommerceTrackerView';
 import SkuPerformanceView from '@/components/views/SkuPerformanceView';
 import TopCreativeView from '@/components/views/TopCreativeView';
 import MediaSignalView from '@/components/views/MediaSignalView';
+import PidPushRankTrackerView from '@/components/views/PidPushRankTrackerView';
 
 const getColVal = (row: any, ...keys: string[]) => {
   if (!row) return '';
@@ -31,7 +32,7 @@ const getColVal = (row: any, ...keys: string[]) => {
 
 export default function DashboardApp() {
   const [currentView, setCurrentView] = useState<'login' | 'welcome' | 'home' | 'dashboard'>('login');
-  const [activeEngine, setActiveEngine] = useState<'media' | 'commerce' | 'creative' | 'signal' | 'sku' | null>(null);
+  const [activeEngine, setActiveEngine] = useState<'media' | 'commerce' | 'creative' | 'signal' | 'sku' | 'pidRank' | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,6 +44,13 @@ export default function DashboardApp() {
   const [extraSheetsData, setExtraSheetsData] = useState<{ mediaApi: any[]; commerce: any[] }>({ mediaApi: [], commerce: [] });
   const [homeMediaData, setHomeMediaData] = useState<any[]>([]);
   const [homeCommerceData, setHomeCommerceData] = useState<any[]>([]);
+  const [pidRankData, setPidRankData] = useState<{ commerce: any[]; category: any[]; sales: any[]; cid: any[]; adjustments: any[] }>({
+    commerce: [],
+    category: [],
+    sales: [],
+    cid: [],
+    adjustments: []
+  });
   
   const [filters, setFilters] = useState(defaultFilters);
   const [selectedSignalPeriod, setSelectedSignalPeriod] = useState<string>('');
@@ -90,7 +98,7 @@ export default function DashboardApp() {
     setHomePeriods([yyyy_mm]);
   }, []);
 
-  const loadData = async (engine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku', forceSync = false) => {
+  const loadData = async (engine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku' | 'pidRank', forceSync = false) => {
     setDashboardContext('Overall');
     setTableColFilter1('All');
     setTableColFilter2('All');
@@ -99,6 +107,12 @@ export default function DashboardApp() {
       if (engine === 'sku' || engine === 'commerce') {
         dataCache.current[CONFIG.commerce.sheet] = undefined as any;
         dataCache.current['CIR DAILY'] = undefined as any;
+      } else if (engine === 'pidRank') {
+        dataCache.current[CONFIG.pidRank.sheetCommerce] = undefined as any;
+        dataCache.current[CONFIG.pidRank.sheetCategory] = undefined as any;
+        dataCache.current[CONFIG.pidRank.sheetSales] = undefined as any;
+        dataCache.current[CONFIG.pidRank.sheetCid] = undefined as any;
+        dataCache.current[CONFIG.pidRank.sheetAdjustments] = undefined as any;
       } else {
         dataCache.current[CONFIG[engine].sheet] = undefined as any;
       }
@@ -135,6 +149,21 @@ export default function DashboardApp() {
       } else if (engine === 'sku') {
         const commData = await fetchSheet(CONFIG.commerce.sheet);
         setRawData(commData);
+      } else if (engine === 'pidRank') {
+        const [commData, catData, sData, cData, adjData] = await Promise.all([
+          fetchSheet(CONFIG.pidRank.sheetCommerce),
+          fetchSheet(CONFIG.pidRank.sheetCategory),
+          fetchSheet(CONFIG.pidRank.sheetSales),
+          fetchSheet(CONFIG.pidRank.sheetCid),
+          fetchSheet(CONFIG.pidRank.sheetAdjustments)
+        ]);
+        setPidRankData({
+          commerce: commData,
+          category: catData,
+          sales: sData,
+          cid: cData,
+          adjustments: adjData
+        });
       } else if (engine === 'signal') {
         const [signalData, mediaApiData, commerceData] = await Promise.all([
           fetchSheet("Media Signal"),
@@ -154,7 +183,53 @@ export default function DashboardApp() {
     setIsLoading(false);
   };
 
-  const selectEngine = (engine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku') => {
+  const handleAddAdjustment = async (data: any) => {
+    try {
+      const res = await fetch('/api/sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'addAdjustment', ...data })
+      });
+      const result = await res.json();
+      if (result.success && result.adjustment) {
+        setPidRankData(prev => ({
+          ...prev,
+          adjustments: [result.adjustment, ...prev.adjustments]
+        }));
+      } else {
+        throw new Error(result.error || 'Failed to save adjustment');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error saving adjustment');
+      throw err;
+    }
+  };
+
+  const handleUpdateAdjustmentStatus = async (id: string, status: 'Pending' | 'Adjusted', user: string) => {
+    try {
+      const res = await fetch('/api/sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'updateAdjustmentStatus', id, status, userName: user })
+      });
+      const result = await res.json();
+      if (result.success) {
+        setPidRankData(prev => ({
+          ...prev,
+          adjustments: prev.adjustments.map(a =>
+            a.id === id ? { ...a, status, updatedAt: result.updatedAt, updatedBy: user } : a
+          )
+        }));
+      } else {
+        throw new Error(result.error || 'Failed to update adjustment');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error updating status');
+      throw err;
+    }
+  };
+
+  const selectEngine = (engine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku' | 'pidRank') => {
     setActiveEngine(engine);
     setCurrentView('dashboard');
     loadData(engine);
@@ -455,9 +530,9 @@ export default function DashboardApp() {
 
     const metric = (name: string, key: string, fmt: (value: number) => string, isInv = false, overridePlan?: number) => ({
       name,
-      act: signalCompiled.actual?.[key],
-      pln: overridePlan !== undefined ? overridePlan : signalCompiled.plan?.[key],
-      prv: signalCompiled.prev?.[key],
+      act: (signalCompiled.actual as any)?.[key],
+      pln: overridePlan !== undefined ? overridePlan : (signalCompiled.plan as any)?.[key],
+      prv: (signalCompiled.prev as any)?.[key],
       fmt,
       isInv
     });
@@ -540,9 +615,9 @@ export default function DashboardApp() {
   }, [signalCompiled]);
 
   const { curData, prevData, chartData, creativeData, globalDates } = useMemo(() => {
-    if (!activeEngine || activeEngine === 'signal' || rawData.length === 0) return { curData: [], prevData: [], chartData: [], creativeData: [], globalDates: null };
+    if (!activeEngine || activeEngine === 'signal' || activeEngine === 'pidRank' || rawData.length === 0) return { curData: [], prevData: [], chartData: [], creativeData: [], globalDates: null };
     const activeCfgKey = activeEngine === 'sku' ? 'commerce' : activeEngine;
-    const cfg = CONFIG[activeCfgKey];
+    const cfg: any = CONFIG[activeCfgKey as keyof typeof CONFIG];
 
     const filteredBase = rawData.filter(row => {
       if (filters.brand !== 'All' && String(row[cfg.colBrand]) !== filters.brand) return false;
@@ -1155,6 +1230,21 @@ export default function DashboardApp() {
               filters={filters}
               onFilterChange={handleFilterChange}
               brandOptions={getDependentOptions(CONFIG.commerce.colBrand, 'brand')}
+            />
+          )}
+
+          {activeEngine === 'pidRank' && (
+            <PidPushRankTrackerView
+              commerceData={pidRankData.commerce}
+              categoryData={pidRankData.category}
+              salesData={pidRankData.sales}
+              cidData={pidRankData.cid}
+              adjustments={pidRankData.adjustments}
+              isDarkMode={isDarkMode}
+              onAddAdjustment={handleAddAdjustment}
+              onUpdateAdjustmentStatus={handleUpdateAdjustmentStatus}
+              onSyncData={() => loadData('pidRank', true)}
+              isLoading={isLoading}
             />
           )}
 

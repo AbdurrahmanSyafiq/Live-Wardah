@@ -5,9 +5,9 @@ interface SidebarProps {
   isSidebarOpen: boolean;
   setIsSidebarOpen: (v: boolean) => void;
   currentView: 'login' | 'welcome' | 'home' | 'dashboard';
-  activeEngine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku' | null;
+  activeEngine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku' | 'pidRank' | null;
   onSelectHome: () => void;
-  onSelectEngine: (engine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku') => void;
+  onSelectEngine: (engine: 'media' | 'commerce' | 'creative' | 'signal' | 'sku' | 'pidRank') => void;
   isDarkMode: boolean;
   granularity: string;
   setGranularity: (v: string) => void;
@@ -100,6 +100,11 @@ export default function Sidebar(props: SidebarProps) {
         <button onClick={() => onSelectEngine('sku')} title="PID & SKU Performance" className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${activeEngine === 'sku' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
           {isSidebarOpen && <span className="truncate">PID & SKU Analytics</span>}
+        </button>
+
+        <button onClick={() => onSelectEngine('pidRank')} title="PID Push Rank Tracker" className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${activeEngine === 'pidRank' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>
+          <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+          {isSidebarOpen && <span className="truncate">PID Push Rank Tracker</span>}
         </button>
 
         <button onClick={() => onSelectEngine('creative')} title="Top Creative" className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${activeEngine === 'creative' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#111827] text-slate-400'}`}>

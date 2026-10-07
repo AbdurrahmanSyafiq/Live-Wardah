@@ -430,7 +430,7 @@ export default function DigitalMediaView({
         const weekM: any = {}; let curCumul = getBaseMetrics(); let prevCumul = getBaseMetrics();
         
         weeks.forEach(w => { 
-          Object.keys(curCumul).forEach(k => curCumul[k] += g.weeks[w].cur[k]); Object.keys(prevCumul).forEach(k => prevCumul[k] += g.weeks[w].prev[k]);
+          Object.keys(curCumul).forEach(k => (curCumul as any)[k] += g.weeks[w].cur[k]); Object.keys(prevCumul).forEach(k => (prevCumul as any)[k] += g.weeks[w].prev[k]);
           weekM[w] = { cur: getDisplayMetricsArray(curCumul, adTypeStr), prev: getDisplayMetricsArray(prevCumul, adTypeStr) }; 
         });
 

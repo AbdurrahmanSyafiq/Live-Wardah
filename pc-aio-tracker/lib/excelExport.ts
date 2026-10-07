@@ -117,3 +117,128 @@ export async function exportMediaSignalToExcel({ rawData, extraSheetsData, selec
   const buffer = await workbook.xlsx.writeBuffer();
   saveAs(new Blob([buffer as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `Media_Signal_All_Brands_${selectedPeriod.start}_to_${selectedPeriod.end}.xlsx`);
 }
+
+export interface PidExportItem {
+  cluster: string;
+  cid: string;
+  skuName: string;
+  pid: string;
+  dailyData: Record<string, {
+    spend: number;
+    adsGmv: number;
+    sales: number;
+    roas: number;
+    cir: number;
+    displayDate: string;
+  }>;
+}
+
+export async function exportPidPushRankToExcel(
+  items: PidExportItem[],
+  dates: string[],
+  displayDates: Record<string, string>,
+  periodLabel: string
+) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'PID Push Rank Tracker';
+  workbook.created = new Date();
+
+  const worksheet = workbook.addWorksheet('PID Push Rank');
+  const border: Partial<ExcelJS.Borders> = {
+    top: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+    left: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+    bottom: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+    right: { style: 'thin', color: { argb: 'FFD3D3D3' } }
+  };
+
+  // Row 1: Merged dates
+  const row1Values: (string | number)[] = ['', '', '', ''];
+  // Row 2: Sub-headers
+  const row2Values: (string | number)[] = ['Cluster', 'CID', 'SKU Name', 'PID'];
+
+  dates.forEach((d) => {
+    const disp = displayDates[d] || d;
+    row1Values.push(disp, '', '', '', '');
+    row2Values.push('Spend', 'Ads GMV', 'Sales', 'ROAS', 'CIR');
+  });
+
+  const headerRow1 = worksheet.addRow(row1Values);
+  const headerRow2 = worksheet.addRow(row2Values);
+
+  headerRow1.height = 24;
+  headerRow2.height = 22;
+
+  // Merge columns in Row 1 for each date
+  let startCol = 5;
+  dates.forEach(() => {
+    worksheet.mergeCells(1, startCol, 1, startCol + 4);
+    startCol += 5;
+  });
+
+  // Style Header Row 1
+  headerRow1.eachCell((cell) => {
+    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border = border;
+  });
+
+  // Style Header Row 2
+  headerRow2.eachCell((cell, colNum) => {
+    cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    cell.alignment = { vertical: 'middle', horizontal: colNum > 4 ? 'right' : 'left' };
+    cell.border = border;
+  });
+
+  // Add Data Rows
+  items.forEach((item) => {
+    const rowVals: (string | number)[] = [
+      item.cluster || '',
+      item.cid || '',
+      item.skuName || '',
+      item.pid || ''
+    ];
+
+    dates.forEach((d) => {
+      const rec = item.dailyData[d] || { spend: 0, adsGmv: 0, sales: 0, roas: 0, cir: 0 };
+      rowVals.push(rec.spend, rec.adsGmv, rec.sales, rec.roas, rec.cir ? rec.cir / 100 : 0);
+    });
+
+    const dataRow = worksheet.addRow(rowVals);
+    dataRow.height = 20;
+
+    dataRow.eachCell((cell, colNum) => {
+      cell.font = { name: 'Calibri', size: 10 };
+      cell.border = border;
+      if (colNum <= 4) {
+        cell.alignment = { vertical: 'middle', horizontal: colNum === 4 || colNum === 2 ? 'center' : 'left' };
+      } else {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        const subColIdx = (colNum - 5) % 5;
+        if (subColIdx === 0 || subColIdx === 1 || subColIdx === 2) {
+          cell.numFmt = '#,##0';
+        } else if (subColIdx === 3) {
+          cell.numFmt = '0.00';
+        } else if (subColIdx === 4) {
+          cell.numFmt = '0.00%';
+        }
+      }
+    });
+  });
+
+  // Set column widths
+  worksheet.getColumn(1).width = 20; // Cluster
+  worksheet.getColumn(2).width = 22; // CID
+  worksheet.getColumn(3).width = 40; // SKU Name
+  worksheet.getColumn(4).width = 24; // PID
+  for (let c = 5; c <= 4 + dates.length * 5; c++) {
+    worksheet.getColumn(c).width = 14;
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  saveAs(
+    new Blob([buffer as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `PID_Push_Rank_Tracker_${periodLabel.replace(/\s+/g, '_')}.xlsx`
+  );
+}
