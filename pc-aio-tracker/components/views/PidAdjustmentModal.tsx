@@ -307,7 +307,7 @@ export function AdjustmentLogsDrawer({
   const bgModal = isDarkMode ? 'bg-[#0f172a]' : 'bg-white';
   const bgHeader = isDarkMode ? 'bg-[#131d33]' : 'bg-slate-50';
   const bgSubHeader = isDarkMode ? 'bg-[#0c1222]' : 'bg-slate-100/70';
-  const tableHeadBg = isDarkMode ? 'bg-[#1e293b] text-slate-300' : 'bg-slate-100 text-slate-700';
+  const tableHeadBg = 'bg-[#0f172a] text-white';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">

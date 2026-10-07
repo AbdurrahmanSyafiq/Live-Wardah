@@ -671,17 +671,17 @@ export default function PidPushRankTrackerView({
 
       {/* 4. Tracking Result Table with Frozen 4 Columns */}
       <div className={`rounded-2xl border ${borderCol} shadow-sm overflow-hidden ${cardBg}`}>
-        <div className="overflow-x-auto max-h-[75vh]">
+        <div className="overflow-auto max-h-[75vh]">
           <table className="w-full text-left border-separate border-spacing-0 text-xs whitespace-nowrap">
             {/* Top Multi-level Header */}
-            <thead className="sticky top-0 z-30 font-bold uppercase tracking-wider text-[11px]">
+            <thead className="font-bold uppercase tracking-wider text-[11px]">
               {/* Row 1: Fixed 4 Column Headers + Merged Date Headers */}
-              <tr className={`border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}>
+              <tr className="border-b border-slate-700 h-[38px]">
                 {/* Col 1: Cluster (Frozen) */}
                 <th
                   rowSpan={2}
                   onClick={() => handleSort('cluster')}
-                  className={`w-[130px] min-w-[130px] max-w-[130px] py-3 px-3 border-r ${borderCol} sticky left-0 top-0 z-50 ${tableHeaderTopBg} ${mainText} cursor-pointer hover:underline select-none align-middle`}
+                  className="w-[130px] min-w-[130px] max-w-[130px] py-3 px-3 border-r border-b border-slate-700 sticky left-0 top-0 z-50 bg-[#0f172a] text-white font-black cursor-pointer hover:underline select-none align-middle"
                 >
                   Cluster {sortField === 'cluster' ? (sortAsc ? '▲' : '▼') : ''}
                 </th>
@@ -689,7 +689,7 @@ export default function PidPushRankTrackerView({
                 {/* Col 2: CID (Frozen) */}
                 <th
                   rowSpan={2}
-                  className={`w-[140px] min-w-[140px] max-w-[140px] py-3 px-3 border-r ${borderCol} sticky left-[130px] top-0 z-50 ${tableHeaderTopBg} ${mainText} align-middle`}
+                  className="w-[140px] min-w-[140px] max-w-[140px] py-3 px-3 border-r border-b border-slate-700 sticky left-[130px] top-0 z-50 bg-[#0f172a] text-white font-black align-middle"
                 >
                   CID
                 </th>
@@ -698,7 +698,7 @@ export default function PidPushRankTrackerView({
                 <th
                   rowSpan={2}
                   onClick={() => handleSort('skuName')}
-                  className={`w-[260px] min-w-[260px] max-w-[260px] py-3 px-4 border-r ${borderCol} sticky left-[270px] top-0 z-50 ${tableHeaderTopBg} ${mainText} cursor-pointer hover:underline select-none align-middle`}
+                  className="w-[260px] min-w-[260px] max-w-[260px] py-3 px-4 border-r border-b border-slate-700 sticky left-[270px] top-0 z-50 bg-[#0f172a] text-white font-black cursor-pointer hover:underline select-none align-middle"
                 >
                   SKU Name {sortField === 'skuName' ? (sortAsc ? '▲' : '▼') : ''}
                 </th>
@@ -707,7 +707,7 @@ export default function PidPushRankTrackerView({
                 <th
                   rowSpan={2}
                   onClick={() => handleSort('pid')}
-                  className={`w-[160px] min-w-[160px] max-w-[160px] py-3 px-3 border-r-2 ${isDarkMode ? 'border-slate-600' : 'border-slate-400'} shadow-[4px_0_8px_-2px_rgba(0,0,0,0.15)] sticky left-[530px] top-0 z-50 ${tableHeaderTopBg} ${mainText} cursor-pointer hover:underline select-none align-middle`}
+                  className="w-[160px] min-w-[160px] max-w-[160px] py-3 px-3 border-r-2 border-b border-slate-600 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.3)] sticky left-[530px] top-0 z-50 bg-[#0f172a] text-white font-black cursor-pointer hover:underline select-none align-middle"
                 >
                   PID {sortField === 'pid' ? (sortAsc ? '▲' : '▼') : ''}
                 </th>
@@ -717,7 +717,7 @@ export default function PidPushRankTrackerView({
                   <th
                     key={dateStr}
                     colSpan={5}
-                    className={`py-2.5 px-3 text-center border-r border-b ${borderCol} ${tableHeaderTopBg} ${mainText} font-black tracking-wide`}
+                    className="py-2.5 px-3 text-center border-r border-b border-slate-700 sticky top-0 z-30 bg-[#0f172a] text-white font-black tracking-wide h-[38px]"
                   >
                     {formatDisplayDate(dateStr)}
                   </th>
@@ -725,22 +725,22 @@ export default function PidPushRankTrackerView({
               </tr>
 
               {/* Row 2: Sub-columns (Spend, Ads GMV, Sales, ROAS, CIR) */}
-              <tr className={`border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}>
+              <tr className="border-b border-slate-700 h-[36px]">
                 {activeDates.map((dateStr) => (
                   <React.Fragment key={`sub-${dateStr}`}>
-                    <th className={`w-[90px] min-w-[90px] max-w-[90px] py-2 px-2 text-right font-black border-r border-b ${borderCol} ${tableHeaderSubBg} ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                    <th className="w-[90px] min-w-[90px] max-w-[90px] py-2 px-2 text-right font-black border-r border-b border-slate-700 sticky top-[38px] z-30 bg-[#182338] text-white">
                       Spend
                     </th>
-                    <th className={`w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b ${borderCol} ${tableHeaderSubBg} ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                    <th className="w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b border-slate-700 sticky top-[38px] z-30 bg-[#182338] text-white">
                       Ads GMV
                     </th>
-                    <th className={`w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b ${borderCol} ${tableHeaderSubBg} ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                    <th className="w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b border-slate-700 sticky top-[38px] z-30 bg-[#182338] text-white">
                       Sales
                     </th>
-                    <th className={`w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b ${borderCol} ${tableHeaderSubBg} ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                    <th className="w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b border-slate-700 sticky top-[38px] z-30 bg-[#182338] text-white">
                       ROAS
                     </th>
-                    <th className={`w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b ${borderCol} ${tableHeaderSubBg} ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+                    <th className="w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b border-slate-700 sticky top-[38px] z-30 bg-[#182338] text-white">
                       CIR
                     </th>
                   </React.Fragment>
