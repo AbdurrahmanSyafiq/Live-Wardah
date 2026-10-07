@@ -105,12 +105,31 @@ export async function POST(request: Request) {
         userName || "User",
         now,
         "",
-        ""
+        "",
+        body.actionTaken || ""
       ];
+
+      // Ensure header L1 has 'Action Taken' if not present
+      try {
+        const headerRes = await sheets.spreadsheets.values.get({
+          spreadsheetId: process.env.SPREADSHEET_ID,
+          range: 'Adjustment Logs!L1',
+        });
+        if (!headerRes.data.values || !headerRes.data.values[0] || !headerRes.data.values[0][0]) {
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: process.env.SPREADSHEET_ID,
+            range: 'Adjustment Logs!L1',
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [['Action Taken']] },
+          });
+        }
+      } catch (e) {
+        console.warn('Could not verify header L1:', e);
+      }
 
       await sheets.spreadsheets.values.append({
         spreadsheetId: process.env.SPREADSHEET_ID,
-        range: 'Adjustment Logs!A:K',
+        range: 'Adjustment Logs!A:L',
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [newRow],
@@ -130,7 +149,8 @@ export async function POST(request: Request) {
           createdBy: userName || "User",
           createdAt: now,
           updatedAt: "",
-          updatedBy: ""
+          updatedBy: "",
+          actionTaken: body.actionTaken || ""
         }
       });
     }
@@ -153,7 +173,7 @@ export async function POST(request: Request) {
       const sheets = google.sheets({ version: 'v4', auth });
       const getRes = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SPREADSHEET_ID,
-        range: 'Adjustment Logs!A:K',
+        range: 'Adjustment Logs!A:L',
       });
       const rows = getRes.data.values || [];
       const rowIndex = rows.findIndex(r => r[0] === id);
@@ -183,6 +203,71 @@ export async function POST(request: Request) {
         success: true,
         id,
         status,
+        updatedAt: now,
+        updatedBy: userName || "User"
+      });
+    }
+
+    // --- 5. UPDATE ACTION TAKEN ---
+    if (action === 'updateActionTaken') {
+      const { id, actionTaken, userName } = body;
+      if (!id) {
+        return NextResponse.json({ error: "Missing adjustment ID." }, { status: 400 });
+      }
+
+      const auth = new google.auth.GoogleAuth({
+        credentials: {
+          client_email: process.env.GOOGLE_CLIENT_EMAIL,
+          private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n').replace(/"/g, ''),
+        },
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      });
+
+      const sheets = google.sheets({ version: 'v4', auth });
+      const getRes = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SPREADSHEET_ID,
+        range: 'Adjustment Logs!A:L',
+      });
+      const rows = getRes.data.values || [];
+      const rowIndex = rows.findIndex(r => r[0] === id);
+      if (rowIndex === -1) {
+        return NextResponse.json({ error: `Adjustment with ID ${id} not found.` }, { status: 404 });
+      }
+
+      const sheetRowNum = rowIndex + 1;
+      const now = new Date().toISOString();
+
+      // Ensure header L1 has 'Action Taken' if empty
+      if (!rows[0] || !rows[0][11]) {
+        try {
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: process.env.SPREADSHEET_ID,
+            range: 'Adjustment Logs!L1',
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [['Action Taken']] },
+          });
+        } catch (e) {
+          console.warn('Could not set header L1:', e);
+        }
+      }
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: process.env.SPREADSHEET_ID,
+        range: `Adjustment Logs!J${sheetRowNum}:L${sheetRowNum}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [[
+            now,                     // Updated At (Col J)
+            userName || "User",      // Updated By (Col K)
+            actionTaken || ""        // Action Taken (Col L)
+          ]],
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        id,
+        actionTaken: actionTaken || "",
         updatedAt: now,
         updatedBy: userName || "User"
       });

@@ -15,6 +15,7 @@ interface PidPushRankTrackerViewProps {
   isDarkMode: boolean;
   onAddAdjustment: (data: any) => Promise<void>;
   onUpdateAdjustmentStatus: (id: string, status: 'Pending' | 'Adjusted', user: string) => Promise<void>;
+  onUpdateActionTaken?: (id: string, actionTaken: string, user: string) => Promise<void>;
   onSyncData: () => void;
   isLoading?: boolean;
 }
@@ -67,6 +68,7 @@ export default function PidPushRankTrackerView({
   isDarkMode,
   onAddAdjustment,
   onUpdateAdjustmentStatus,
+  onUpdateActionTaken,
   onSyncData,
   isLoading = false
 }: PidPushRankTrackerViewProps) {
@@ -487,6 +489,10 @@ export default function PidPushRankTrackerView({
   const tableFreezeHoverBg = isDarkMode ? 'group-hover:bg-[#1a253a]' : 'group-hover:bg-slate-100';
   const tableRowHoverBg = isDarkMode ? 'hover:bg-[#131d33]' : 'hover:bg-slate-50';
 
+  const tableTotalWidth = useMemo(() => {
+    return 130 + 140 + 280 + 160 + (activeDates.length * 420);
+  }, [activeDates.length]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* 1. Header & Controls Bar */}
@@ -725,7 +731,22 @@ export default function PidPushRankTrackerView({
       {/* 4. Tracking Result Table with Frozen 4 Columns */}
       <div className={`rounded-2xl border ${borderCol} shadow-sm overflow-hidden ${cardBg}`}>
         <div className="overflow-auto max-h-[75vh]">
-          <table className="w-max min-w-full text-left border-separate border-spacing-0 text-xs whitespace-nowrap">
+          <table className="table-fixed text-left border-separate border-spacing-0 text-xs whitespace-nowrap" style={{ width: `${tableTotalWidth}px`, minWidth: '100%' }}>
+            {/* Rigid Column Width Definitions */}
+            <colgroup>
+              <col style={{ width: '130px', minWidth: '130px' }} />
+              <col style={{ width: '140px', minWidth: '140px' }} />
+              <col style={{ width: '280px', minWidth: '280px' }} />
+              <col style={{ width: '160px', minWidth: '160px' }} />
+              {activeDates.flatMap((d) => [
+                <col key={`${d}-sp`} style={{ width: '90px', minWidth: '90px' }} />,
+                <col key={`${d}-gm`} style={{ width: '95px', minWidth: '95px' }} />,
+                <col key={`${d}-sa`} style={{ width: '95px', minWidth: '95px' }} />,
+                <col key={`${d}-ro`} style={{ width: '70px', minWidth: '70px' }} />,
+                <col key={`${d}-ci`} style={{ width: '70px', minWidth: '70px' }} />
+              ])}
+            </colgroup>
+
             {/* Top Multi-level Header */}
             <thead className="sticky top-0 z-40 font-bold uppercase tracking-wider text-[11px]">
               {/* Row 1: Fixed 4 Column Headers + Merged Date Headers */}
@@ -767,12 +788,12 @@ export default function PidPushRankTrackerView({
                   </div>
                 </th>
 
-                {/* Date Columns: Spanning 5 sub-columns each */}
+                {/* Date Columns: Plain static th cells so they slide behind frozen 4 columns */}
                 {activeDates.map((dateStr) => (
                   <th
                     key={dateStr}
                     colSpan={5}
-                    className="py-2.5 px-3 text-center border-r border-b border-slate-700 bg-[#0f172a] text-white font-black tracking-wide h-[38px] relative z-0"
+                    className="py-2.5 px-3 text-center border-r border-b border-slate-700 bg-[#0f172a] text-white font-black tracking-wide h-[38px]"
                   >
                     {formatDisplayDate(dateStr)}
                   </th>
@@ -781,27 +802,36 @@ export default function PidPushRankTrackerView({
 
               {/* Row 2: Sub-columns (Spend, Ads GMV, Sales, ROAS, CIR) */}
               <tr className="border-b border-slate-700 h-[36px]">
-                {/* Frozen column matching cells in Row 2 */}
-                <th className="w-[130px] min-w-[130px] max-w-[130px] py-2 px-3 border-r border-b border-slate-700 sticky left-0 z-50 bg-[#0f172a] text-slate-400 text-[10px] select-none align-middle text-left" />
-                <th className="w-[140px] min-w-[140px] max-w-[140px] py-2 px-3 border-r border-b border-slate-700 sticky left-[130px] z-50 bg-[#0f172a] text-slate-400 text-[10px] select-none align-middle text-left" />
-                <th className="w-[280px] min-w-[280px] max-w-[280px] py-2 px-4 border-r border-b border-slate-700 sticky left-[270px] z-50 bg-[#0f172a] text-slate-400 text-[10px] select-none align-middle text-left" />
-                <th className="w-[160px] min-w-[160px] max-w-[160px] py-2 px-3 border-r-2 border-b border-slate-600 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.3)] sticky left-[550px] z-50 bg-[#0f172a] text-slate-400 text-[10px] select-none align-middle text-left" />
+                {/* Frozen column matching cells in Row 2 with non-empty block divs */}
+                <th className="w-[130px] min-w-[130px] max-w-[130px] py-2 px-3 border-r border-b border-slate-700 sticky left-0 z-50 bg-[#0f172a] align-middle text-left">
+                  <div className="w-[104px] h-3 select-none" />
+                </th>
+                <th className="w-[140px] min-w-[140px] max-w-[140px] py-2 px-3 border-r border-b border-slate-700 sticky left-[130px] z-50 bg-[#0f172a] align-middle text-left">
+                  <div className="w-[114px] h-3 select-none" />
+                </th>
+                <th className="w-[280px] min-w-[280px] max-w-[280px] py-2 px-4 border-r border-b border-slate-700 sticky left-[270px] z-50 bg-[#0f172a] align-middle text-left">
+                  <div className="w-[248px] h-3 select-none" />
+                </th>
+                <th className="w-[160px] min-w-[160px] max-w-[160px] py-2 px-3 border-r-2 border-b border-slate-600 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.3)] sticky left-[550px] z-50 bg-[#0f172a] align-middle text-left">
+                  <div className="w-[134px] h-3 select-none" />
+                </th>
 
+                {/* Sub-column static cells (slide cleanly behind z-50 frozen 4 columns) */}
                 {activeDates.map((dateStr) => (
                   <React.Fragment key={`sub-${dateStr}`}>
-                    <th className="w-[90px] min-w-[90px] max-w-[90px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white relative z-0">
+                    <th className="w-[90px] min-w-[90px] max-w-[90px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white">
                       Spend
                     </th>
-                    <th className="w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white relative z-0">
+                    <th className="w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white">
                       Ads GMV
                     </th>
-                    <th className="w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white relative z-0">
+                    <th className="w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white">
                       Sales
                     </th>
-                    <th className="w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white relative z-0">
+                    <th className="w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white">
                       ROAS
                     </th>
-                    <th className="w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white relative z-0">
+                    <th className="w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white">
                       CIR
                     </th>
                   </React.Fragment>
@@ -1030,6 +1060,7 @@ export default function PidPushRankTrackerView({
         onClose={() => setIsLogsDrawerOpen(false)}
         logs={adjustments}
         onUpdateStatus={onUpdateAdjustmentStatus}
+        onUpdateActionTaken={onUpdateActionTaken}
         isDarkMode={isDarkMode}
       />
     </div>

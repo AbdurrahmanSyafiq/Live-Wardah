@@ -221,7 +221,9 @@ export default function DashboardApp() {
         setPidRankData(prev => ({
           ...prev,
           adjustments: prev.adjustments.map(a =>
-            a.id === id ? { ...a, status, updatedAt: result.updatedAt, updatedBy: user } : a
+            a.id === id || a.ID === id
+              ? { ...a, status, updatedAt: result.updatedAt, updatedBy: user }
+              : a
           )
         }));
       } else {
@@ -229,6 +231,32 @@ export default function DashboardApp() {
       }
     } catch (err: any) {
       alert(err.message || 'Error updating status');
+      throw err;
+    }
+  };
+
+  const handleUpdateActionTaken = async (id: string, actionTaken: string, user: string) => {
+    try {
+      const res = await fetch('/api/sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'updateActionTaken', id, actionTaken, userName: user })
+      });
+      const result = await res.json();
+      if (result.success) {
+        setPidRankData(prev => ({
+          ...prev,
+          adjustments: prev.adjustments.map(a =>
+            a.id === id || a.ID === id
+              ? { ...a, actionTaken, 'Action Taken': actionTaken, updatedAt: result.updatedAt, updatedBy: user }
+              : a
+          )
+        }));
+      } else {
+        throw new Error(result.error || 'Failed to update action taken');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error updating action taken');
       throw err;
     }
   };
@@ -1248,6 +1276,7 @@ export default function DashboardApp() {
               isDarkMode={isDarkMode}
               onAddAdjustment={handleAddAdjustment}
               onUpdateAdjustmentStatus={handleUpdateAdjustmentStatus}
+              onUpdateActionTaken={handleUpdateActionTaken}
               onSyncData={() => loadData('pidRank', true)}
               isLoading={isLoading}
             />

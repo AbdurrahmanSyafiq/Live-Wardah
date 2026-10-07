@@ -13,6 +13,8 @@ export interface AdjustmentLogItem {
   createdAt: string;
   updatedAt: string;
   updatedBy: string;
+  actionTaken?: string;
+  'Action Taken'?: string;
 }
 
 interface AddAdjustmentModalProps {
@@ -250,6 +252,7 @@ interface AdjustmentLogsDrawerProps {
   onClose: () => void;
   logs: AdjustmentLogItem[];
   onUpdateStatus: (id: string, newStatus: 'Pending' | 'Adjusted', userName: string) => Promise<void>;
+  onUpdateActionTaken?: (id: string, actionTaken: string, userName: string) => Promise<void>;
   isDarkMode: boolean;
 }
 
@@ -258,11 +261,26 @@ export function AdjustmentLogsDrawer({
   onClose,
   logs,
   onUpdateStatus,
+  onUpdateActionTaken,
   isDarkMode
 }: AdjustmentLogsDrawerProps) {
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Action Taken Dialog Modal state
+  const [actionTakenModal, setActionTakenModal] = useState<{
+    isOpen: boolean;
+    item: AdjustmentLogItem | null;
+    currentText: string;
+    userName: string;
+  }>({
+    isOpen: false,
+    item: null,
+    currentText: '',
+    userName: 'samuelgeorgiofc'
+  });
+  const [isSavingAction, setIsSavingAction] = useState(false);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -403,6 +421,7 @@ export function AdjustmentLogsDrawer({
                     <th className="py-3 px-3">Adjustment Notes</th>
                     <th className="py-3 px-3">Logged By</th>
                     <th className="py-3 px-3">Last Updated</th>
+                    <th className="py-3 px-3 min-w-[200px]">Action Taken</th>
                     <th className="py-3 px-3 text-center">Action</th>
                   </tr>
                 </thead>
@@ -410,6 +429,7 @@ export function AdjustmentLogsDrawer({
                   {filteredLogs.map((log) => {
                     const isAdjusted = log.status === 'Adjusted';
                     const isUpdating = updatingId === log.id;
+                    const actionTakenText = log.actionTaken || log['Action Taken'] || '';
                     return (
                       <tr key={log.id} className={isDarkMode ? 'hover:bg-slate-800/40' : 'hover:bg-slate-100/70'}>
                         <td className="py-3 px-3">
@@ -443,7 +463,7 @@ export function AdjustmentLogsDrawer({
                           {log.metric}
                         </td>
 
-                        <td className="py-3 px-3 max-w-[260px]">
+                        <td className="py-3 px-3 max-w-[240px]">
                           <p className={`font-medium leading-snug break-words ${mainText}`}>
                             {log.adjustment}
                           </p>
@@ -469,6 +489,51 @@ export function AdjustmentLogsDrawer({
                           )}
                         </td>
 
+                        {/* Action Taken Column */}
+                        <td className="py-3 px-3 min-w-[200px] max-w-[260px]">
+                          {actionTakenText ? (
+                            <div className="space-y-1">
+                              <p className={`font-medium leading-snug break-words text-xs ${mainText}`}>
+                                {actionTakenText}
+                              </p>
+                              <button
+                                onClick={() => setActionTakenModal({
+                                  isOpen: true,
+                                  item: log,
+                                  currentText: actionTakenText,
+                                  userName: 'samuelgeorgiofc'
+                                })}
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-500 hover:text-indigo-400 hover:underline transition-colors"
+                              >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                                Edit Action
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setActionTakenModal({
+                                isOpen: true,
+                                item: log,
+                                currentText: '',
+                                userName: 'samuelgeorgiofc'
+                              })}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 shadow-sm ${
+                                isDarkMode
+                                  ? 'bg-indigo-500/10 text-indigo-300 hover:bg-indigo-600 hover:text-white border-indigo-500/30'
+                                  : 'bg-indigo-50 text-indigo-800 hover:bg-indigo-600 hover:text-white border-indigo-200'
+                              }`}
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                              </svg>
+                              Input Next Step
+                            </button>
+                          )}
+                        </td>
+
+                        {/* Action Column */}
                         <td className="py-3 px-3 text-center whitespace-nowrap">
                           <button
                             onClick={() => handleToggleStatus(log)}
@@ -518,6 +583,129 @@ export function AdjustmentLogsDrawer({
           </button>
         </div>
       </div>
+
+      {/* Action Taken Input/Edit Modal Dialog */}
+      {actionTakenModal.isOpen && actionTakenModal.item && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border ${borderCol} ${bgModal}`}>
+            <div className={`p-5 border-b flex items-center justify-between ${borderCol} ${bgHeader}`}>
+              <div>
+                <h3 className={`text-base font-black ${mainText}`}>Action Taken / Next Step Detail</h3>
+                <p className={`text-xs ${secText}`}>
+                  Record operational actions taken for {actionTakenModal.item.pid}
+                </p>
+              </div>
+              <button
+                onClick={() => setActionTakenModal({ isOpen: false, item: null, currentText: '', userName: 'samuelgeorgiofc' })}
+                className={`p-1.5 rounded-xl transition-colors ${
+                  isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!actionTakenModal.item || !onUpdateActionTaken) return;
+                setIsSavingAction(true);
+                try {
+                  await onUpdateActionTaken(
+                    actionTakenModal.item.id,
+                    actionTakenModal.currentText.trim(),
+                    actionTakenModal.userName.trim() || 'samuelgeorgiofc'
+                  );
+                  actionTakenModal.item.actionTaken = actionTakenModal.currentText.trim();
+                  actionTakenModal.item['Action Taken'] = actionTakenModal.currentText.trim();
+                  setActionTakenModal({ isOpen: false, item: null, currentText: '', userName: 'samuelgeorgiofc' });
+                } catch (err: any) {
+                  alert(err.message || 'Failed to save action taken.');
+                } finally {
+                  setIsSavingAction(false);
+                }
+              }}
+              className="p-5 space-y-4"
+            >
+              {/* Context Summary */}
+              <div className={`p-3 rounded-xl border text-xs space-y-1 ${borderCol} ${bgSubHeader}`}>
+                <div className="flex justify-between">
+                  <span className={secText}>Date & Metric:</span>
+                  <span className={`font-bold ${mainText}`}>{actionTakenModal.item.date} • {actionTakenModal.item.metric}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className={secText}>SKU:</span>
+                  <span className={`font-bold truncate max-w-[280px] ${mainText}`} title={actionTakenModal.item.skuName}>
+                    {actionTakenModal.item.skuName}
+                  </span>
+                </div>
+                <div className="pt-1 border-t border-slate-700/30">
+                  <span className={secText}>Adjustment Note: </span>
+                  <span className={`font-medium ${mainText}`}>{actionTakenModal.item.adjustment}</span>
+                </div>
+              </div>
+
+              {/* Action Taken Input */}
+              <div>
+                <label className={`block text-[11px] font-extrabold uppercase tracking-wider mb-1 ${mainText}`}>
+                  Action Taken / Next Step Detail <span className={`text-[10px] font-normal lowercase ${secText}`}>(optional, can be edited)</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={actionTakenModal.currentText}
+                  onChange={(e) => setActionTakenModal(prev => ({ ...prev, currentText: e.target.value }))}
+                  placeholder="Detail operational next steps taken (e.g. reduced bid by 15%, paused creative, restocked inventory, changed targeting)..."
+                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-medium border outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed ${
+                    isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                  }`}
+                />
+              </div>
+
+              {/* Operator Name */}
+              <div>
+                <label className={`block text-[11px] font-extrabold uppercase tracking-wider mb-1 ${mainText}`}>
+                  Action Taken By
+                </label>
+                <input
+                  type="text"
+                  value={actionTakenModal.userName}
+                  onChange={(e) => setActionTakenModal(prev => ({ ...prev, userName: e.target.value }))}
+                  className={`w-full py-2 px-3 rounded-xl text-xs font-bold border outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setActionTakenModal({ isOpen: false, item: null, currentText: '', userName: 'samuelgeorgiofc' })}
+                  disabled={isSavingAction}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                    isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingAction}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2"
+                >
+                  {isSavingAction ? (
+                    <>
+                      <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                      Saving to Sheet...
+                    </>
+                  ) : (
+                    'Save Action Taken'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
