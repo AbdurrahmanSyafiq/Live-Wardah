@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { parseNum, formatIDR, formatNum } from '@/lib/formatters';
-import { parseSheetDate, toYMD } from '@/lib/dateUtils';
+import React, { useState, useMemo } from 'react';
+import { parseNum, formatNum } from '@/lib/formatters';
+import { toYMD } from '@/lib/dateUtils';
 import { exportPidPushRankToExcel } from '@/lib/excelExport';
 import PidMetricDetailModal, { MetricType } from './PidMetricDetailModal';
-import { AddAdjustmentModal, AdjustmentLogsDrawer, AdjustmentLogItem } from './PidAdjustmentModal';
+import { AddAdjustmentModal, AdjustmentLogsDrawer } from './PidAdjustmentModal';
 
 interface PidPushRankTrackerViewProps {
   commerceData: any[];
@@ -72,22 +72,13 @@ export default function PidPushRankTrackerView({
   const [selectedPlatform, setSelectedPlatform] = useState('All');
   const [selectedCluster, setSelectedCluster] = useState('All');
   const [selectedMonth, setSelectedMonth] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate] = useState('');
+  const [endDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<'cluster' | 'skuName' | 'pid' | 'spend' | 'adsGmv' | 'sales' | 'roas' | 'cir'>('spend');
   const [sortAsc, setSortAsc] = useState(false);
   const [page, setPage] = useState(1);
   const PER_PAGE = 25;
-
-  const handleSort = (field: typeof sortField) => {
-    if (sortField === field) {
-      setSortAsc(!sortAsc);
-    } else {
-      setSortField(field);
-      setSortAsc(false);
-    }
-  };
 
   // Modals State
   const [activeDrilldown, setActiveDrilldown] = useState<{
@@ -107,6 +98,15 @@ export default function PidPushRankTrackerView({
   }>({ isOpen: false });
 
   const [isLogsDrawerOpen, setIsLogsDrawerOpen] = useState(false);
+
+  const handleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      setSortAsc(false);
+    }
+  };
 
   // 1. Build Category / Cluster Map from 'PID CATEGORY'
   const categoryMap = useMemo(() => {
@@ -169,7 +169,7 @@ export default function PidPushRankTrackerView({
 
   // Sync date range based on active month or custom
   const activeDates = useMemo(() => {
-    if (!activeMonth) return allAvailableDates.slice(-14); // Fallback last 14 days
+    if (!activeMonth) return allAvailableDates.slice(-14);
     if (activeMonth === 'custom' && startDate && endDate) {
       return allAvailableDates.filter(d => d >= startDate && d <= endDate);
     }
@@ -188,7 +188,6 @@ export default function PidPushRankTrackerView({
       daily: Map<string, { spend: number; adsGmv: number; sales: number }>;
     }>();
 
-    // Helper to get or init item
     const getOrCreate = (pid: string, defaultSku = '', defaultBrand = '', defaultPlatform = '', defaultCid = '') => {
       let item = pidsMap.get(pid);
       if (!item) {
@@ -289,9 +288,7 @@ export default function PidPushRankTrackerView({
         const adsGmv = dRec.adsGmv;
         const sales = dRec.sales;
 
-        // Formula: ROAS = Ads GMV / Spend
         const roas = spend > 0 ? adsGmv / spend : 0;
-        // Formula: CIR = Spend / Ads GMV * 100% (or Spend / Sales if user prefers, matching screenshot 100k/2.694M = 3.71%)
         const cir = adsGmv > 0 ? (spend / adsGmv) * 100 : 0;
 
         totalSpend += spend;
@@ -398,7 +395,7 @@ export default function PidPushRankTrackerView({
     });
   }, [pidItems, selectedBrand, selectedPlatform, selectedCluster, searchTerm, sortField, sortAsc]);
 
-  // Overall KPI Cards Summary
+  // Summary KPIs
   const summaryKPIs = useMemo(() => {
     const totalSpend = filteredItems.reduce((acc, i) => acc + i.totalSpend, 0);
     const totalAdsGmv = filteredItems.reduce((acc, i) => acc + i.totalAdsGmv, 0);
@@ -428,7 +425,7 @@ export default function PidPushRankTrackerView({
     return adjustments.filter((a) => a.status !== 'Adjusted').length;
   }, [adjustments]);
 
-  // Helper to check if PID + Date has adjustment
+  // Check if PID + Date has adjustment
   const getAdjustment = (pid: string, displayDate: string, ymd: string) => {
     return adjustments.find(
       (a) => a.pid === pid && (a.date === displayDate || a.date === ymd)
@@ -440,47 +437,39 @@ export default function PidPushRankTrackerView({
     activeDates.forEach((d) => {
       displayDatesMap[d] = formatDisplayDate(d);
     });
-    const periodLabel = selectedMonth === 'custom' ? `${startDate}_to_${endDate}` : selectedMonth || 'Period';
+    const periodLabel = activeMonth || 'Period';
     await exportPidPushRankToExcel(filteredItems, activeDates, displayDatesMap, periodLabel);
   };
 
-  const getClusterBadgeStyle = (cluster: string) => {
-    const c = cluster.toUpperCase();
-    if (c.includes('SCALE')) {
-      return 'bg-blue-500/15 text-blue-400 border-blue-500/30';
-    }
-    if (c.includes('REVIEW')) {
-      return 'bg-purple-500/15 text-purple-400 border-purple-500/30';
-    }
-    if (c.includes('HIDDEN')) {
-      return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
-    }
-    if (c.includes('KILL') || c.includes('DROP')) {
-      return 'bg-rose-500/15 text-rose-400 border-rose-500/30';
-    }
-    return 'bg-slate-500/15 text-slate-400 border-slate-500/30';
-  };
+  // High contrast color classes
+  const mainText = isDarkMode ? 'text-slate-100' : 'text-slate-900';
+  const secText = isDarkMode ? 'text-slate-400' : 'text-slate-700';
+  const borderCol = isDarkMode ? 'border-slate-800' : 'border-slate-300';
+  const cardBg = isDarkMode ? 'bg-[#0f172a]' : 'bg-white';
+  const tableHeaderTopBg = isDarkMode ? 'bg-[#182338]' : 'bg-slate-200';
+  const tableHeaderSubBg = isDarkMode ? 'bg-[#101827]' : 'bg-slate-100';
+  const tableFreezeBg = isDarkMode ? 'bg-[#0f172a]' : 'bg-white';
+  const tableFreezeHoverBg = isDarkMode ? 'group-hover:bg-[#1a253a]' : 'group-hover:bg-slate-100';
+  const tableRowHoverBg = isDarkMode ? 'hover:bg-[#131d33]' : 'hover:bg-slate-50';
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* 1. Header & Controls Bar */}
-      <div className={`p-6 rounded-2xl border ${isDarkMode ? 'bg-[#0f172a] border-slate-800' : 'bg-white border-slate-200'} shadow-sm space-y-4`}>
+      <div className={`p-6 rounded-2xl border ${borderCol} ${cardBg} shadow-sm space-y-4`}>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="p-2.5 rounded-xl bg-indigo-600/10 text-indigo-400 border border-indigo-500/20">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
-              </span>
-              <div>
-                <h1 className={`text-xl font-black tracking-tight ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
-                  PID Push Rank Tracker
-                </h1>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Cross-examine daily Spend, Ads GMV, Sales, ROAS, and CIR with cluster ranking and live operational adjustment logs.
-                </p>
-              </div>
+          <div className="flex items-center gap-3">
+            <span className={`p-2.5 rounded-xl border ${isDarkMode ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' : 'bg-indigo-50 text-indigo-700 border-indigo-200'}`}>
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </span>
+            <div>
+              <h1 className={`text-xl font-black tracking-tight ${mainText}`}>
+                PID Push Rank Tracker
+              </h1>
+              <p className={`text-xs ${secText} mt-0.5`}>
+                Cross-examine daily Spend, Ads GMV, Sales, ROAS, and CIR with cluster ranking and live operational adjustment logs.
+              </p>
             </div>
           </div>
 
@@ -488,9 +477,15 @@ export default function PidPushRankTrackerView({
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setIsLogsDrawerOpen(true)}
-              className="px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border bg-indigo-600/10 text-indigo-400 hover:bg-indigo-600 hover:text-white border-indigo-500/30 shadow-sm"
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border shadow-sm ${
+                isDarkMode
+                  ? 'bg-indigo-500/10 text-indigo-300 hover:bg-indigo-600 hover:text-white border-indigo-500/30'
+                  : 'bg-indigo-50 text-indigo-900 hover:bg-indigo-600 hover:text-white border-indigo-200'
+              }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
               Adjustment Logs
               {pendingAdjustmentsCount > 0 && (
                 <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-slate-950">
@@ -503,7 +498,9 @@ export default function PidPushRankTrackerView({
               onClick={() => setAddAdjustmentModal({ isOpen: true })}
               className="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              </svg>
               New Adjustment
             </button>
 
@@ -511,11 +508,13 @@ export default function PidPushRankTrackerView({
               onClick={handleExportExcel}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors flex items-center gap-2 ${
                 isDarkMode
-                  ? 'bg-emerald-600/10 text-emerald-400 hover:bg-emerald-600 hover:text-white border-emerald-500/30'
-                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border-emerald-300'
+                  ? 'bg-slate-800 text-slate-100 hover:bg-slate-700 border-slate-700'
+                  : 'bg-slate-100 text-slate-900 hover:bg-slate-200 border-slate-300'
               }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
               Export Excel
             </button>
 
@@ -523,18 +522,23 @@ export default function PidPushRankTrackerView({
               onClick={onSyncData}
               disabled={isLoading}
               title="Sync fresh data from Google Sheets"
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors border border-slate-700 shrink-0"
+              className={`p-2 rounded-xl border transition-colors shrink-0 ${
+                isDarkMode
+                  ? 'text-slate-300 hover:text-white hover:bg-slate-800 border-slate-700'
+                  : 'text-slate-700 hover:text-slate-950 hover:bg-slate-100 border-slate-300'
+              }`}
             >
-              <svg className={`w-4 h-4 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              <svg className={`w-4 h-4 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
             </button>
           </div>
         </div>
 
         {/* 2. Filter Bar Controls */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-2">
-          {/* Month / Date Selector */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+            <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${secText}`}>
               Active Period
             </label>
             <select
@@ -543,7 +547,7 @@ export default function PidPushRankTrackerView({
                 setSelectedMonth(e.target.value);
                 setPage(1);
               }}
-              className={`w-full py-2 px-3 rounded-xl text-xs font-semibold border outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500 ${
+              className={`w-full py-2 px-3 rounded-xl text-xs font-bold border outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500 ${
                 isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
               }`}
             >
@@ -555,15 +559,14 @@ export default function PidPushRankTrackerView({
             </select>
           </div>
 
-          {/* Brand Filter */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+            <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${secText}`}>
               Brand
             </label>
             <select
               value={selectedBrand}
               onChange={(e) => { setSelectedBrand(e.target.value); setPage(1); }}
-              className={`w-full py-2 px-3 rounded-xl text-xs font-semibold border outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500 ${
+              className={`w-full py-2 px-3 rounded-xl text-xs font-bold border outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500 ${
                 isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
               }`}
             >
@@ -571,15 +574,14 @@ export default function PidPushRankTrackerView({
             </select>
           </div>
 
-          {/* Platform Filter */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+            <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${secText}`}>
               Platform
             </label>
             <select
               value={selectedPlatform}
               onChange={(e) => { setSelectedPlatform(e.target.value); setPage(1); }}
-              className={`w-full py-2 px-3 rounded-xl text-xs font-semibold border outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500 ${
+              className={`w-full py-2 px-3 rounded-xl text-xs font-bold border outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500 ${
                 isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
               }`}
             >
@@ -587,15 +589,14 @@ export default function PidPushRankTrackerView({
             </select>
           </div>
 
-          {/* Cluster / Class Filter */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+            <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${secText}`}>
               Cluster / Class
             </label>
             <select
               value={selectedCluster}
               onChange={(e) => { setSelectedCluster(e.target.value); setPage(1); }}
-              className={`w-full py-2 px-3 rounded-xl text-xs font-semibold border outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500 ${
+              className={`w-full py-2 px-3 rounded-xl text-xs font-bold border outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500 ${
                 isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
               }`}
             >
@@ -603,22 +604,23 @@ export default function PidPushRankTrackerView({
             </select>
           </div>
 
-          {/* Search Box */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+            <label className={`block text-[10px] font-extrabold uppercase tracking-wider mb-1 ${secText}`}>
               Search PID / SKU
             </label>
             <div className="relative">
               <input
                 type="text"
-                placeholder="Search..."
+                placeholder="Search PID or SKU..."
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
                 className={`w-full py-2 px-3 pl-8 rounded-xl text-xs font-semibold border outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                  isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
                 }`}
               />
-              <svg className="w-3.5 h-3.5 absolute left-2.5 top-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              <svg className={`w-3.5 h-3.5 absolute left-2.5 top-3 ${secText}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </div>
           </div>
         </div>
@@ -626,111 +628,119 @@ export default function PidPushRankTrackerView({
 
       {/* 3. KPI Summary Metrics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-[#0f172a] border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
-          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total PIDs</div>
-          <div className="text-xl font-black mt-1 text-slate-200">{summaryKPIs.totalPids}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">{activeDates.length} Days Tracking</div>
+        <div className={`p-4 rounded-2xl border ${borderCol} ${cardBg} shadow-sm`}>
+          <div className={`text-[10px] font-extrabold uppercase tracking-wider ${secText}`}>Total PIDs</div>
+          <div className={`text-xl font-black mt-1 ${mainText}`}>{summaryKPIs.totalPids}</div>
+          <div className={`text-[11px] font-medium mt-0.5 ${secText}`}>{activeDates.length} Days Tracking</div>
         </div>
 
-        <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-[#0f172a] border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
-          <div className="text-[10px] font-bold text-amber-500/80 uppercase tracking-wider">Total Spend</div>
-          <div className="text-xl font-black mt-1 text-amber-400">{formatIDR(summaryKPIs.totalSpend)}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Commerce Expense</div>
+        <div className={`p-4 rounded-2xl border ${borderCol} ${cardBg} shadow-sm`}>
+          <div className={`text-[10px] font-extrabold uppercase tracking-wider ${secText}`}>Total Spend</div>
+          <div className={`text-xl font-black mt-1 ${mainText}`}>Rp {formatNum(summaryKPIs.totalSpend)}</div>
+          <div className={`text-[11px] font-medium mt-0.5 ${secText}`}>Commerce Expense</div>
         </div>
 
-        <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-[#0f172a] border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
-          <div className="text-[10px] font-bold text-indigo-400/80 uppercase tracking-wider">Total Ads GMV</div>
-          <div className="text-xl font-black mt-1 text-indigo-400">{formatIDR(summaryKPIs.totalAdsGmv)}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Paid Advertising</div>
+        <div className={`p-4 rounded-2xl border ${borderCol} ${cardBg} shadow-sm`}>
+          <div className={`text-[10px] font-extrabold uppercase tracking-wider ${secText}`}>Total Ads GMV</div>
+          <div className={`text-xl font-black mt-1 ${mainText}`}>Rp {formatNum(summaryKPIs.totalAdsGmv)}</div>
+          <div className={`text-[11px] font-medium mt-0.5 ${secText}`}>Paid Advertising</div>
         </div>
 
-        <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-[#0f172a] border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
-          <div className="text-[10px] font-bold text-emerald-400/80 uppercase tracking-wider">Total Sales</div>
-          <div className="text-xl font-black mt-1 text-emerald-400">{formatIDR(summaryKPIs.totalSales)}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">PID Sales Sheet</div>
+        <div className={`p-4 rounded-2xl border ${borderCol} ${cardBg} shadow-sm`}>
+          <div className={`text-[10px] font-extrabold uppercase tracking-wider ${secText}`}>Total Sales</div>
+          <div className={`text-xl font-black mt-1 ${mainText}`}>Rp {formatNum(summaryKPIs.totalSales)}</div>
+          <div className={`text-[11px] font-medium mt-0.5 ${secText}`}>PID Sales Sheet</div>
         </div>
 
-        <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-[#0f172a] border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
-          <div className="text-[10px] font-bold text-blue-400/80 uppercase tracking-wider">Blended ROAS</div>
-          <div className="text-xl font-black mt-1 text-blue-400">
+        <div className={`p-4 rounded-2xl border ${borderCol} ${cardBg} shadow-sm`}>
+          <div className={`text-[10px] font-extrabold uppercase tracking-wider ${secText}`}>Blended ROAS</div>
+          <div className={`text-xl font-black mt-1 ${mainText}`}>
             {summaryKPIs.overallRoas > 0 ? `${summaryKPIs.overallRoas.toFixed(2)}x` : '-'}
           </div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Ads GMV / Spend</div>
+          <div className={`text-[11px] font-medium mt-0.5 ${secText}`}>Ads GMV / Spend</div>
         </div>
 
-        <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-[#0f172a] border-slate-800' : 'bg-white border-slate-200'} shadow-sm`}>
-          <div className="text-[10px] font-bold text-rose-400/80 uppercase tracking-wider">Blended CIR</div>
-          <div className="text-xl font-black mt-1 text-rose-400">
+        <div className={`p-4 rounded-2xl border ${borderCol} ${cardBg} shadow-sm`}>
+          <div className={`text-[10px] font-extrabold uppercase tracking-wider ${secText}`}>Blended CIR</div>
+          <div className={`text-xl font-black mt-1 ${mainText}`}>
             {summaryKPIs.overallCir > 0 ? `${summaryKPIs.overallCir.toFixed(2)}%` : '-'}
           </div>
-          <div className="text-[11px] text-slate-500 mt-0.5">Spend / Ads GMV</div>
+          <div className={`text-[11px] font-medium mt-0.5 ${secText}`}>Spend / Ads GMV</div>
         </div>
       </div>
 
-      {/* 4. Tracking Result Table (Exact Matching User Image) */}
-      <div className={`rounded-2xl border shadow-sm overflow-hidden ${isDarkMode ? 'bg-[#0f172a] border-slate-800' : 'bg-white border-slate-200'}`}>
+      {/* 4. Tracking Result Table with Frozen 4 Columns */}
+      <div className={`rounded-2xl border ${borderCol} shadow-sm overflow-hidden ${cardBg}`}>
         <div className="overflow-x-auto max-h-[75vh]">
-          <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+          <table className="w-full text-left border-separate border-spacing-0 text-xs whitespace-nowrap">
             {/* Top Multi-level Header */}
-            <thead className={`sticky top-0 z-30 font-bold uppercase tracking-wider text-[11px] ${isDarkMode ? 'bg-[#090d16] text-slate-300' : 'bg-slate-100 text-slate-700'}`}>
-              {/* Row 1: Left fixed blanks/titles + Merged Date Headers */}
-              <tr className="border-b border-slate-800">
+            <thead className="sticky top-0 z-30 font-bold uppercase tracking-wider text-[11px]">
+              {/* Row 1: Fixed 4 Column Headers + Merged Date Headers */}
+              <tr className={`border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}>
+                {/* Col 1: Cluster (Frozen) */}
                 <th
+                  rowSpan={2}
                   onClick={() => handleSort('cluster')}
-                  className="py-3 px-3 min-w-[130px] border-r border-slate-800 sticky left-0 z-40 bg-inherit cursor-pointer hover:text-indigo-400 select-none"
+                  className={`w-[130px] min-w-[130px] max-w-[130px] py-3 px-3 border-r ${borderCol} sticky left-0 top-0 z-50 ${tableHeaderTopBg} ${mainText} cursor-pointer hover:underline select-none align-middle`}
                 >
                   Cluster {sortField === 'cluster' ? (sortAsc ? '▲' : '▼') : ''}
                 </th>
-                <th className="py-3 px-3 min-w-[140px] border-r border-slate-800 sticky left-[130px] z-40 bg-inherit">
+
+                {/* Col 2: CID (Frozen) */}
+                <th
+                  rowSpan={2}
+                  className={`w-[140px] min-w-[140px] max-w-[140px] py-3 px-3 border-r ${borderCol} sticky left-[130px] top-0 z-50 ${tableHeaderTopBg} ${mainText} align-middle`}
+                >
                   CID
                 </th>
+
+                {/* Col 3: SKU Name (Frozen) */}
                 <th
+                  rowSpan={2}
                   onClick={() => handleSort('skuName')}
-                  className="py-3 px-4 min-w-[260px] max-w-[320px] border-r border-slate-800 sticky left-[270px] z-40 bg-inherit cursor-pointer hover:text-indigo-400 select-none"
+                  className={`w-[260px] min-w-[260px] max-w-[260px] py-3 px-4 border-r ${borderCol} sticky left-[270px] top-0 z-50 ${tableHeaderTopBg} ${mainText} cursor-pointer hover:underline select-none align-middle`}
                 >
                   SKU Name {sortField === 'skuName' ? (sortAsc ? '▲' : '▼') : ''}
                 </th>
+
+                {/* Col 4: PID (Frozen + Divider) */}
                 <th
+                  rowSpan={2}
                   onClick={() => handleSort('pid')}
-                  className="py-3 px-3 min-w-[150px] border-r-2 border-indigo-500/50 sticky left-[550px] z-40 bg-inherit cursor-pointer hover:text-indigo-400 select-none"
+                  className={`w-[160px] min-w-[160px] max-w-[160px] py-3 px-3 border-r-2 ${isDarkMode ? 'border-slate-600' : 'border-slate-400'} shadow-[4px_0_8px_-2px_rgba(0,0,0,0.15)] sticky left-[530px] top-0 z-50 ${tableHeaderTopBg} ${mainText} cursor-pointer hover:underline select-none align-middle`}
                 >
                   PID {sortField === 'pid' ? (sortAsc ? '▲' : '▼') : ''}
                 </th>
 
-                {/* Date Columns headers spanning 5 subcolumns each */}
+                {/* Date Columns: Spanning 5 sub-columns each */}
                 {activeDates.map((dateStr) => (
                   <th
                     key={dateStr}
                     colSpan={5}
-                    className="py-2.5 px-3 text-center border-r border-slate-800 bg-slate-900/80 font-black tracking-wide text-indigo-300"
+                    className={`py-2.5 px-3 text-center border-r border-b ${borderCol} ${tableHeaderTopBg} ${mainText} font-black tracking-wide`}
                   >
                     {formatDisplayDate(dateStr)}
                   </th>
                 ))}
               </tr>
 
-              {/* Row 2: Sub-columns (Spend, Ads GMV, Sales, ROAS, CIR) for each day */}
-              <tr className="border-b border-slate-800 text-[10px] text-slate-400">
-                <th className="py-2 px-3 border-r border-slate-800 sticky left-0 z-40 bg-inherit"></th>
-                <th className="py-2 px-3 border-r border-slate-800 sticky left-[130px] z-40 bg-inherit"></th>
-                <th className="py-2 px-4 border-r border-slate-800 sticky left-[270px] z-40 bg-inherit"></th>
-                <th className="py-2 px-3 border-r-2 border-indigo-500/50 sticky left-[550px] z-40 bg-inherit"></th>
-
+              {/* Row 2: Sub-columns (Spend, Ads GMV, Sales, ROAS, CIR) */}
+              <tr className={`border-b ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}>
                 {activeDates.map((dateStr) => (
                   <React.Fragment key={`sub-${dateStr}`}>
-                    <th className="py-2 px-2.5 text-right font-bold text-amber-400 min-w-[85px] border-r border-slate-800/60">
+                    <th className={`w-[90px] min-w-[90px] max-w-[90px] py-2 px-2 text-right font-black border-r border-b ${borderCol} ${tableHeaderSubBg} ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                       Spend
                     </th>
-                    <th className="py-2 px-2.5 text-right font-bold text-indigo-400 min-w-[95px] border-r border-slate-800/60">
+                    <th className={`w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b ${borderCol} ${tableHeaderSubBg} ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                       Ads GMV
                     </th>
-                    <th className="py-2 px-2.5 text-right font-bold text-emerald-400 min-w-[95px] border-r border-slate-800/60">
+                    <th className={`w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b ${borderCol} ${tableHeaderSubBg} ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                       Sales
                     </th>
-                    <th className="py-2 px-2 text-right font-bold text-blue-400 min-w-[65px] border-r border-slate-800/60">
+                    <th className={`w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b ${borderCol} ${tableHeaderSubBg} ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                       ROAS
                     </th>
-                    <th className="py-2 px-2 text-right font-bold text-rose-400 min-w-[65px] border-r border-slate-800">
+                    <th className={`w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b ${borderCol} ${tableHeaderSubBg} ${isDarkMode ? 'text-slate-300' : 'text-slate-700'}`}>
                       CIR
                     </th>
                   </React.Fragment>
@@ -739,46 +749,46 @@ export default function PidPushRankTrackerView({
             </thead>
 
             {/* Table Body */}
-            <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800/80' : 'divide-slate-100'}`}>
+            <tbody>
               {paginatedItems.map((item) => (
                 <tr
                   key={item.pid}
-                  className={`group transition-colors ${
-                    isDarkMode ? 'hover:bg-slate-800/40 bg-[#0b101c]' : 'hover:bg-slate-50 bg-white'
-                  }`}
+                  className={`group transition-colors ${tableRowHoverBg}`}
                 >
-                  {/* Sticky Column: Cluster */}
-                  <td className="py-3 px-3 border-r border-slate-800 sticky left-0 z-20 bg-inherit">
+                  {/* Frozen Column 1: Cluster */}
+                  <td className={`w-[130px] min-w-[130px] max-w-[130px] py-3 px-3 border-r border-b ${borderCol} sticky left-0 z-20 ${tableFreezeBg} ${tableFreezeHoverBg}`}>
                     <span
-                      className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border truncate max-w-[120px] ${getClusterBadgeStyle(
-                        item.cluster
-                      )}`}
+                      className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border truncate max-w-[115px] ${
+                        isDarkMode
+                          ? 'bg-slate-800 text-slate-200 border-slate-700'
+                          : 'bg-slate-100 text-slate-800 border-slate-300'
+                      }`}
                       title={item.cluster}
                     >
                       {item.cluster}
                     </span>
                   </td>
 
-                  {/* Sticky Column: CID */}
-                  <td className="py-3 px-3 border-r border-slate-800 font-mono text-[11px] text-slate-400 sticky left-[130px] z-20 bg-inherit select-all">
+                  {/* Frozen Column 2: CID */}
+                  <td className={`w-[140px] min-w-[140px] max-w-[140px] py-3 px-3 border-r border-b ${borderCol} font-mono text-[11px] font-semibold sticky left-[130px] z-20 ${tableFreezeBg} ${tableFreezeHoverBg} ${secText} select-all truncate`}>
                     {item.cid || '-'}
                   </td>
 
-                  {/* Sticky Column: SKU Name */}
+                  {/* Frozen Column 3: SKU Name */}
                   <td
-                    className="py-3 px-4 border-r border-slate-800 sticky left-[270px] z-20 bg-inherit max-w-[280px]"
+                    className={`w-[260px] min-w-[260px] max-w-[260px] py-3 px-4 border-r border-b ${borderCol} sticky left-[270px] z-20 ${tableFreezeBg} ${tableFreezeHoverBg}`}
                     title={item.skuName}
                   >
-                    <div className="font-semibold text-slate-200 truncate leading-snug">
+                    <div className={`font-bold truncate leading-snug ${mainText}`}>
                       {item.skuName}
                     </div>
                     {item.brand && (
-                      <span className="text-[10px] text-slate-400 font-medium">{item.brand}</span>
+                      <span className={`text-[10px] font-semibold ${secText}`}>{item.brand}</span>
                     )}
                   </td>
 
-                  {/* Sticky Column: PID */}
-                  <td className="py-3 px-3 border-r-2 border-indigo-500/50 font-mono text-[11px] text-indigo-300 font-bold sticky left-[550px] z-20 bg-inherit select-all">
+                  {/* Frozen Column 4: PID (+ Distinct Boundary Divider) */}
+                  <td className={`w-[160px] min-w-[160px] max-w-[160px] py-3 px-3 border-r-2 border-b ${isDarkMode ? 'border-slate-600' : 'border-slate-400'} shadow-[4px_0_8px_-2px_rgba(0,0,0,0.15)] font-mono text-[11px] font-black sticky left-[530px] z-20 ${tableFreezeBg} ${tableFreezeHoverBg} ${mainText} select-all truncate`}>
                     {item.pid}
                   </td>
 
@@ -801,52 +811,52 @@ export default function PidPushRankTrackerView({
                         {/* Spend Cell */}
                         <td
                           onClick={() => setActiveDrilldown({ pidItem: item, metric: 'spend' })}
-                          className="py-2.5 px-2.5 text-right font-mono border-r border-slate-800/60 cursor-pointer hover:bg-amber-500/15 transition-colors relative group/cell"
-                          title="Click to view full Spend history"
+                          className={`w-[90px] min-w-[90px] max-w-[90px] py-2.5 px-2 text-right font-mono border-r border-b ${borderCol} cursor-pointer transition-colors relative hover:bg-indigo-500/10`}
+                          title="Click to view Spend details"
                         >
-                          <span className={rec.spend > 0 ? 'text-slate-200 font-semibold' : 'text-slate-600'}>
-                            {formatNum(rec.spend)}
+                          <span className={rec.spend > 0 ? `${mainText} font-bold` : `${secText}`}>
+                            {rec.spend > 0 ? formatNum(rec.spend) : '-'}
                           </span>
                           {adj && adj.metric === 'Spend' && (
-                            <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-indigo-500" />
                           )}
                         </td>
 
                         {/* Ads GMV Cell */}
                         <td
                           onClick={() => setActiveDrilldown({ pidItem: item, metric: 'adsGmv' })}
-                          className="py-2.5 px-2.5 text-right font-mono border-r border-slate-800/60 cursor-pointer hover:bg-indigo-500/15 transition-colors relative group/cell"
-                          title="Click to view full Ads GMV history"
+                          className={`w-[95px] min-w-[95px] max-w-[95px] py-2.5 px-2 text-right font-mono border-r border-b ${borderCol} cursor-pointer transition-colors relative hover:bg-indigo-500/10`}
+                          title="Click to view Ads GMV details"
                         >
-                          <span className={rec.adsGmv > 0 ? 'text-indigo-200 font-semibold' : 'text-slate-600'}>
-                            {formatNum(rec.adsGmv)}
+                          <span className={rec.adsGmv > 0 ? `${mainText} font-bold` : `${secText}`}>
+                            {rec.adsGmv > 0 ? formatNum(rec.adsGmv) : '-'}
                           </span>
                           {adj && adj.metric === 'Ads GMV' && (
-                            <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                            <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-indigo-500" />
                           )}
                         </td>
 
                         {/* Sales Cell */}
                         <td
                           onClick={() => setActiveDrilldown({ pidItem: item, metric: 'sales' })}
-                          className="py-2.5 px-2.5 text-right font-mono border-r border-slate-800/60 cursor-pointer hover:bg-emerald-500/15 transition-colors relative group/cell"
-                          title="Click to view full Sales history"
+                          className={`w-[95px] min-w-[95px] max-w-[95px] py-2.5 px-2 text-right font-mono border-r border-b ${borderCol} cursor-pointer transition-colors relative hover:bg-indigo-500/10`}
+                          title="Click to view Sales details"
                         >
-                          <span className={rec.sales > 0 ? 'text-emerald-300 font-semibold' : 'text-slate-600'}>
-                            {formatNum(rec.sales)}
+                          <span className={rec.sales > 0 ? `${mainText} font-bold` : `${secText}`}>
+                            {rec.sales > 0 ? formatNum(rec.sales) : '-'}
                           </span>
                           {adj && adj.metric === 'Sales' && (
-                            <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-indigo-500" />
                           )}
                         </td>
 
                         {/* ROAS Cell */}
                         <td
                           onClick={() => setActiveDrilldown({ pidItem: item, metric: 'roas' })}
-                          className="py-2.5 px-2 text-right font-mono border-r border-slate-800/60 cursor-pointer hover:bg-blue-500/15 transition-colors"
-                          title="Click to view full ROAS history"
+                          className={`w-[70px] min-w-[70px] max-w-[70px] py-2.5 px-2 text-right font-mono border-r border-b ${borderCol} cursor-pointer transition-colors hover:bg-indigo-500/10`}
+                          title="Click to view ROAS details"
                         >
-                          <span className={rec.roas > 0 ? 'text-blue-300 font-semibold' : 'text-slate-600'}>
+                          <span className={rec.roas > 0 ? `${mainText} font-bold` : `${secText}`}>
                             {rec.roas > 0 ? rec.roas.toFixed(2) : '-'}
                           </span>
                         </td>
@@ -854,10 +864,10 @@ export default function PidPushRankTrackerView({
                         {/* CIR Cell */}
                         <td
                           onClick={() => setActiveDrilldown({ pidItem: item, metric: 'cir' })}
-                          className="py-2.5 px-2 text-right font-mono border-r border-slate-800 cursor-pointer hover:bg-rose-500/15 transition-colors"
-                          title="Click to view full CIR history"
+                          className={`w-[70px] min-w-[70px] max-w-[70px] py-2.5 px-2 text-right font-mono border-r border-b ${borderCol} cursor-pointer transition-colors hover:bg-indigo-500/10`}
+                          title="Click to view CIR details"
                         >
-                          <span className={rec.cir > 0 ? 'text-rose-300 font-semibold' : 'text-slate-600'}>
+                          <span className={rec.cir > 0 ? `${mainText} font-bold` : `${secText}`}>
                             {rec.cir > 0 ? `${rec.cir.toFixed(2)}%` : '-'}
                           </span>
                         </td>
@@ -871,27 +881,35 @@ export default function PidPushRankTrackerView({
         </div>
 
         {/* 5. Pagination & Table Footer */}
-        <div className={`p-4 border-t flex flex-wrap items-center justify-between gap-3 ${isDarkMode ? 'border-slate-800 bg-[#090d16]' : 'border-slate-100 bg-slate-50'}`}>
-          <div className="text-xs text-slate-400">
-            Showing <span className="font-bold text-slate-200">{paginatedItems.length}</span> of <span className="font-bold text-slate-200">{filteredItems.length}</span> PIDs.
-            <span className="ml-2 text-slate-500">(Click any daily metric number to inspect its isolated timeline)</span>
+        <div className={`p-4 border-t flex flex-wrap items-center justify-between gap-3 ${borderCol} ${tableHeaderSubBg}`}>
+          <div className={`text-xs ${secText}`}>
+            Showing <span className={`font-bold ${mainText}`}>{paginatedItems.length}</span> of <span className={`font-bold ${mainText}`}>{filteredItems.length}</span> PIDs.
+            <span className="ml-2 font-medium">(First 4 columns are frozen. Click any metric cell to open single-metric popup)</span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-700 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-800 text-slate-300 transition-colors"
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border disabled:opacity-30 disabled:cursor-not-allowed transition-colors ${
+                isDarkMode
+                  ? 'border-slate-700 hover:bg-slate-800 text-slate-200'
+                  : 'border-slate-300 hover:bg-slate-200 text-slate-800'
+              }`}
             >
               Previous
             </button>
-            <span className="text-xs font-bold px-2 text-slate-300">
+            <span className={`text-xs font-bold px-2 ${mainText}`}>
               Page {page} of {totalPages}
             </span>
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-700 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-800 text-slate-300 transition-colors"
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border disabled:opacity-30 disabled:cursor-not-allowed transition-colors ${
+                isDarkMode
+                  ? 'border-slate-700 hover:bg-slate-800 text-slate-200'
+                  : 'border-slate-300 hover:bg-slate-200 text-slate-800'
+              }`}
             >
               Next
             </button>
@@ -938,4 +956,3 @@ export default function PidPushRankTrackerView({
     </div>
   );
 }
-

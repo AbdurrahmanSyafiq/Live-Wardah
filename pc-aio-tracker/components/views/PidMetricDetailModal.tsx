@@ -32,41 +32,31 @@ interface PidMetricDetailModalProps {
   adjustments?: any[];
 }
 
-const METRIC_CONFIG: Record<MetricType, { label: string; unit: string; format: (v: number) => string; color: string; bgColor: string }> = {
+const METRIC_CONFIG: Record<MetricType, { label: string; unit: string; format: (v: number) => string }> = {
   spend: {
     label: 'Spend',
     unit: 'IDR',
-    format: (v: number) => formatIDR(v),
-    color: 'text-amber-500',
-    bgColor: 'bg-amber-500/10 border-amber-500/30'
+    format: (v: number) => formatIDR(v)
   },
   adsGmv: {
     label: 'Ads GMV',
     unit: 'IDR',
-    format: (v: number) => formatIDR(v),
-    color: 'text-indigo-500',
-    bgColor: 'bg-indigo-500/10 border-indigo-500/30'
+    format: (v: number) => formatIDR(v)
   },
   sales: {
     label: 'Sales',
     unit: 'IDR',
-    format: (v: number) => formatIDR(v),
-    color: 'text-emerald-500',
-    bgColor: 'bg-emerald-500/10 border-emerald-500/30'
+    format: (v: number) => formatIDR(v)
   },
   roas: {
     label: 'ROAS',
     unit: 'x',
-    format: (v: number) => v > 0 ? `${v.toFixed(2)}x` : '-',
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-500/10 border-blue-500/30'
+    format: (v: number) => (v > 0 ? `${v.toFixed(2)}x` : '-')
   },
   cir: {
     label: 'CIR',
     unit: '%',
-    format: (v: number) => v > 0 ? `${v.toFixed(2)}%` : '-',
-    color: 'text-rose-500',
-    bgColor: 'bg-rose-500/10 border-rose-500/30'
+    format: (v: number) => (v > 0 ? `${v.toFixed(2)}%` : '-')
   }
 };
 
@@ -100,7 +90,7 @@ export default function PidMetricDetailModal({
 
   const rows = useMemo(() => {
     if (!pidItem) return [];
-    
+
     return dates.map((d, idx) => {
       const record = pidItem.dailyData[d] || {
         date: d,
@@ -113,7 +103,7 @@ export default function PidMetricDetailModal({
       };
 
       const val = record[selectedMetric] || 0;
-      
+
       // Calculate DoD
       let dodVal = 0;
       let dodPct = 0;
@@ -127,7 +117,7 @@ export default function PidMetricDetailModal({
 
       // Find adjustments for this PID and date
       const adjForDay = adjustments.filter(
-        a => a.pid === pidItem.pid && (a.date === record.displayDate || a.date === d)
+        (a) => a.pid === pidItem.pid && (a.date === record.displayDate || a.date === d)
       );
 
       return {
@@ -144,7 +134,7 @@ export default function PidMetricDetailModal({
   // Aggregate stats
   const stats = useMemo(() => {
     if (!rows.length) return { total: 0, avg: 0, max: 0, min: 0 };
-    const values = rows.map(r => r.value).filter(v => v > 0);
+    const values = rows.map((r) => r.value).filter((v) => v > 0);
     const total = rows.reduce((acc, r) => acc + r.value, 0);
     const avg = values.length ? total / values.length : 0;
     const max = values.length ? Math.max(...values) : 0;
@@ -156,37 +146,55 @@ export default function PidMetricDetailModal({
 
   const currentCfg = METRIC_CONFIG[selectedMetric];
 
+  // Theme tokens
+  const mainText = isDarkMode ? 'text-slate-100' : 'text-slate-900';
+  const secText = isDarkMode ? 'text-slate-400' : 'text-slate-600';
+  const borderCol = isDarkMode ? 'border-slate-800' : 'border-slate-200';
+  const bgModal = isDarkMode ? 'bg-[#0f172a]' : 'bg-white';
+  const bgHeader = isDarkMode ? 'bg-[#131d33]' : 'bg-slate-50';
+  const bgSubHeader = isDarkMode ? 'bg-[#0c1222]' : 'bg-slate-100/70';
+  const bgCard = isDarkMode ? 'bg-[#1e293b]/70 border-slate-800' : 'bg-slate-50 border-slate-200';
+  const tableHeadBg = isDarkMode ? 'bg-[#1e293b] text-slate-300' : 'bg-slate-100 text-slate-700';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div 
-        className={`relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border ${
-          isDarkMode ? 'bg-[#0f172a] border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
-        }`}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+      <div
+        className={`relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border ${borderCol} ${bgModal}`}
       >
         {/* Modal Header */}
-        <div className={`p-6 border-b flex items-start justify-between ${isDarkMode ? 'border-slate-800 bg-[#131d33]' : 'border-slate-100 bg-slate-50'}`}>
+        <div className={`p-6 border-b flex items-start justify-between ${borderCol} ${bgHeader}`}>
           <div className="space-y-1 pr-6">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border ${
+                  isDarkMode
+                    ? 'bg-slate-800 text-slate-200 border-slate-700'
+                    : 'bg-slate-200 text-slate-800 border-slate-300'
+                }`}
+              >
                 {pidItem.cluster || 'No Cluster'}
               </span>
-              <span className="text-xs text-slate-400 font-mono">PID: {pidItem.pid}</span>
+              <span className={`text-xs font-mono ${secText}`}>PID: {pidItem.pid}</span>
               {pidItem.cid && (
-                <span className="text-xs text-slate-400 font-mono">CID: {pidItem.cid}</span>
+                <span className={`text-xs font-mono ${secText}`}>CID: {pidItem.cid}</span>
               )}
             </div>
-            <h2 className="text-lg font-bold line-clamp-2 leading-tight">
+            <h2 className={`text-lg font-black line-clamp-2 leading-tight ${mainText}`}>
               {pidItem.skuName}
             </h2>
-            <p className="text-xs text-slate-400">
-              Daily Single-Metric View: <span className={`font-semibold ${currentCfg.color}`}>{currentCfg.label}</span>
+            <p className={`text-xs ${secText}`}>
+              Daily Single-Metric View: <span className={`font-bold ${mainText}`}>{currentCfg.label}</span>
             </p>
           </div>
 
           <button
             onClick={onClose}
             aria-label="Close modal"
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
+            className={`p-2 rounded-xl transition-colors shrink-0 ${
+              isDarkMode
+                ? 'text-slate-400 hover:text-white hover:bg-slate-800'
+                : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200'
+            }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -195,7 +203,7 @@ export default function PidMetricDetailModal({
         </div>
 
         {/* Metric Switcher Tabs */}
-        <div className={`px-6 pt-4 pb-2 border-b flex flex-wrap gap-2 ${isDarkMode ? 'border-slate-800 bg-[#0c1222]' : 'border-slate-100 bg-slate-50/50'}`}>
+        <div className={`px-6 pt-4 pb-3 border-b flex flex-wrap gap-2 ${borderCol} ${bgSubHeader}`}>
           {(['spend', 'adsGmv', 'sales', 'roas', 'cir'] as MetricType[]).map((m) => {
             const cfg = METRIC_CONFIG[m];
             const isAct = selectedMetric === m;
@@ -203,12 +211,14 @@ export default function PidMetricDetailModal({
               <button
                 key={m}
                 onClick={() => setSelectedMetric(m)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
                   isAct
-                    ? `${cfg.bgColor} ${cfg.color} border shadow-sm ring-1 ring-inset ring-current`
+                    ? isDarkMode
+                      ? 'bg-slate-100 text-slate-950 border-white shadow-sm font-black'
+                      : 'bg-slate-900 text-white border-slate-900 shadow-sm font-black'
                     : isDarkMode
-                    ? 'bg-[#1e293b] text-slate-400 hover:text-slate-200'
-                    : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                    ? 'bg-[#1e293b] text-slate-400 hover:text-slate-200 border-slate-700'
+                    : 'bg-white text-slate-700 hover:text-slate-950 border-slate-300'
                 }`}
               >
                 {cfg.label}
@@ -219,34 +229,34 @@ export default function PidMetricDetailModal({
 
         {/* Summary Stats Cards */}
         <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className={`p-3.5 rounded-xl border ${isDarkMode ? 'bg-[#1e293b]/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
-            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+          <div className={`p-4 rounded-xl border ${bgCard}`}>
+            <div className={`text-[10px] font-extrabold uppercase tracking-wider ${secText}`}>
               {selectedMetric === 'roas' || selectedMetric === 'cir' ? 'Average' : 'Total'}
             </div>
-            <div className={`text-base font-extrabold mt-0.5 ${currentCfg.color}`}>
+            <div className={`text-lg font-black mt-1 ${mainText}`}>
               {selectedMetric === 'roas' || selectedMetric === 'cir'
                 ? currentCfg.format(stats.avg)
                 : currentCfg.format(stats.total)}
             </div>
           </div>
 
-          <div className={`p-3.5 rounded-xl border ${isDarkMode ? 'bg-[#1e293b]/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
-            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Daily Average</div>
-            <div className="text-base font-extrabold text-slate-200 mt-0.5">
+          <div className={`p-4 rounded-xl border ${bgCard}`}>
+            <div className={`text-[10px] font-extrabold uppercase tracking-wider ${secText}`}>Daily Average</div>
+            <div className={`text-lg font-black mt-1 ${mainText}`}>
               {currentCfg.format(stats.avg)}
             </div>
           </div>
 
-          <div className={`p-3.5 rounded-xl border ${isDarkMode ? 'bg-[#1e293b]/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
-            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Peak Value</div>
-            <div className="text-base font-extrabold text-emerald-400 mt-0.5">
+          <div className={`p-4 rounded-xl border ${bgCard}`}>
+            <div className={`text-[10px] font-extrabold uppercase tracking-wider ${secText}`}>Peak Value</div>
+            <div className={`text-lg font-black mt-1 ${mainText}`}>
               {currentCfg.format(stats.max)}
             </div>
           </div>
 
-          <div className={`p-3.5 rounded-xl border ${isDarkMode ? 'bg-[#1e293b]/50 border-slate-800' : 'bg-slate-50 border-slate-100'}`}>
-            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Lowest Value</div>
-            <div className="text-base font-extrabold text-slate-400 mt-0.5">
+          <div className={`p-4 rounded-xl border ${bgCard}`}>
+            <div className={`text-[10px] font-extrabold uppercase tracking-wider ${secText}`}>Lowest Value</div>
+            <div className={`text-lg font-black mt-1 ${mainText}`}>
               {currentCfg.format(stats.min)}
             </div>
           </div>
@@ -254,9 +264,9 @@ export default function PidMetricDetailModal({
 
         {/* Focused Daily Table */}
         <div className="flex-1 overflow-y-auto px-6 pb-6">
-          <div className={`rounded-xl border overflow-hidden ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+          <div className={`rounded-xl border overflow-hidden ${borderCol}`}>
             <table className="w-full text-left border-collapse text-xs">
-              <thead className={`text-[11px] font-bold uppercase tracking-wider ${isDarkMode ? 'bg-[#1e293b] text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
+              <thead className={`text-[11px] font-bold uppercase tracking-wider border-b ${borderCol} ${tableHeadBg}`}>
                 <tr>
                   <th className="py-3 px-4">Date</th>
                   <th className="py-3 px-4 text-right">{currentCfg.label}</th>
@@ -265,33 +275,37 @@ export default function PidMetricDetailModal({
                   <th className="py-3 px-4 text-center">Action</th>
                 </tr>
               </thead>
-              <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
+              <tbody className={`divide-y ${borderCol}`}>
                 {rows.map((row, idx) => (
                   <tr
                     key={row.date}
                     className={`transition-colors ${
-                      isDarkMode ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'
+                      isDarkMode ? 'hover:bg-slate-800/40' : 'hover:bg-slate-100/70'
                     }`}
                   >
-                    <td className="py-3 px-4 font-semibold text-slate-300">
+                    <td className={`py-3 px-4 font-bold ${mainText}`}>
                       {row.displayDate}
                     </td>
 
-                    <td className={`py-3 px-4 text-right font-extrabold ${currentCfg.color}`}>
+                    <td className={`py-3 px-4 text-right font-black font-mono text-sm ${mainText}`}>
                       {currentCfg.format(row.value)}
                     </td>
 
                     <td className="py-3 px-4 text-right">
                       {idx === 0 ? (
-                        <span className="text-slate-500 font-mono">-</span>
+                        <span className={`font-mono ${secText}`}>-</span>
                       ) : (
                         <span
-                          className={`font-semibold font-mono ${
+                          className={`font-bold font-mono ${
                             row.dodVal > 0
-                              ? 'text-emerald-400'
+                              ? isDarkMode
+                                ? 'text-emerald-400'
+                                : 'text-emerald-700'
                               : row.dodVal < 0
-                              ? 'text-rose-400'
-                              : 'text-slate-400'
+                              ? isDarkMode
+                                ? 'text-rose-400'
+                                : 'text-rose-700'
+                              : secText
                           }`}
                         >
                           {row.dodVal > 0 ? '+' : ''}
@@ -306,22 +320,29 @@ export default function PidMetricDetailModal({
                           {row.adjustments.map((adj) => (
                             <div key={adj.id || adj.adjustment} className="flex items-center gap-2">
                               <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
                                   adj.status === 'Adjusted'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                                    ? isDarkMode
+                                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                      : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                    : isDarkMode
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                    : 'bg-amber-100 text-amber-900 border-amber-300'
                                 }`}
                               >
                                 {adj.status || 'Pending'}
                               </span>
-                              <span className="truncate max-w-[200px] text-slate-300" title={adj.adjustment}>
+                              <span
+                                className={`truncate max-w-[220px] font-medium ${mainText}`}
+                                title={adj.adjustment}
+                              >
                                 {adj.adjustment}
                               </span>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <span className="text-slate-500 italic">No notes</span>
+                        <span className={`italic text-[11px] ${secText}`}>No notes</span>
                       )}
                     </td>
 
@@ -336,7 +357,11 @@ export default function PidMetricDetailModal({
                             row.value
                           )
                         }
-                        className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white transition-all border border-indigo-500/30"
+                        className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-colors ${
+                          isDarkMode
+                            ? 'bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white border-slate-700'
+                            : 'bg-slate-100 text-slate-800 hover:bg-slate-900 hover:text-white border-slate-300'
+                        }`}
                       >
                         + Adjust
                       </button>
@@ -349,13 +374,17 @@ export default function PidMetricDetailModal({
         </div>
 
         {/* Modal Footer */}
-        <div className={`p-4 border-t flex items-center justify-between ${isDarkMode ? 'border-slate-800 bg-[#0c1222]' : 'border-slate-100 bg-slate-50'}`}>
-          <div className="text-xs text-slate-400">
-            Showing only <span className="font-semibold text-slate-200">{currentCfg.label}</span> performance across {dates.length} days.
+        <div className={`p-4 border-t flex items-center justify-between ${borderCol} ${bgHeader}`}>
+          <div className={`text-xs ${secText}`}>
+            Showing only <span className={`font-bold ${mainText}`}>{currentCfg.label}</span> performance across {dates.length} days.
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+            className={`px-5 py-2 rounded-xl text-xs font-bold transition-colors ${
+              isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-white'
+                : 'bg-slate-200 hover:bg-slate-300 text-slate-900'
+            }`}
           >
             Close
           </button>

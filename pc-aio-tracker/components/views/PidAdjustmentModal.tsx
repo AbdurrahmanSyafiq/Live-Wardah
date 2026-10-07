@@ -98,22 +98,30 @@ export function AddAdjustmentModal({
     }
   };
 
+  const mainText = isDarkMode ? 'text-slate-100' : 'text-slate-900';
+  const secText = isDarkMode ? 'text-slate-400' : 'text-slate-600';
+  const labelText = isDarkMode ? 'text-slate-400' : 'text-slate-700';
+  const borderCol = isDarkMode ? 'border-slate-800' : 'border-slate-200';
+  const inputBg = isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
-        className={`relative w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border ${
-          isDarkMode ? 'bg-[#0f172a] border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+        className={`relative w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border ${borderCol} ${
+          isDarkMode ? 'bg-[#0f172a]' : 'bg-white'
         }`}
       >
-        <div className={`p-5 border-b flex items-center justify-between ${isDarkMode ? 'border-slate-800 bg-[#131d33]' : 'border-slate-100 bg-slate-50'}`}>
+        <div className={`p-5 border-b flex items-center justify-between ${borderCol} ${isDarkMode ? 'bg-[#131d33]' : 'bg-slate-50'}`}>
           <div>
-            <h3 className="text-base font-bold">Add Performance Adjustment</h3>
-            <p className="text-xs text-slate-400">Record operational notes and adjustment logs in Google Sheets.</p>
+            <h3 className={`text-base font-black ${mainText}`}>Add Performance Adjustment</h3>
+            <p className={`text-xs ${secText}`}>Record operational notes and adjustment logs in Google Sheets.</p>
           </div>
           <button
             onClick={onClose}
             aria-label="Close modal"
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className={`p-2 rounded-xl transition-colors ${
+              isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200'
+            }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -121,33 +129,29 @@ export function AddAdjustmentModal({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
           {error && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 font-semibold">
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 font-bold">
               {error}
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Date</label>
+              <label className={`block text-[11px] font-extrabold uppercase tracking-wider mb-1 ${labelText}`}>Date</label>
               <input
                 type="text"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 required
-                className={`w-full py-2 px-3 rounded-xl font-semibold border outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                }`}
+                className={`w-full py-2 px-3 rounded-xl font-bold border outline-none focus:ring-2 focus:ring-indigo-500 ${inputBg}`}
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Target Metric</label>
+              <label className={`block text-[11px] font-extrabold uppercase tracking-wider mb-1 ${labelText}`}>Target Metric</label>
               <select
                 value={metric}
                 onChange={(e) => setMetric(e.target.value)}
-                className={`w-full py-2 px-3 rounded-xl font-semibold border outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                }`}
+                className={`w-full py-2 px-3 rounded-xl font-bold border outline-none focus:ring-2 focus:ring-indigo-500 ${inputBg}`}
               >
                 <option value="Spend">Spend</option>
                 <option value="Ads GMV">Ads GMV</option>
@@ -160,32 +164,28 @@ export function AddAdjustmentModal({
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Product ID (PID)</label>
+            <label className={`block text-[11px] font-extrabold uppercase tracking-wider mb-1 ${labelText}`}>Product ID (PID)</label>
             <input
               type="text"
               value={pid}
               onChange={(e) => setPid(e.target.value)}
               required
-              className={`w-full py-2 px-3 rounded-xl font-mono border outline-none focus:ring-2 focus:ring-indigo-500 ${
-                isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-              }`}
+              className={`w-full py-2 px-3 rounded-xl font-mono font-bold border outline-none focus:ring-2 focus:ring-indigo-500 ${inputBg}`}
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">SKU Name</label>
+            <label className={`block text-[11px] font-extrabold uppercase tracking-wider mb-1 ${labelText}`}>SKU Name</label>
             <input
               type="text"
               value={skuName}
               onChange={(e) => setSkuName(e.target.value)}
-              className={`w-full py-2 px-3 rounded-xl font-semibold border outline-none focus:ring-2 focus:ring-indigo-500 ${
-                isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-              }`}
+              className={`w-full py-2 px-3 rounded-xl font-bold border outline-none focus:ring-2 focus:ring-indigo-500 ${inputBg}`}
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+            <label className={`block text-[11px] font-extrabold uppercase tracking-wider mb-1 ${labelText}`}>
               Adjustment Notes / Action Plan
             </label>
             <textarea
@@ -194,22 +194,18 @@ export function AddAdjustmentModal({
               onChange={(e) => setAdjustment(e.target.value)}
               placeholder="e.g. Budget increased by 20% due to ROAS > 10x; SKU ranking pushed to top 3."
               required
-              className={`w-full p-3 rounded-xl border outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed ${
-                isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-              }`}
+              className={`w-full p-3 rounded-xl border outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed font-medium ${inputBg}`}
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Submitted By</label>
+            <label className={`block text-[11px] font-extrabold uppercase tracking-wider mb-1 ${labelText}`}>Submitted By</label>
             <input
               type="text"
               value={userName}
               onChange={(e) => setUserName(e.target.value)}
               required
-              className={`w-full py-2 px-3 rounded-xl font-semibold border outline-none focus:ring-2 focus:ring-indigo-500 ${
-                isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-              }`}
+              className={`w-full py-2 px-3 rounded-xl font-bold border outline-none focus:ring-2 focus:ring-indigo-500 ${inputBg}`}
             />
           </div>
 
@@ -218,14 +214,20 @@ export function AddAdjustmentModal({
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100'
+              }`}
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2"
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                isDarkMode
+                  ? 'bg-slate-100 hover:bg-white text-slate-950 shadow-md'
+                  : 'bg-slate-900 hover:bg-slate-800 text-white shadow-md'
+              }`}
             >
               {isSubmitting ? (
                 <>
@@ -299,23 +301,35 @@ export function AdjustmentLogsDrawer({
 
   if (!isOpen) return null;
 
+  const mainText = isDarkMode ? 'text-slate-100' : 'text-slate-900';
+  const secText = isDarkMode ? 'text-slate-400' : 'text-slate-600';
+  const borderCol = isDarkMode ? 'border-slate-800' : 'border-slate-200';
+  const bgModal = isDarkMode ? 'bg-[#0f172a]' : 'bg-white';
+  const bgHeader = isDarkMode ? 'bg-[#131d33]' : 'bg-slate-50';
+  const bgSubHeader = isDarkMode ? 'bg-[#0c1222]' : 'bg-slate-100/70';
+  const tableHeadBg = isDarkMode ? 'bg-[#1e293b] text-slate-300' : 'bg-slate-100 text-slate-700';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
-        className={`relative w-full max-w-5xl max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border ${
-          isDarkMode ? 'bg-[#0f172a] border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
-        }`}
+        className={`relative w-full max-w-5xl max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border ${borderCol} ${bgModal}`}
       >
         {/* Header */}
-        <div className={`p-6 border-b flex items-center justify-between ${isDarkMode ? 'border-slate-800 bg-[#131d33]' : 'border-slate-100 bg-slate-50'}`}>
+        <div className={`p-6 border-b flex items-center justify-between ${borderCol} ${bgHeader}`}>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold">Adjustment Logs</h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <h2 className={`text-lg font-black ${mainText}`}>Adjustment Logs</h2>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                  isDarkMode
+                    ? 'bg-slate-800 text-slate-200 border-slate-700'
+                    : 'bg-slate-200 text-slate-800 border-slate-300'
+                }`}
+              >
                 {logs.length} Total
               </span>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className={`text-xs ${secText}`}>
               Operational track records stored in sheet &apos;Adjustment Logs&apos;. Update status to collaborate seamlessly.
             </p>
           </div>
@@ -323,34 +337,37 @@ export function AdjustmentLogsDrawer({
           <button
             onClick={onClose}
             aria-label="Close modal"
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className={`p-2 rounded-xl transition-colors ${
+              isDarkMode ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-slate-950 hover:bg-slate-200'
+            }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
         {/* Filters */}
-        <div className={`px-6 py-3 border-b flex flex-wrap items-center justify-between gap-3 ${isDarkMode ? 'border-slate-800 bg-[#0c1222]' : 'border-slate-100 bg-slate-50/50'}`}>
+        <div className={`px-6 py-3 border-b flex flex-wrap items-center justify-between gap-3 ${borderCol} ${bgSubHeader}`}>
           <div className="flex items-center gap-2">
-            {(['All', 'Pending', 'Adjusted'] as string[]).map((st) => (
-              <button
-                key={st}
-                onClick={() => setFilterStatus(st)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                  filterStatus === st
-                    ? st === 'Adjusted'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : st === 'Pending'
-                      ? 'bg-amber-600 text-white shadow-sm'
-                      : 'bg-indigo-600 text-white shadow-sm'
-                    : isDarkMode
-                    ? 'bg-[#1e293b] text-slate-400 hover:text-slate-200'
-                    : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
-                }`}
-              >
-                {st}
-              </button>
-            ))}
+            {(['All', 'Pending', 'Adjusted'] as string[]).map((st) => {
+              const isAct = filterStatus === st;
+              return (
+                <button
+                  key={st}
+                  onClick={() => setFilterStatus(st)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                    isAct
+                      ? isDarkMode
+                        ? 'bg-slate-100 text-slate-950 border-white shadow-sm font-black'
+                        : 'bg-slate-900 text-white border-slate-900 shadow-sm font-black'
+                      : isDarkMode
+                      ? 'bg-[#1e293b] text-slate-400 hover:text-slate-200 border-slate-700'
+                      : 'bg-white text-slate-700 hover:text-slate-950 border-slate-300'
+                  }`}
+                >
+                  {st}
+                </button>
+              );
+            })}
           </div>
 
           <div className="relative min-w-[240px]">
@@ -359,25 +376,25 @@ export function AdjustmentLogsDrawer({
               placeholder="Search by PID, SKU, note, author..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className={`w-full py-1.5 px-3 pl-8 rounded-xl text-xs border outline-none focus:ring-2 focus:ring-indigo-500 ${
-                isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-800'
+              className={`w-full py-1.5 px-3 pl-8 rounded-xl text-xs font-medium border outline-none focus:ring-2 focus:ring-indigo-500 ${
+                isDarkMode ? 'bg-[#1e293b] border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
               }`}
             />
-            <svg className="w-4 h-4 absolute left-2.5 top-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <svg className={`w-4 h-4 absolute left-2.5 top-2.5 ${secText}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </div>
         </div>
 
         {/* Logs Table */}
         <div className="flex-1 overflow-y-auto p-6">
           {filteredLogs.length === 0 ? (
-            <div className="text-center py-12 text-slate-500">
+            <div className={`text-center py-12 ${secText}`}>
               <svg className="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              <p className="text-sm font-semibold">No adjustments found matching filter.</p>
+              <p className="text-sm font-bold">No adjustments found matching filter.</p>
             </div>
           ) : (
-            <div className={`rounded-xl border overflow-hidden ${isDarkMode ? 'border-slate-800' : 'border-slate-200'}`}>
+            <div className={`rounded-xl border overflow-hidden ${borderCol}`}>
               <table className="w-full text-left border-collapse text-xs">
-                <thead className={`text-[11px] font-bold uppercase tracking-wider ${isDarkMode ? 'bg-[#1e293b] text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
+                <thead className={`text-[11px] font-bold uppercase tracking-wider border-b ${borderCol} ${tableHeadBg}`}>
                   <tr>
                     <th className="py-3 px-3">Status</th>
                     <th className="py-3 px-3">Date</th>
@@ -389,62 +406,66 @@ export function AdjustmentLogsDrawer({
                     <th className="py-3 px-3 text-center">Action</th>
                   </tr>
                 </thead>
-                <tbody className={`divide-y ${isDarkMode ? 'divide-slate-800' : 'divide-slate-100'}`}>
+                <tbody className={`divide-y ${borderCol}`}>
                   {filteredLogs.map((log) => {
                     const isAdjusted = log.status === 'Adjusted';
                     const isUpdating = updatingId === log.id;
                     return (
-                      <tr key={log.id} className={isDarkMode ? 'hover:bg-slate-800/40' : 'hover:bg-slate-50'}>
+                      <tr key={log.id} className={isDarkMode ? 'hover:bg-slate-800/40' : 'hover:bg-slate-100/70'}>
                         <td className="py-3 px-3">
                           <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
                               isAdjusted
-                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                ? isDarkMode
+                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                  : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                : isDarkMode
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                : 'bg-amber-100 text-amber-900 border-amber-300'
                             }`}
                           >
                             {log.status || 'Pending'}
                           </span>
                         </td>
 
-                        <td className="py-3 px-3 font-semibold text-slate-300 whitespace-nowrap">
+                        <td className={`py-3 px-3 font-bold whitespace-nowrap ${mainText}`}>
                           {log.date}
                         </td>
 
                         <td className="py-3 px-3 max-w-[200px]">
-                          <div className="font-mono text-[11px] text-slate-400">{log.pid}</div>
-                          <div className="font-semibold text-slate-200 truncate" title={log.skuName}>
+                          <div className={`font-mono text-[11px] ${secText}`}>{log.pid}</div>
+                          <div className={`font-bold truncate leading-snug ${mainText}`} title={log.skuName}>
                             {log.skuName}
                           </div>
                         </td>
 
-                        <td className="py-3 px-3 font-bold text-indigo-400 whitespace-nowrap">
+                        <td className={`py-3 px-3 font-bold whitespace-nowrap ${mainText}`}>
                           {log.metric}
                         </td>
 
                         <td className="py-3 px-3 max-w-[260px]">
-                          <p className="text-slate-300 leading-snug break-words">
+                          <p className={`font-medium leading-snug break-words ${mainText}`}>
                             {log.adjustment}
                           </p>
                         </td>
 
-                        <td className="py-3 px-3 whitespace-nowrap text-slate-400">
-                          <div>{log.createdBy}</div>
-                          <div className="text-[10px] text-slate-500">
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <div className={`font-bold ${mainText}`}>{log.createdBy}</div>
+                          <div className={`text-[10px] ${secText}`}>
                             {log.createdAt ? new Date(log.createdAt).toLocaleDateString() : ''}
                           </div>
                         </td>
 
-                        <td className="py-3 px-3 whitespace-nowrap text-slate-400">
+                        <td className="py-3 px-3 whitespace-nowrap">
                           {log.updatedAt ? (
                             <>
-                              <div>{log.updatedBy || 'Updated'}</div>
-                              <div className="text-[10px] text-slate-500">
+                              <div className={`font-bold ${mainText}`}>{log.updatedBy || 'Updated'}</div>
+                              <div className={`text-[10px] ${secText}`}>
                                 {new Date(log.updatedAt).toLocaleString()}
                               </div>
                             </>
                           ) : (
-                            <span className="text-slate-600">-</span>
+                            <span className={secText}>-</span>
                           )}
                         </td>
 
@@ -454,8 +475,12 @@ export function AdjustmentLogsDrawer({
                             disabled={isUpdating}
                             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1 mx-auto ${
                               isAdjusted
-                                ? 'bg-slate-700/50 hover:bg-amber-600/30 text-slate-300 hover:text-amber-300 border border-slate-600'
-                                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                                ? isDarkMode
+                                  ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300'
+                                : isDarkMode
+                                ? 'bg-slate-100 hover:bg-white text-slate-950 font-black'
+                                : 'bg-slate-900 hover:bg-slate-800 text-white font-black'
                             }`}
                           >
                             {isUpdating ? (
@@ -477,13 +502,17 @@ export function AdjustmentLogsDrawer({
         </div>
 
         {/* Footer */}
-        <div className={`p-4 border-t flex items-center justify-between ${isDarkMode ? 'border-slate-800 bg-[#0c1222]' : 'border-slate-100 bg-slate-50'}`}>
-          <div className="text-xs text-slate-400">
-            Changes are saved live to <span className="font-mono text-indigo-400">Adjustment Logs</span> sheet in Google Spreadsheet.
+        <div className={`p-4 border-t flex items-center justify-between ${borderCol} ${bgHeader}`}>
+          <div className={`text-xs ${secText}`}>
+            Changes are saved live to <span className={`font-mono font-bold ${mainText}`}>Adjustment Logs</span> sheet in Google Spreadsheet.
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+            className={`px-5 py-2 rounded-xl text-xs font-bold transition-colors ${
+              isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-white'
+                : 'bg-slate-200 hover:bg-slate-300 text-slate-900'
+            }`}
           >
             Close
           </button>
