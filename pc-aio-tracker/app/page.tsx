@@ -44,12 +44,13 @@ export default function DashboardApp() {
   const [extraSheetsData, setExtraSheetsData] = useState<{ mediaApi: any[]; commerce: any[] }>({ mediaApi: [], commerce: [] });
   const [homeMediaData, setHomeMediaData] = useState<any[]>([]);
   const [homeCommerceData, setHomeCommerceData] = useState<any[]>([]);
-  const [pidRankData, setPidRankData] = useState<{ commerce: any[]; category: any[]; sales: any[]; cid: any[]; adjustments: any[] }>({
+  const [pidRankData, setPidRankData] = useState<{ commerce: any[]; category: any[]; sales: any[]; cid: any[]; adjustments: any[]; pushRank: any[] }>({
     commerce: [],
     category: [],
     sales: [],
     cid: [],
-    adjustments: []
+    adjustments: [],
+    pushRank: []
   });
   
   const [filters, setFilters] = useState(defaultFilters);
@@ -113,6 +114,7 @@ export default function DashboardApp() {
         dataCache.current[CONFIG.pidRank.sheetSales] = undefined as any;
         dataCache.current[CONFIG.pidRank.sheetCid] = undefined as any;
         dataCache.current[CONFIG.pidRank.sheetAdjustments] = undefined as any;
+        dataCache.current[CONFIG.pidRank.sheetPushRank] = undefined as any;
       } else {
         dataCache.current[CONFIG[engine].sheet] = undefined as any;
       }
@@ -150,19 +152,21 @@ export default function DashboardApp() {
         const commData = await fetchSheet(CONFIG.commerce.sheet);
         setRawData(commData);
       } else if (engine === 'pidRank') {
-        const [commData, catData, sData, cData, adjData] = await Promise.all([
+        const [commData, catData, sData, cData, adjData, prData] = await Promise.all([
           fetchSheet(CONFIG.pidRank.sheetCommerce),
           fetchSheet(CONFIG.pidRank.sheetCategory),
           fetchSheet(CONFIG.pidRank.sheetSales),
           fetchSheet(CONFIG.pidRank.sheetCid),
-          fetchSheet(CONFIG.pidRank.sheetAdjustments)
+          fetchSheet(CONFIG.pidRank.sheetAdjustments),
+          fetchSheet(CONFIG.pidRank.sheetPushRank)
         ]);
         setPidRankData({
           commerce: commData,
           category: catData,
           sales: sData,
           cid: cData,
-          adjustments: adjData
+          adjustments: adjData,
+          pushRank: prData
         });
       } else if (engine === 'signal') {
         const [signalData, mediaApiData, commerceData] = await Promise.all([
@@ -1240,6 +1244,7 @@ export default function DashboardApp() {
               salesData={pidRankData.sales}
               cidData={pidRankData.cid}
               adjustments={pidRankData.adjustments}
+              pushRankData={pidRankData.pushRank}
               isDarkMode={isDarkMode}
               onAddAdjustment={handleAddAdjustment}
               onUpdateAdjustmentStatus={handleUpdateAdjustmentStatus}

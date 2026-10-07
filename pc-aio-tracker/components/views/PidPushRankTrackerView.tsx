@@ -11,6 +11,7 @@ interface PidPushRankTrackerViewProps {
   salesData: any[];
   cidData: any[];
   adjustments: any[];
+  pushRankData?: any[];
   isDarkMode: boolean;
   onAddAdjustment: (data: any) => Promise<void>;
   onUpdateAdjustmentStatus: (id: string, status: 'Pending' | 'Adjusted', user: string) => Promise<void>;
@@ -35,6 +36,7 @@ interface PidItem {
   cid: string;
   brand: string;
   platform: string;
+  isPushRank?: boolean;
   dailyData: Record<string, DailyRecord>;
   totalSpend: number;
   totalAdsGmv: number;
@@ -61,6 +63,7 @@ export default function PidPushRankTrackerView({
   salesData,
   cidData,
   adjustments,
+  pushRankData = [],
   isDarkMode,
   onAddAdjustment,
   onUpdateAdjustmentStatus,
@@ -71,6 +74,7 @@ export default function PidPushRankTrackerView({
   const [selectedBrand, setSelectedBrand] = useState('All');
   const [selectedPlatform, setSelectedPlatform] = useState('All');
   const [selectedCluster, setSelectedCluster] = useState('All');
+  const [pushRankOnly, setPushRankOnly] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('');
   const [startDate] = useState('');
   const [endDate] = useState('');
@@ -136,7 +140,26 @@ export default function PidPushRankTrackerView({
     return map;
   }, [cidData]);
 
-  // 3. Collect all distinct months and dates available
+  // 3. Build Push Rank Set from 'Push Rank' sheet (col D "Status" = "PUSH RANK")
+  const pushRankSet = useMemo(() => {
+    const set = new Set<string>();
+    if (!Array.isArray(pushRankData)) return set;
+    pushRankData.forEach((row) => {
+      const status = cleanStr(row['Status'] || row['status'] || row['STATUS']);
+      if (status.toUpperCase().includes('PUSH RANK')) {
+        const rawSkuId = cleanStr(row['SKU ID'] || row['SKU ID​'] || row['PID'] || row['Sku Id']);
+        if (rawSkuId) {
+          set.add(rawSkuId);
+          set.add(rawSkuId.replace(/\.0$/, ''));
+        }
+        const skuName = cleanStr(row['SKU Name'] || row['Nama Produk']);
+        if (skuName) set.add(skuName.toLowerCase());
+      }
+    });
+    return set;
+  }, [pushRankData]);
+
+  // 4. Collect all distinct months and dates available
   const { allAvailableDates, availableMonths } = useMemo(() => {
     const datesSet = new Set<string>();
     const monthsSet = new Set<string>();
@@ -309,6 +332,11 @@ export default function PidPushRankTrackerView({
       const overallRoas = totalSpend > 0 ? totalAdsGmv / totalSpend : 0;
       const overallCir = totalAdsGmv > 0 ? (totalSpend / totalAdsGmv) * 100 : 0;
 
+      const pidClean = cleanStr(val.pid);
+      const isPushRank = pushRankSet.has(pidClean) ||
+        pushRankSet.has(pidClean.replace(/\.0$/, '')) ||
+        Boolean(val.skuName && pushRankSet.has(val.skuName.toLowerCase()));
+
       result.push({
         pid: val.pid,
         skuName: val.skuName,
@@ -316,6 +344,7 @@ export default function PidPushRankTrackerView({
         cid: val.cid,
         brand: val.brand,
         platform: val.platform,
+        isPushRank,
         dailyData,
         totalSpend,
         totalAdsGmv,
@@ -326,7 +355,7 @@ export default function PidPushRankTrackerView({
     });
 
     return result;
-  }, [categoryData, categoryMap, cidMap, commerceData, salesData, activeDates]);
+  }, [categoryData, categoryMap, cidMap, commerceData, salesData, activeDates, pushRankSet]);
 
   // Filter options
   const brandOptions = useMemo(() => {
@@ -366,6 +395,10 @@ export default function PidPushRankTrackerView({
       list = list.filter((i) => i.cluster.toLowerCase() === c);
     }
 
+    if (pushRankOnly) {
+      list = list.filter((i) => i.isPushRank);
+    }
+
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       list = list.filter(
@@ -393,7 +426,9 @@ export default function PidPushRankTrackerView({
 
       return sortAsc ? diff : -diff;
     });
-  }, [pidItems, selectedBrand, selectedPlatform, selectedCluster, searchTerm, sortField, sortAsc]);
+  }, [pidItems, selectedBrand, selectedPlatform, selectedCluster, pushRankOnly, searchTerm, sortField, sortAsc]);
+
+  const pushRankCount = useMemo(() => pidItems.filter((i) => i.isPushRank).length, [pidItems]);
 
   // Summary KPIs
   const summaryKPIs = useMemo(() => {
@@ -502,6 +537,24 @@ export default function PidPushRankTrackerView({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
               </svg>
               New Adjustment
+            </button>
+
+            {/* Push Rank PID Filter Toggle */}
+            <button
+              onClick={() => {
+                setPushRankOnly(!pushRankOnly);
+                setPage(1);
+              }}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border shadow-sm ${
+                pushRankOnly
+                  ? 'bg-rose-600 text-white border-rose-600 shadow-rose-600/20'
+                  : isDarkMode
+                  ? 'bg-rose-500/10 text-rose-300 hover:bg-rose-600 hover:text-white border-rose-500/30'
+                  : 'bg-rose-50 text-rose-900 hover:bg-rose-600 hover:text-white border-rose-200'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${pushRankOnly ? 'bg-white' : 'bg-rose-500 animate-pulse'}`} />
+              Push Rank Only ({pushRankCount})
             </button>
 
             <button
@@ -672,44 +725,46 @@ export default function PidPushRankTrackerView({
       {/* 4. Tracking Result Table with Frozen 4 Columns */}
       <div className={`rounded-2xl border ${borderCol} shadow-sm overflow-hidden ${cardBg}`}>
         <div className="overflow-auto max-h-[75vh]">
-          <table className="w-full text-left border-separate border-spacing-0 text-xs whitespace-nowrap">
+          <table className="w-max min-w-full text-left border-separate border-spacing-0 text-xs whitespace-nowrap">
             {/* Top Multi-level Header */}
-            <thead className="font-bold uppercase tracking-wider text-[11px]">
+            <thead className="sticky top-0 z-40 font-bold uppercase tracking-wider text-[11px]">
               {/* Row 1: Fixed 4 Column Headers + Merged Date Headers */}
               <tr className="border-b border-slate-700 h-[38px]">
                 {/* Col 1: Cluster (Frozen) */}
                 <th
-                  rowSpan={2}
                   onClick={() => handleSort('cluster')}
-                  className="w-[130px] min-w-[130px] max-w-[130px] py-3 px-3 border-r border-b border-slate-700 sticky left-0 top-0 z-50 bg-[#0f172a] text-white font-black cursor-pointer hover:underline select-none align-middle"
+                  className="w-[130px] min-w-[130px] max-w-[130px] py-2 px-3 border-r border-slate-700 sticky left-0 z-50 bg-[#0f172a] text-white font-black cursor-pointer hover:underline select-none align-middle text-left"
                 >
-                  Cluster {sortField === 'cluster' ? (sortAsc ? '▲' : '▼') : ''}
+                  <div className="w-[104px] truncate">
+                    Cluster {sortField === 'cluster' ? (sortAsc ? '▲' : '▼') : ''}
+                  </div>
                 </th>
 
                 {/* Col 2: CID (Frozen) */}
                 <th
-                  rowSpan={2}
-                  className="w-[140px] min-w-[140px] max-w-[140px] py-3 px-3 border-r border-b border-slate-700 sticky left-[130px] top-0 z-50 bg-[#0f172a] text-white font-black align-middle"
+                  className="w-[140px] min-w-[140px] max-w-[140px] py-2 px-3 border-r border-slate-700 sticky left-[130px] z-50 bg-[#0f172a] text-white font-black align-middle text-left"
                 >
-                  CID
+                  <div className="w-[114px] truncate">CID</div>
                 </th>
 
                 {/* Col 3: SKU Name (Frozen) */}
                 <th
-                  rowSpan={2}
                   onClick={() => handleSort('skuName')}
-                  className="w-[260px] min-w-[260px] max-w-[260px] py-3 px-4 border-r border-b border-slate-700 sticky left-[270px] top-0 z-50 bg-[#0f172a] text-white font-black cursor-pointer hover:underline select-none align-middle"
+                  className="w-[280px] min-w-[280px] max-w-[280px] py-2 px-4 border-r border-slate-700 sticky left-[270px] z-50 bg-[#0f172a] text-white font-black cursor-pointer hover:underline select-none align-middle text-left"
                 >
-                  SKU Name {sortField === 'skuName' ? (sortAsc ? '▲' : '▼') : ''}
+                  <div className="w-[248px] truncate">
+                    SKU Name {sortField === 'skuName' ? (sortAsc ? '▲' : '▼') : ''}
+                  </div>
                 </th>
 
                 {/* Col 4: PID (Frozen + Divider) */}
                 <th
-                  rowSpan={2}
                   onClick={() => handleSort('pid')}
-                  className="w-[160px] min-w-[160px] max-w-[160px] py-3 px-3 border-r-2 border-b border-slate-600 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.3)] sticky left-[530px] top-0 z-50 bg-[#0f172a] text-white font-black cursor-pointer hover:underline select-none align-middle"
+                  className="w-[160px] min-w-[160px] max-w-[160px] py-2 px-3 border-r-2 border-slate-600 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.3)] sticky left-[550px] z-50 bg-[#0f172a] text-white font-black cursor-pointer hover:underline select-none align-middle text-left"
                 >
-                  PID {sortField === 'pid' ? (sortAsc ? '▲' : '▼') : ''}
+                  <div className="w-[134px] truncate">
+                    PID {sortField === 'pid' ? (sortAsc ? '▲' : '▼') : ''}
+                  </div>
                 </th>
 
                 {/* Date Columns: Spanning 5 sub-columns each */}
@@ -717,7 +772,7 @@ export default function PidPushRankTrackerView({
                   <th
                     key={dateStr}
                     colSpan={5}
-                    className="py-2.5 px-3 text-center border-r border-b border-slate-700 sticky top-0 z-30 bg-[#0f172a] text-white font-black tracking-wide h-[38px]"
+                    className="py-2.5 px-3 text-center border-r border-b border-slate-700 bg-[#0f172a] text-white font-black tracking-wide h-[38px] relative z-0"
                   >
                     {formatDisplayDate(dateStr)}
                   </th>
@@ -726,21 +781,27 @@ export default function PidPushRankTrackerView({
 
               {/* Row 2: Sub-columns (Spend, Ads GMV, Sales, ROAS, CIR) */}
               <tr className="border-b border-slate-700 h-[36px]">
+                {/* Frozen column matching cells in Row 2 */}
+                <th className="w-[130px] min-w-[130px] max-w-[130px] py-2 px-3 border-r border-b border-slate-700 sticky left-0 z-50 bg-[#0f172a] text-slate-400 text-[10px] select-none align-middle text-left" />
+                <th className="w-[140px] min-w-[140px] max-w-[140px] py-2 px-3 border-r border-b border-slate-700 sticky left-[130px] z-50 bg-[#0f172a] text-slate-400 text-[10px] select-none align-middle text-left" />
+                <th className="w-[280px] min-w-[280px] max-w-[280px] py-2 px-4 border-r border-b border-slate-700 sticky left-[270px] z-50 bg-[#0f172a] text-slate-400 text-[10px] select-none align-middle text-left" />
+                <th className="w-[160px] min-w-[160px] max-w-[160px] py-2 px-3 border-r-2 border-b border-slate-600 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.3)] sticky left-[550px] z-50 bg-[#0f172a] text-slate-400 text-[10px] select-none align-middle text-left" />
+
                 {activeDates.map((dateStr) => (
                   <React.Fragment key={`sub-${dateStr}`}>
-                    <th className="w-[90px] min-w-[90px] max-w-[90px] py-2 px-2 text-right font-black border-r border-b border-slate-700 sticky top-[38px] z-30 bg-[#182338] text-white">
+                    <th className="w-[90px] min-w-[90px] max-w-[90px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white relative z-0">
                       Spend
                     </th>
-                    <th className="w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b border-slate-700 sticky top-[38px] z-30 bg-[#182338] text-white">
+                    <th className="w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white relative z-0">
                       Ads GMV
                     </th>
-                    <th className="w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b border-slate-700 sticky top-[38px] z-30 bg-[#182338] text-white">
+                    <th className="w-[95px] min-w-[95px] max-w-[95px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white relative z-0">
                       Sales
                     </th>
-                    <th className="w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b border-slate-700 sticky top-[38px] z-30 bg-[#182338] text-white">
+                    <th className="w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white relative z-0">
                       ROAS
                     </th>
-                    <th className="w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b border-slate-700 sticky top-[38px] z-30 bg-[#182338] text-white">
+                    <th className="w-[70px] min-w-[70px] max-w-[70px] py-2 px-2 text-right font-black border-r border-b border-slate-700 bg-[#182338] text-white relative z-0">
                       CIR
                     </th>
                   </React.Fragment>
@@ -757,39 +818,57 @@ export default function PidPushRankTrackerView({
                 >
                   {/* Frozen Column 1: Cluster */}
                   <td className={`w-[130px] min-w-[130px] max-w-[130px] py-3 px-3 border-r border-b ${borderCol} sticky left-0 z-20 ${tableFreezeBg} ${tableFreezeHoverBg}`}>
-                    <span
-                      className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border truncate max-w-[115px] ${
-                        isDarkMode
-                          ? 'bg-slate-800 text-slate-200 border-slate-700'
-                          : 'bg-slate-100 text-slate-800 border-slate-300'
-                      }`}
-                      title={item.cluster}
-                    >
-                      {item.cluster}
-                    </span>
+                    <div className="w-[104px]">
+                      <span
+                        className={`inline-block px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border truncate max-w-[104px] ${
+                          isDarkMode
+                            ? 'bg-slate-800 text-slate-200 border-slate-700'
+                            : 'bg-slate-100 text-slate-800 border-slate-300'
+                        }`}
+                        title={item.cluster}
+                      >
+                        {item.cluster}
+                      </span>
+                    </div>
                   </td>
 
                   {/* Frozen Column 2: CID */}
-                  <td className={`w-[140px] min-w-[140px] max-w-[140px] py-3 px-3 border-r border-b ${borderCol} font-mono text-[11px] font-semibold sticky left-[130px] z-20 ${tableFreezeBg} ${tableFreezeHoverBg} ${secText} select-all truncate`}>
-                    {item.cid || '-'}
+                  <td className={`w-[140px] min-w-[140px] max-w-[140px] py-3 px-3 border-r border-b ${borderCol} font-mono text-[11px] font-semibold sticky left-[130px] z-20 ${tableFreezeBg} ${tableFreezeHoverBg} ${secText} select-all`}>
+                    <div className="w-[114px] truncate" title={item.cid || '-'}>
+                      {item.cid || '-'}
+                    </div>
                   </td>
 
                   {/* Frozen Column 3: SKU Name */}
                   <td
-                    className={`w-[260px] min-w-[260px] max-w-[260px] py-3 px-4 border-r border-b ${borderCol} sticky left-[270px] z-20 ${tableFreezeBg} ${tableFreezeHoverBg}`}
+                    className={`w-[280px] min-w-[280px] max-w-[280px] py-3 px-4 border-r border-b ${borderCol} sticky left-[270px] z-20 ${tableFreezeBg} ${tableFreezeHoverBg}`}
                     title={item.skuName}
                   >
-                    <div className={`font-bold truncate leading-snug ${mainText}`}>
-                      {item.skuName}
+                    <div className="w-[248px] max-w-[248px]">
+                      <div className={`font-bold truncate leading-snug ${mainText}`} title={item.skuName}>
+                        {item.skuName}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {item.brand && (
+                          <span className={`text-[10px] font-semibold ${secText} truncate max-w-[110px]`} title={item.brand}>
+                            {item.brand}
+                          </span>
+                        )}
+                        {item.isPushRank && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-500 dark:text-rose-400 border border-rose-500/30 whitespace-nowrap shrink-0">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                            Push Rank PID
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {item.brand && (
-                      <span className={`text-[10px] font-semibold ${secText}`}>{item.brand}</span>
-                    )}
                   </td>
 
                   {/* Frozen Column 4: PID (+ Distinct Boundary Divider) */}
-                  <td className={`w-[160px] min-w-[160px] max-w-[160px] py-3 px-3 border-r-2 border-b ${isDarkMode ? 'border-slate-600' : 'border-slate-400'} shadow-[4px_0_8px_-2px_rgba(0,0,0,0.15)] font-mono text-[11px] font-black sticky left-[530px] z-20 ${tableFreezeBg} ${tableFreezeHoverBg} ${mainText} select-all truncate`}>
-                    {item.pid}
+                  <td className={`w-[160px] min-w-[160px] max-w-[160px] py-3 px-3 border-r-2 border-b ${isDarkMode ? 'border-slate-600' : 'border-slate-400'} shadow-[4px_0_8px_-2px_rgba(0,0,0,0.15)] font-mono text-[11px] font-black sticky left-[550px] z-20 ${tableFreezeBg} ${tableFreezeHoverBg} ${mainText} select-all`}>
+                    <div className="w-[134px] truncate" title={item.pid}>
+                      {item.pid}
+                    </div>
                   </td>
 
                   {/* Daily Metric Cells */}

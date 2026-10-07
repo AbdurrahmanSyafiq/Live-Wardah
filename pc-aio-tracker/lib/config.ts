@@ -9,6 +9,7 @@ export const CONFIG = {
     sheetSales: "PID SALES",
     sheetCid: "PID CID",
     sheetAdjustments: "Adjustment Logs",
+    sheetPushRank: "Push Rank",
     colBrand: "Brand fx",
     colDate: "Date",
     colPlatform: "Platform",

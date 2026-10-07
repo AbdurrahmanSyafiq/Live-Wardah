@@ -30,7 +30,8 @@ export async function POST(request: Request) {
         "PID CATEGORY",
         "PID SALES",
         "PID CID",
-        "Adjustment Logs"
+        "Adjustment Logs",
+        "Push Rank"
       ];
       
       if (!allowedSheets.includes(sheetName)) {
