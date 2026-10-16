@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
 import {
   AreaChart,
   Area,
@@ -32,32 +32,6 @@ export default function GeneralOverviewView({
   setHomeMomentumType,
 }: GeneralOverviewViewProps) {
   const [isMomentumDropdownOpen, setIsMomentumDropdownOpen] = useState(false);
-  const [momentumSource, setMomentumSource] = useState<
-    "media" | "commerce" | "all"
-  >("all");
-  const momentumDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Tutup dropdown Metrics saat klik di luar atau tekan Escape
-  useEffect(() => {
-    if (!isMomentumDropdownOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        momentumDropdownRef.current &&
-        !momentumDropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsMomentumDropdownOpen(false);
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsMomentumDropdownOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [isMomentumDropdownOpen]);
 
   const homeSurface = isDarkMode
     ? "bg-slate-800 border-slate-700"
@@ -65,55 +39,40 @@ export default function GeneralOverviewView({
   const homeHeading = isDarkMode ? "text-white" : "text-slate-900";
   const homeMuted = isDarkMode ? "text-slate-400" : "text-slate-500";
 
-  const allMetricOptions = [
+  const metricOptions = [
     { key: "spend", label: "Spend", color: "#6366f1", fmt: formatIDR },
-    {
-      key: "commerceGmv",
-      label: "Commerce GMV",
-      color: "#10b981",
-      fmt: formatIDR,
-    },
+    { key: "gmv", label: "GMV", color: "#10b981", fmt: formatIDR },
     {
       key: "impressions",
       label: "Impressions",
       color: "#06b6d4",
       fmt: formatNum,
     },
-    { key: "clicks", label: "Clicks", color: "#84cc16", fmt: formatNum },
-    {
-      key: "engagement",
-      label: "Engagement",
-      color: "#f59e0b",
-      fmt: formatNum,
-    },
-    { key: "orders", label: "Orders", color: "#ec4899", fmt: formatNum },
+    { key: "clicks", label: "Clicks", color: "#f59e0b", fmt: formatNum },
   ];
 
-  // Sumber Media tidak punya GMV/Orders, jadi dua metrik itu disembunyikan
-  const metricOptions =
-    momentumSource === "media"
-      ? allMetricOptions.filter(
-          (m) => m.key !== "commerceGmv" && m.key !== "orders",
-        )
-      : allMetricOptions;
+  // Angka besar diringkas: 5.350.185.616 -> 5.35B, 194.537.989 -> 194.54M, 6.606.702 -> 6.61M
+  const compact = (n: number) => {
+    const v = Number(n) || 0;
+    const abs = Math.abs(v);
+    if (abs >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+    if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+    if (abs >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+    return String(Math.round(v));
+  };
+  const compactIDR = (n: number) => `Rp ${compact(n)}`;
+
+  const platformColors = [
+    "#6366f1",
+    "#10b981",
+    "#f59e0b",
+    "#06b6d4",
+    "#ec4899",
+  ];
 
   const activeMetricConfigs = metricOptions.filter((m) =>
     homeMomentumMetrics.includes(m.key),
   );
-
-  const momentumData =
-    homeSummary.ytdTrend?.[momentumSource] ?? homeSummary.trend;
-
-  const handleChangeMomentumSource = (source: "media" | "commerce" | "all") => {
-    setMomentumSource(source);
-    setIsMomentumDropdownOpen(false);
-    if (source === "media") {
-      setHomeMomentumMetrics((prev) => {
-        const valid = prev.filter((k) => k !== "commerceGmv" && k !== "orders");
-        return valid.length ? valid : ["spend"];
-      });
-    }
-  };
 
   const handleToggleMomentumMetric = (metricKey: string) => {
     setHomeMomentumMetrics((prev) => {
@@ -128,6 +87,7 @@ export default function GeneralOverviewView({
   };
 
   const growth = (current: number, previous: number) => {
+    if (!homeSummary.hasPrevious) return "-";
     if (previous === 0 && current === 0) return "-";
     const rate = getGr(current, previous);
     return `${rate >= 0 ? "+" : ""}${formatPct(rate)}`;
@@ -141,6 +101,7 @@ export default function GeneralOverviewView({
     hexColor: string,
     chartData: { label: string; val: number }[],
     fmt: (val: number) => string,
+    fullValue?: string,
   ) => {
     const isPositive = change.startsWith("+");
     const isNeutral = change === "-";
@@ -167,6 +128,7 @@ export default function GeneralOverviewView({
 
         <div className="px-5 z-10 mb-2">
           <strong
+            title={fullValue}
             className={`text-[clamp(1.35rem,1.8vw,1.85rem)] font-black ${homeHeading} tracking-tight block leading-tight`}>
             {value}
           </strong>
@@ -256,15 +218,9 @@ export default function GeneralOverviewView({
       label: string;
       mix: { label: string; total: number }[];
     }[],
+    colors: string[],
   ) => {
-    const stackColors = [
-      "bg-indigo-500",
-      "bg-emerald-500",
-      "bg-amber-400",
-      "bg-cyan-400",
-    ];
-    const BAR_AREA_PX = 112; // harus sama dengan h-28 pada container bar
-    const MIN_LABEL_PX = 12; // segmen lebih pendek dari ini tidak diberi label (persen tetap ada di tooltip)
+    if (trendData.length === 0) return null;
     const max = Math.max(
       ...trendData.map((item) =>
         item.mix.reduce((total, mix) => total + mix.total, 0),
@@ -274,11 +230,9 @@ export default function GeneralOverviewView({
     return (
       <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/60">
         <div
-          className={`h-28 flex items-end gap-2 border-b ${isDarkMode ? "border-slate-700" : "border-slate-200"} pb-0`}>
+          className={`h-24 flex items-end gap-2 border-b ${isDarkMode ? "border-slate-700" : "border-slate-200"} pb-0`}>
           {trendData.map((item) => {
-            const total =
-              item.mix.reduce((sum, mix) => sum + mix.total, 0) || 1;
-            const stackHeightPct = Math.max(6, (total / max) * 100);
+            const total = item.mix.reduce((sum, mix) => sum + mix.total, 0);
             return (
               <div
                 key={item.key}
@@ -292,48 +246,54 @@ export default function GeneralOverviewView({
                   <span className="text-slate-400 font-extrabold border-b border-slate-200 dark:border-slate-700 pb-0.5">
                     {item.label}
                   </span>
-                  {item.mix.map((mix) => (
-                    <div
-                      key={mix.label}
-                      className="flex items-center justify-between gap-3">
-                      <span>{mix.label}</span>
-                      <span className="text-indigo-400 font-mono">
-                        {formatIDR(mix.total)} ({formatPct(mix.total / total)})
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                <div
-                  className="w-full flex flex-col-reverse transition-all duration-300 ease-out"
-                  style={{ height: `${stackHeightPct}%` }}>
-                  {item.mix.map((mix, index) => {
-                    const share = mix.total / total;
-                    const segmentPx =
-                      share * (stackHeightPct / 100) * BAR_AREA_PX;
-                    return (
+                  {item.mix
+                    .filter((mix) => mix.total > 0)
+                    .map((mix) => (
                       <div
                         key={mix.label}
-                        className={`w-full ${stackColors[index % stackColors.length]} first:rounded-b-sm last:rounded-t-sm flex items-center justify-center overflow-hidden`}
-                        style={{ height: `${share * 100}%` }}>
-                        {segmentPx >= MIN_LABEL_PX && (
-                          <span
-                            className={`text-[9px] font-black leading-none text-white`}>
-                            {Math.round(share * 100)}%
-                          </span>
-                        )}
+                        className="flex items-center justify-between gap-3">
+                        <span>{mix.label}</span>
+                        <span className="text-indigo-400 font-mono">
+                          {formatIDR(mix.total)}
+                        </span>
                       </div>
-                    );
-                  })}
+                    ))}
                 </div>
+
+                {total > 0 && (
+                  <div
+                    className="w-full flex flex-col-reverse transition-all duration-300 ease-out"
+                    style={{ height: `${Math.max(6, (total / max) * 100)}%` }}>
+                    {item.mix.map((mix, index) => {
+                      if (mix.total <= 0) return null;
+                      const pct = (mix.total / total) * 100;
+                      return (
+                        <div
+                          key={mix.label}
+                          className="w-full flex items-center justify-center overflow-hidden first:rounded-b-md last:rounded-t-md"
+                          style={{
+                            height: `${pct}%`,
+                            backgroundColor: colors[index % colors.length],
+                          }}>
+                          {pct >= 12 && (
+                            <span className="text-[9px] font-black text-white leading-none">
+                              {Math.round(pct)}%
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
-        <div
-          className={`flex justify-between pt-1.5 text-[9px] font-bold ${homeMuted}`}>
+        <div className={`flex gap-2 pt-1.5 text-[9px] font-bold ${homeMuted}`}>
           {trendData.map((item) => (
-            <span key={item.key}>{item.label}</span>
+            <span key={item.key} className="flex-1 text-center truncate">
+              {item.label}
+            </span>
           ))}
         </div>
       </div>
@@ -419,11 +379,18 @@ export default function GeneralOverviewView({
         </div>
       </div>
 
+      {homeSummary.missing.length > 0 && (
+        <p className="text-xs font-semibold text-amber-500">
+          Kolom tidak ditemukan di sheet: {homeSummary.missing.join(", ")}{" "}
+          (nilainya dihitung 0).
+        </p>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {metricCard(
           "Media spend",
-          formatIDR(homeSummary.currentTotalSpend),
-          growth(homeSummary.currentTotalSpend, homeSummary.previousTotalSpend),
+          compactIDR(homeSummary.current.spend),
+          growth(homeSummary.current.spend, homeSummary.previous.spend),
           "gradSpend",
           "#6366f1",
           homeSummary.trend.map((item: any) => ({
@@ -431,13 +398,14 @@ export default function GeneralOverviewView({
             val: item.spend,
           })),
           formatIDR,
+          formatIDR(homeSummary.current.spend),
         )}
         {metricCard(
           "Impressions",
-          formatNum(homeSummary.currentTotalImpressions),
+          compact(homeSummary.current.impressions),
           growth(
-            homeSummary.currentTotalImpressions,
-            homeSummary.previousTotalImpressions,
+            homeSummary.current.impressions,
+            homeSummary.previous.impressions,
           ),
           "gradImp",
           "#06b6d4",
@@ -446,36 +414,33 @@ export default function GeneralOverviewView({
             val: item.impressions,
           })),
           formatNum,
+          formatNum(homeSummary.current.impressions),
         )}
         {metricCard(
-          "Commerce GMV",
-          formatIDR(homeSummary.current.commerce.gmv),
-          growth(
-            homeSummary.current.commerce.gmv,
-            homeSummary.previous.commerce.gmv,
-          ),
+          "Clicks",
+          compact(homeSummary.current.clicks),
+          growth(homeSummary.current.clicks, homeSummary.previous.clicks),
+          "gradClicks",
+          "#f59e0b",
+          homeSummary.trend.map((item: any) => ({
+            label: item.label,
+            val: item.clicks,
+          })),
+          formatNum,
+          formatNum(homeSummary.current.clicks),
+        )}
+        {metricCard(
+          "GMV",
+          compactIDR(homeSummary.current.gmv),
+          growth(homeSummary.current.gmv, homeSummary.previous.gmv),
           "gradGmv",
           "#10b981",
           homeSummary.trend.map((item: any) => ({
             label: item.label,
-            val: item.commerceGmv,
+            val: item.gmv,
           })),
           formatIDR,
-        )}
-        {metricCard(
-          "Engagement",
-          formatNum(homeSummary.currentTotalEngagement),
-          growth(
-            homeSummary.currentTotalEngagement,
-            homeSummary.previousTotalEngagement,
-          ),
-          "gradEng",
-          "#f59e0b",
-          homeSummary.trend.map((item: any) => ({
-            label: item.label,
-            val: item.engagement,
-          })),
-          formatNum,
+          formatIDR(homeSummary.current.gmv),
         )}
       </div>
 
@@ -485,30 +450,15 @@ export default function GeneralOverviewView({
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
               <div>
-                <h2 className={`text-base font-black ${homeHeading}`}>YTD</h2>
+                <h2 className={`text-base font-black ${homeHeading}`}>MTD</h2>
                 <p className={`text-xs ${homeMuted} mt-0.5`}>
-                  {homeSummary.ytdYear
-                    ? `Jan - ${momentumData[momentumData.length - 1]?.label ?? ""} ${homeSummary.ytdYear} · `
-                    : ""}
-                  Trend comparison across selected metrics
+                  {homeSummary.periodLabel} · Weekly trend comparison across
+                  selected metrics
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={momentumSource}
-                  onChange={(e) =>
-                    handleChangeMomentumSource(
-                      e.target.value as "media" | "commerce" | "all",
-                    )
-                  }
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold shadow-sm cursor-pointer outline-none ${isDarkMode ? "bg-slate-900 border-slate-700 text-slate-200" : "bg-slate-100 border-slate-200 text-slate-800"}`}>
-                  <option value="media">Media</option>
-                  <option value="commerce">Commerce</option>
-                  <option value="all">All</option>
-                </select>
-
-                <div className="relative" ref={momentumDropdownRef}>
+                <div className="relative">
                   <button
                     type="button"
                     onClick={() =>
@@ -564,7 +514,7 @@ export default function GeneralOverviewView({
               <ResponsiveContainer width="100%" height="100%">
                 {homeMomentumType === "bar" ? (
                   <BarChart
-                    data={momentumData}
+                    data={homeSummary.trend}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid
                       strokeDasharray="3 3"
@@ -639,7 +589,7 @@ export default function GeneralOverviewView({
                   </BarChart>
                 ) : homeMomentumType === "line" ? (
                   <LineChart
-                    data={momentumData}
+                    data={homeSummary.trend}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid
                       strokeDasharray="3 3"
@@ -716,7 +666,7 @@ export default function GeneralOverviewView({
                   </LineChart>
                 ) : (
                   <AreaChart
-                    data={momentumData}
+                    data={homeSummary.trend}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
                       {activeMetricConfigs.map((cfg) => (
@@ -840,14 +790,10 @@ export default function GeneralOverviewView({
             <p className={`text-xs ${homeMuted} mb-4`}>
               Investment across platform
             </p>
-            {mixDonut(
-              homeSummary.platformMix,
-              ["#6366f1", "#10b981", "#f59e0b", "#06b6d4", "#ec4899"],
-              "MIX",
-            )}
+            {mixDonut(homeSummary.platformMix, platformColors, "MIX")}
           </div>
           <div className="mt-auto">
-            {renderStackBars(homeSummary.platformTrend)}
+            {renderStackBars(homeSummary.platformTrend, platformColors)}
           </div>
         </div>
       </div>
@@ -857,24 +803,26 @@ export default function GeneralOverviewView({
           <h2 className={`text-base font-black ${homeHeading} mb-1`}>
             Funnel mix
           </h2>
-          <p className={`text-xs ${homeMuted} mb-3`}>
-            Media &amp; commerce spend by funnel
-          </p>
+          <p className={`text-xs ${homeMuted} mb-3`}>GMV by funnel</p>
           {mixDonut(
             homeSummary.funnelMix,
             ["#4f46e5", "#10b981", "#f59e0b", "#06b6d4", "#ec4899"],
             "MIX",
           )}
-          {renderStackBars(homeSummary.funnelTrend)}
+          {renderStackBars(homeSummary.funnelTrend, [
+            "#4f46e5",
+            "#10b981",
+            "#f59e0b",
+            "#06b6d4",
+            "#ec4899",
+          ])}
         </div>
         <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
           <h2 className={`text-base font-black ${homeHeading} mb-1`}>
-            Format mix
+            Category mix
           </h2>
-          <p className={`text-xs ${homeMuted} mb-4`}>
-            Media investment by format
-          </p>
-          {mixBars(homeSummary.formatMix, [
+          <p className={`text-xs ${homeMuted} mb-4`}>GMV by category</p>
+          {mixBars(homeSummary.categoryMix, [
             "bg-violet-500",
             "bg-blue-500",
             "bg-teal-500",
@@ -889,36 +837,26 @@ export default function GeneralOverviewView({
             Core media efficiency metrics
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <div
-              className={`${isDarkMode ? "bg-[#090d16]" : "bg-slate-50"} rounded-xl p-3`}>
-              <span className={`text-[10px] font-bold ${homeMuted}`}>CTR</span>
-              <strong className={`block text-lg ${homeHeading} mt-1`}>
-                {formatPct(homeSummary.current.media.ctr)}
-              </strong>
-            </div>
-            <div
-              className={`${isDarkMode ? "bg-[#090d16]" : "bg-slate-50"} rounded-xl p-3`}>
-              <span className={`text-[10px] font-bold ${homeMuted}`}>VTR</span>
-              <strong className={`block text-lg ${homeHeading} mt-1`}>
-                {formatPct(homeSummary.current.media.vtr)}
-              </strong>
-            </div>
-            <div
-              className={`${isDarkMode ? "bg-[#090d16]" : "bg-slate-50"} rounded-xl p-3`}>
-              <span className={`text-[10px] font-bold ${homeMuted}`}>ROAS</span>
-              <strong className={`block text-lg ${homeHeading} mt-1`}>
-                {homeSummary.current.commerce.roas.toFixed(2)}x
-              </strong>
-            </div>
-            <div
-              className={`${isDarkMode ? "bg-[#090d16]" : "bg-slate-50"} rounded-xl p-3`}>
-              <span className={`text-[10px] font-bold ${homeMuted}`}>
-                Clicks
-              </span>
-              <strong className={`block text-lg ${homeHeading} mt-1`}>
-                {formatNum(homeSummary.current.media.clicks)}
-              </strong>
-            </div>
+            {[
+              { label: "CTR", value: formatPct(homeSummary.current.ctr) },
+              { label: "CPM", value: formatIDR(homeSummary.current.cpm) },
+              {
+                label: "ROAS",
+                value: `${homeSummary.current.roas.toFixed(2)}x`,
+              },
+              { label: "Clicks", value: formatNum(homeSummary.current.clicks) },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className={`${isDarkMode ? "bg-[#090d16]" : "bg-slate-50"} rounded-xl p-3`}>
+                <span className={`text-[10px] font-bold ${homeMuted}`}>
+                  {item.label}
+                </span>
+                <strong className={`block text-lg ${homeHeading} mt-1`}>
+                  {item.value}
+                </strong>
+              </div>
+            ))}
           </div>
         </div>
       </div>

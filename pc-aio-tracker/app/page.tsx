@@ -16,6 +16,12 @@ import {
   getMediaDates,
   getWeekBucket,
 } from "@/lib/dateUtils";
+import {
+  HOME_MONTHS,
+  HOME_MONTH_SHEETS,
+  normalizeSheetRows,
+  buildHomeSummary,
+} from "@/lib/homeData";
 import LoginView from "@/components/auth/LoginView";
 import WelcomeView from "@/components/navigation/WelcomeView";
 import Sidebar from "@/components/navigation/Sidebar";
@@ -25,7 +31,6 @@ import CommerceTrackerView from "@/components/views/CommerceTrackerView";
 import SkuPerformanceView from "@/components/views/SkuPerformanceView";
 import TopCreativeView from "@/components/views/TopCreativeView";
 import MediaSignalView from "@/components/views/MediaSignalView";
-import PidPushRankTrackerView from "@/components/views/PidPushRankTrackerView";
 
 const getColVal = (row: any, ...keys: string[]) => {
   if (!row) return "";
@@ -46,7 +51,7 @@ export default function DashboardApp() {
     "login" | "welcome" | "home" | "dashboard"
   >("login");
   const [activeEngine, setActiveEngine] = useState<
-    "media" | "commerce" | "creative" | "signal" | "sku" | "pidRank" | null
+    "media" | "commerce" | "creative" | "signal" | "sku" | null
   >(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -60,23 +65,7 @@ export default function DashboardApp() {
     mediaApi: any[];
     commerce: any[];
   }>({ mediaApi: [], commerce: [] });
-  const [homeMediaData, setHomeMediaData] = useState<any[]>([]);
-  const [homeCommerceData, setHomeCommerceData] = useState<any[]>([]);
-  const [pidRankData, setPidRankData] = useState<{
-    commerce: any[];
-    category: any[];
-    sales: any[];
-    cid: any[];
-    adjustments: any[];
-    pushRank: any[];
-  }>({
-    commerce: [],
-    category: [],
-    sales: [],
-    cid: [],
-    adjustments: [],
-    pushRank: [],
-  });
+  const [homeSheetData, setHomeSheetData] = useState<Record<string, any[]>>({});
 
   const [filters, setFilters] = useState(defaultFilters);
   const [selectedSignalPeriod, setSelectedSignalPeriod] = useState<string>("");
@@ -90,7 +79,7 @@ export default function DashboardApp() {
   const [homePeriods, setHomePeriods] = useState<string[]>([]);
   const [homeMomentumMetrics, setHomeMomentumMetrics] = useState<string[]>([
     "spend",
-    "commerceGmv",
+    "gmv",
   ]);
 
   const [tableColFilter1, setTableColFilter1] = useState("All");
@@ -136,11 +125,11 @@ export default function DashboardApp() {
     setDateWeekly(yyyy_mm_dd);
     setDateDailyStart(start_yyyy_mm_dd);
     setDateDailyEnd(yyyy_mm_dd);
-    setHomePeriods([yyyy_mm]);
+    setHomePeriods([HOME_MONTHS.includes(yyyy_mm) ? yyyy_mm : HOME_MONTHS[0]]);
   }, []);
 
   const loadData = async (
-    engine: "media" | "commerce" | "creative" | "signal" | "sku" | "pidRank",
+    engine: "media" | "commerce" | "creative" | "signal" | "sku",
     forceSync = false,
   ) => {
     setDashboardContext("Overall");
@@ -151,13 +140,6 @@ export default function DashboardApp() {
       if (engine === "sku" || engine === "commerce") {
         dataCache.current[CONFIG.commerce.sheet] = undefined as any;
         dataCache.current["CIR DAILY"] = undefined as any;
-      } else if (engine === "pidRank") {
-        dataCache.current[CONFIG.pidRank.sheetCommerce] = undefined as any;
-        dataCache.current[CONFIG.pidRank.sheetCategory] = undefined as any;
-        dataCache.current[CONFIG.pidRank.sheetSales] = undefined as any;
-        dataCache.current[CONFIG.pidRank.sheetCid] = undefined as any;
-        dataCache.current[CONFIG.pidRank.sheetAdjustments] = undefined as any;
-        dataCache.current[CONFIG.pidRank.sheetPushRank] = undefined as any;
       } else {
         dataCache.current[CONFIG[engine].sheet] = undefined as any;
       }
@@ -195,24 +177,6 @@ export default function DashboardApp() {
       } else if (engine === "sku") {
         const commData = await fetchSheet(CONFIG.commerce.sheet);
         setRawData(commData);
-      } else if (engine === "pidRank") {
-        const [commData, catData, sData, cData, adjData, prData] =
-          await Promise.all([
-            fetchSheet(CONFIG.pidRank.sheetCommerce),
-            fetchSheet(CONFIG.pidRank.sheetCategory),
-            fetchSheet(CONFIG.pidRank.sheetSales),
-            fetchSheet(CONFIG.pidRank.sheetCid),
-            fetchSheet(CONFIG.pidRank.sheetAdjustments),
-            fetchSheet(CONFIG.pidRank.sheetPushRank),
-          ]);
-        setPidRankData({
-          commerce: commData,
-          category: catData,
-          sales: sData,
-          cid: cData,
-          adjustments: adjData,
-          pushRank: prData,
-        });
       } else if (engine === "signal") {
         const [signalData, mediaApiData, commerceData] = await Promise.all([
           fetchSheet("Media Signal"),
@@ -232,106 +196,8 @@ export default function DashboardApp() {
     setIsLoading(false);
   };
 
-  const handleAddAdjustment = async (data: any) => {
-    try {
-      const res = await fetch("/api/sheets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "addAdjustment", ...data }),
-      });
-      const result = await res.json();
-      if (result.success && result.adjustment) {
-        setPidRankData((prev) => ({
-          ...prev,
-          adjustments: [result.adjustment, ...prev.adjustments],
-        }));
-      } else {
-        throw new Error(result.error || "Failed to save adjustment");
-      }
-    } catch (err: any) {
-      alert(err.message || "Error saving adjustment");
-      throw err;
-    }
-  };
-
-  const handleUpdateAdjustmentStatus = async (
-    id: string,
-    status: "Pending" | "Adjusted",
-    user: string,
-  ) => {
-    try {
-      const res = await fetch("/api/sheets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "updateAdjustmentStatus",
-          id,
-          status,
-          userName: user,
-        }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        setPidRankData((prev) => ({
-          ...prev,
-          adjustments: prev.adjustments.map((a) =>
-            a.id === id || a.ID === id
-              ? { ...a, status, updatedAt: result.updatedAt, updatedBy: user }
-              : a,
-          ),
-        }));
-      } else {
-        throw new Error(result.error || "Failed to update adjustment");
-      }
-    } catch (err: any) {
-      alert(err.message || "Error updating status");
-      throw err;
-    }
-  };
-
-  const handleUpdateActionTaken = async (
-    id: string,
-    actionTaken: string,
-    user: string,
-  ) => {
-    try {
-      const res = await fetch("/api/sheets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "updateActionTaken",
-          id,
-          actionTaken,
-          userName: user,
-        }),
-      });
-      const result = await res.json();
-      if (result.success) {
-        setPidRankData((prev) => ({
-          ...prev,
-          adjustments: prev.adjustments.map((a) =>
-            a.id === id || a.ID === id
-              ? {
-                  ...a,
-                  actionTaken,
-                  "Action Taken": actionTaken,
-                  updatedAt: result.updatedAt,
-                  updatedBy: user,
-                }
-              : a,
-          ),
-        }));
-      } else {
-        throw new Error(result.error || "Failed to update action taken");
-      }
-    } catch (err: any) {
-      alert(err.message || "Error updating action taken");
-      throw err;
-    }
-  };
-
   const selectEngine = (
-    engine: "media" | "commerce" | "creative" | "signal" | "sku" | "pidRank",
+    engine: "media" | "commerce" | "creative" | "signal" | "sku",
   ) => {
     setActiveEngine(engine);
     setCurrentView("dashboard");
@@ -341,11 +207,14 @@ export default function DashboardApp() {
   const loadHomeData = async (forceSync = false) => {
     setIsLoading(true);
     try {
+      const entries = Object.entries(HOME_MONTH_SHEETS); // [["2026-10","Wardah Oct"], ...]
       if (forceSync) {
-        dataCache.current["Media API"] = undefined as any;
-        dataCache.current["Commerce"] = undefined as any;
+        entries.forEach(([, sheetName]) => {
+          dataCache.current[sheetName] = undefined as any;
+        });
       }
 
+      const errors: string[] = [];
       const fetchSheet = async (sheetName: string) => {
         if (!forceSync && dataCache.current[sheetName])
           return dataCache.current[sheetName];
@@ -355,19 +224,24 @@ export default function DashboardApp() {
           body: JSON.stringify({ action: "getData", sheetName }),
         });
         const result = await res.json();
-        if (result.success) {
+        if (result.success && Array.isArray(result.data)) {
           dataCache.current[sheetName] = result.data;
           return result.data;
         }
+        errors.push(`${sheetName}: ${result.error || "unknown error"}`);
         return [];
       };
 
-      const [mediaData, commerceData] = await Promise.all([
-        fetchSheet("Media API"),
-        fetchSheet("Commerce"),
-      ]);
-      setHomeMediaData(mediaData);
-      setHomeCommerceData(commerceData);
+      const results = await Promise.all(
+        entries.map(([, sheetName]) => fetchSheet(sheetName)),
+      );
+      const next: Record<string, any[]> = {};
+      entries.forEach(([ym], i) => {
+        next[ym] = results[i];
+      });
+      setHomeSheetData(next);
+      if (errors.length)
+        alert(`Failed to load Home data:\n${errors.join("\n")}`);
     } catch {
       alert("Network error loading Home data.");
     }
@@ -820,12 +694,10 @@ export default function DashboardApp() {
       overridePlan?: number,
     ) => ({
       name,
-      act: (signalCompiled.actual as any)?.[key],
+      act: signalCompiled.actual?.[key],
       pln:
-        overridePlan !== undefined
-          ? overridePlan
-          : (signalCompiled.plan as any)?.[key],
-      prv: (signalCompiled.prev as any)?.[key],
+        overridePlan !== undefined ? overridePlan : signalCompiled.plan?.[key],
+      prv: signalCompiled.prev?.[key],
       fmt,
       isInv,
     });
@@ -909,12 +781,7 @@ export default function DashboardApp() {
 
   const { curData, prevData, chartData, creativeData, globalDates } =
     useMemo(() => {
-      if (
-        !activeEngine ||
-        activeEngine === "signal" ||
-        activeEngine === "pidRank" ||
-        rawData.length === 0
-      )
+      if (!activeEngine || activeEngine === "signal" || rawData.length === 0)
         return {
           curData: [],
           prevData: [],
@@ -923,7 +790,7 @@ export default function DashboardApp() {
           globalDates: null,
         };
       const activeCfgKey = activeEngine === "sku" ? "commerce" : activeEngine;
-      const cfg: any = CONFIG[activeCfgKey as keyof typeof CONFIG];
+      const cfg = CONFIG[activeCfgKey];
 
       const filteredBase = rawData.filter((row) => {
         if (
@@ -1321,33 +1188,30 @@ export default function DashboardApp() {
     };
   }, [curData, prevData, activeEngine]);
 
+  // Data Home: baris dari semua sheet bulanan dirapikan jadi satu format
+  const homeNormalized = useMemo(() => {
+    const rows: ReturnType<typeof normalizeSheetRows>["rows"] = [];
+    const missing = new Set<string>();
+    Object.entries(homeSheetData as Record<string, any[]>).forEach(
+      ([ym, raw]) => {
+        const r = normalizeSheetRows(raw, ym);
+        r.rows.forEach((row) => rows.push(row));
+        r.missing.forEach((m) => missing.add(m));
+      },
+    );
+    return { rows, missing: Array.from(missing) };
+  }, [homeSheetData]);
+
   const homeBrandOptions = useMemo(() => {
     const brands = new Set<string>();
-    homeMediaData.forEach((row) => {
-      const brand = String(row["Brand"] || "").trim();
-      if (isValidBrandName(brand)) brands.add(brand);
-    });
-    homeCommerceData.forEach((row) => {
-      const brand = String(row["Brand fx"] || "").trim();
-      if (isValidBrandName(brand)) brands.add(brand);
+    homeNormalized.rows.forEach((row) => {
+      if (isValidBrandName(row.brand)) brands.add(row.brand);
     });
     return ["All", ...Array.from(brands).sort()];
-  }, [homeMediaData, homeCommerceData]);
+  }, [homeNormalized]);
 
-  const availableHomeMonths = useMemo(() => {
-    const months = new Set<string>();
-    const addDate = (dStr: any) => {
-      const d = parseSheetDate(dStr);
-      if (d && !isNaN(d.getTime())) {
-        months.add(
-          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-        );
-      }
-    };
-    homeMediaData.forEach((r) => addDate(r["Date"]));
-    homeCommerceData.forEach((r) => addDate(r["Date"]));
-    return Array.from(months).sort((a, b) => b.localeCompare(a));
-  }, [homeMediaData, homeCommerceData]);
+  // Filter bulan: fixed sesuai sheet yang tersedia (lihat HOME_MONTH_SHEETS di lib/homeData.ts)
+  const availableHomeMonths = HOME_MONTHS;
 
   const handleToggleHomeMonth = (month: string) => {
     setHomePeriods((prev) => {
@@ -1362,362 +1226,13 @@ export default function DashboardApp() {
 
   const homeSummary = useMemo(() => {
     if (!homePeriods.length) return null;
-
-    const normalizeDate = (value: any) => {
-      const date = parseSheetDate(value);
-      if (!date || isNaN(date.getTime())) return null;
-      date.setHours(0, 0, 0, 0);
-      return date;
-    };
-
-    const getMonthRanges = (periodList: string[]) => {
-      return periodList.map((p) => {
-        const [year, month] = p.split("-").map(Number);
-        return {
-          start: new Date(year, month - 1, 1),
-          end: new Date(year, month, 0, 23, 59, 59, 999),
-        };
-      });
-    };
-
-    const getPrevMonthRanges = (periodList: string[]) => {
-      return periodList.map((p) => {
-        const [year, month] = p.split("-").map(Number);
-        return {
-          start: new Date(year, month - 2, 1),
-          end: new Date(year, month - 1, 0, 23, 59, 59, 999),
-        };
-      });
-    };
-
-    const currentRanges = getMonthRanges(homePeriods);
-    const previousRanges = getPrevMonthRanges(homePeriods);
-
-    const inRanges = (
-      date: Date | null,
-      ranges: { start: Date; end: Date }[],
-    ) => {
-      if (!date) return false;
-      return ranges.some((r) => date >= r.start && date <= r.end);
-    };
-
-    const matchesBrand = (value: any) =>
-      homeBrand === "All" || String(value || "").trim() === homeBrand;
-    const mediaRows = homeMediaData.filter((row) => matchesBrand(row["Brand"]));
-    const commerceRows = homeCommerceData.filter((row) =>
-      matchesBrand(row["Brand fx"]),
+    return buildHomeSummary(
+      homeNormalized.rows,
+      homePeriods,
+      homeBrand,
+      homeNormalized.missing,
     );
-
-    const currentMedia = mediaRows.filter((row) =>
-      inRanges(normalizeDate(row["Date"]), currentRanges),
-    );
-    const previousMedia = mediaRows.filter((row) =>
-      inRanges(normalizeDate(row["Date"]), previousRanges),
-    );
-    const currentCommerce = commerceRows.filter((row) =>
-      inRanges(normalizeDate(row["Date"]), currentRanges),
-    );
-    const previousCommerce = commerceRows.filter((row) =>
-      inRanges(normalizeDate(row["Date"]), previousRanges),
-    );
-
-    const sum = (rows: any[], field: string) =>
-      rows.reduce((total, row) => total + parseNum(row[field]), 0);
-    const mediaMetrics = (rows: any[]) => {
-      const spend = sum(rows, "Ad Spend");
-      const impressions = sum(rows, "Impressions");
-      const clicks = sum(rows, "Combined Clicks");
-      const views6s = sum(rows, "Views 6s");
-      const views15s = sum(rows, "Views");
-      const engagement = clicks + views6s + views15s;
-      const views = views15s + views6s;
-      return {
-        spend,
-        impressions,
-        clicks,
-        views,
-        engagement,
-        ctr: impressions ? clicks / impressions : 0,
-        vtr: impressions ? views / impressions : 0,
-      };
-    };
-    const commerceMetrics = (rows: any[]) => {
-      const expense = sum(rows, "Expense");
-      const impressions = rows.reduce(
-        (acc, row) =>
-          acc +
-          (parseNum(row["Impression"]) || parseNum(row["Impressions"]) || 0),
-        0,
-      );
-      const clicks = rows.reduce(
-        (acc, row) =>
-          acc +
-          (parseNum(row["Clicks"]) || parseNum(row["Combined Clicks"]) || 0),
-        0,
-      );
-      const gmv = sum(rows, "GMV");
-      const orders = rows.reduce(
-        (total, row) =>
-          total +
-          parseNum(
-            row["Items Sold"] ||
-              row["Item sold"] ||
-              row["items_sold"] ||
-              row["Orders"],
-          ),
-        0,
-      );
-      return {
-        expense,
-        impressions,
-        clicks,
-        gmv,
-        orders,
-        roas: expense ? gmv / expense : 0,
-      };
-    };
-    const groupSum = (rows: any[], key: string, value: string) => {
-      const grouped = new Map<string, number>();
-      rows.forEach((row) => {
-        const label = String(row[key] || "Unspecified").trim() || "Unspecified";
-        grouped.set(label, (grouped.get(label) || 0) + parseNum(row[value]));
-      });
-      return Array.from(grouped, ([label, total]) => ({ label, total })).sort(
-        (a, b) => b.total - a.total,
-      );
-    };
-    const mergeGroups = (...lists: { label: string; total: number }[][]) => {
-      const merged = new Map<string, number>();
-      lists
-        .flat()
-        .forEach((item) =>
-          merged.set(item.label, (merged.get(item.label) || 0) + item.total),
-        );
-      return Array.from(merged, ([label, total]) => ({ label, total })).sort(
-        (a, b) => b.total - a.total,
-      );
-    };
-
-    const latestSortedMonth = [...homePeriods].sort().pop() || "";
-    const [latestYear, latestMonth] = latestSortedMonth.split("-").map(Number);
-    const monthKey = (date: Date) =>
-      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-
-    const trend = Array.from({ length: 6 }, (_, index) => {
-      const date = new Date(latestYear, latestMonth - 1 - (5 - index), 1);
-      const start = new Date(date.getFullYear(), date.getMonth(), 1);
-      const end = new Date(
-        date.getFullYear(),
-        date.getMonth() + 1,
-        0,
-        23,
-        59,
-        59,
-        999,
-      );
-      const media = mediaMetrics(
-        mediaRows.filter((row) =>
-          inRanges(normalizeDate(row["Date"]), [{ start, end }]),
-        ),
-      );
-      const commerce = commerceMetrics(
-        commerceRows.filter((row) =>
-          inRanges(normalizeDate(row["Date"]), [{ start, end }]),
-        ),
-      );
-      return {
-        key: monthKey(date),
-        label: date.toLocaleString("en-GB", { month: "short" }),
-        spend: media.spend + commerce.expense,
-        mediaSpend: media.spend,
-        commerceExpense: commerce.expense,
-        impressions: media.impressions + commerce.impressions,
-        clicks: media.clicks + commerce.clicks,
-        engagement: media.engagement + commerce.clicks,
-        commerceGmv: commerce.gmv,
-        orders: commerce.orders,
-      };
-    });
-
-    // YTD: Januari sampai bulan terakhir pada tahun periode terpilih, dipisah per sumber data
-    const ytdMonths = Array.from({ length: latestMonth }, (_, index) => {
-      const start = new Date(latestYear, index, 1);
-      const end = new Date(latestYear, index + 1, 0, 23, 59, 59, 999);
-      const media = mediaMetrics(
-        mediaRows.filter((row) =>
-          inRanges(normalizeDate(row["Date"]), [{ start, end }]),
-        ),
-      );
-      const commerce = commerceMetrics(
-        commerceRows.filter((row) =>
-          inRanges(normalizeDate(row["Date"]), [{ start, end }]),
-        ),
-      );
-      return {
-        key: monthKey(start),
-        label: start.toLocaleString("en-GB", { month: "short" }),
-        media,
-        commerce,
-      };
-    });
-    const ytdTrend = {
-      all: ytdMonths.map((m) => ({
-        key: m.key,
-        label: m.label,
-        spend: m.media.spend + m.commerce.expense,
-        impressions: m.media.impressions + m.commerce.impressions,
-        clicks: m.media.clicks + m.commerce.clicks,
-        engagement: m.media.engagement + m.commerce.clicks,
-        commerceGmv: m.commerce.gmv,
-        orders: m.commerce.orders,
-      })),
-      media: ytdMonths.map((m) => ({
-        key: m.key,
-        label: m.label,
-        spend: m.media.spend,
-        impressions: m.media.impressions,
-        clicks: m.media.clicks,
-        engagement: m.media.engagement,
-        commerceGmv: 0,
-        orders: 0,
-      })),
-      commerce: ytdMonths.map((m) => ({
-        key: m.key,
-        label: m.label,
-        spend: m.commerce.expense,
-        impressions: m.commerce.impressions,
-        clicks: m.commerce.clicks,
-        engagement: m.commerce.clicks,
-        commerceGmv: m.commerce.gmv,
-        orders: m.commerce.orders,
-      })),
-    };
-
-    const funnelTrend = trend.map((item) => {
-      const date = new Date(`${item.key}-01T00:00:00`);
-      const start = new Date(date.getFullYear(), date.getMonth(), 1);
-      const end = new Date(
-        date.getFullYear(),
-        date.getMonth() + 1,
-        0,
-        23,
-        59,
-        59,
-        999,
-      );
-      const mRows = mediaRows.filter((row) =>
-        inRanges(normalizeDate(row["Date"]), [{ start, end }]),
-      );
-      const cRows = commerceRows.filter((row) =>
-        inRanges(normalizeDate(row["Date"]), [{ start, end }]),
-      );
-      const mix = mergeGroups(
-        groupSum(mRows, "Funnel", "Ad Spend"),
-        groupSum(cRows, "Funnel", "Expense"),
-      ).slice(0, 4);
-      return { ...item, mix };
-    });
-
-    const platformTrend = trend.map((item) => {
-      const date = new Date(`${item.key}-01T00:00:00`);
-      const start = new Date(date.getFullYear(), date.getMonth(), 1);
-      const end = new Date(
-        date.getFullYear(),
-        date.getMonth() + 1,
-        0,
-        23,
-        59,
-        59,
-        999,
-      );
-      const mRows = mediaRows.filter((row) =>
-        inRanges(normalizeDate(row["Date"]), [{ start, end }]),
-      );
-      const cRows = commerceRows.filter((row) =>
-        inRanges(normalizeDate(row["Date"]), [{ start, end }]),
-      );
-      const mPlat = groupSum(mRows, "Platform", "Ad Spend");
-      const cPlat = groupSum(cRows, "Platform", "Expense");
-      const combined = new Map<string, number>();
-      mPlat
-        .concat(cPlat)
-        .forEach((p) =>
-          combined.set(p.label, (combined.get(p.label) || 0) + p.total),
-        );
-      const mix = Array.from(combined, ([label, total]) => ({ label, total }))
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 4);
-      return { ...item, mix };
-    });
-
-    const current = {
-      media: mediaMetrics(currentMedia),
-      commerce: commerceMetrics(currentCommerce),
-    };
-    const previous = {
-      media: mediaMetrics(previousMedia),
-      commerce: commerceMetrics(previousCommerce),
-    };
-
-    const currentTotalSpend = current.media.spend + current.commerce.expense;
-    const previousTotalSpend = previous.media.spend + previous.commerce.expense;
-
-    const currentTotalImpressions =
-      current.media.impressions + current.commerce.impressions;
-    const previousTotalImpressions =
-      previous.media.impressions + previous.commerce.impressions;
-
-    const currentTotalEngagement =
-      current.media.engagement + current.commerce.clicks;
-    const previousTotalEngagement =
-      previous.media.engagement + previous.commerce.clicks;
-
-    const maxOf = (items: { total: number }[]) =>
-      Math.max(...items.map((item) => item.total), 1);
-    const platformMix = groupSum(currentMedia, "Platform", "Ad Spend").concat(
-      groupSum(currentCommerce, "Platform", "Expense"),
-    );
-    const platformTotals = Array.from(
-      platformMix.reduce(
-        (map, item) =>
-          map.set(item.label, (map.get(item.label) || 0) + item.total),
-        new Map<string, number>(),
-      ),
-      ([label, total]) => ({ label, total }),
-    ).sort((a, b) => b.total - a.total);
-
-    const formattedPeriodLabel =
-      homePeriods.length === 1
-        ? new Date(`${homePeriods[0]}-01`).toLocaleString("en-GB", {
-            month: "long",
-            year: "numeric",
-          })
-        : `${homePeriods.length} Months Selected (${homePeriods.sort().join(", ")})`;
-
-    return {
-      current,
-      previous,
-      currentTotalSpend,
-      previousTotalSpend,
-      currentTotalImpressions,
-      previousTotalImpressions,
-      currentTotalEngagement,
-      previousTotalEngagement,
-      trend,
-      ytdTrend,
-      ytdYear: latestYear,
-      funnelTrend,
-      platformTrend,
-      funnelMix: mergeGroups(
-        groupSum(currentMedia, "Funnel", "Ad Spend"),
-        groupSum(currentCommerce, "Funnel", "Expense"),
-      ).slice(0, 5),
-      formatMix: groupSum(currentMedia, "Format", "Ad Spend").slice(0, 6),
-      platformMix: platformTotals.slice(0, 5),
-      maxOf,
-      periodLabel: formattedPeriodLabel,
-    };
-  }, [homeMediaData, homeCommerceData, homeBrand, homePeriods]);
+  }, [homeNormalized, homeBrand, homePeriods]);
 
   if (currentView === "login") {
     return <LoginView onLoginSuccess={() => setCurrentView("welcome")} />;
@@ -1986,23 +1501,6 @@ export default function DashboardApp() {
                 CONFIG.commerce.colBrand,
                 "brand",
               )}
-            />
-          )}
-
-          {activeEngine === "pidRank" && (
-            <PidPushRankTrackerView
-              commerceData={pidRankData.commerce}
-              categoryData={pidRankData.category}
-              salesData={pidRankData.sales}
-              cidData={pidRankData.cid}
-              adjustments={pidRankData.adjustments}
-              pushRankData={pidRankData.pushRank}
-              isDarkMode={isDarkMode}
-              onAddAdjustment={handleAddAdjustment}
-              onUpdateAdjustmentStatus={handleUpdateAdjustmentStatus}
-              onUpdateActionTaken={handleUpdateActionTaken}
-              onSyncData={() => loadData("pidRank", true)}
-              isLoading={isLoading}
             />
           )}
 
