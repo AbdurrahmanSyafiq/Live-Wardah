@@ -21,6 +21,9 @@ import {
   HOME_MONTH_SHEETS,
   normalizeSheetRows,
   buildHomeSummary,
+  toSkuRows,
+  toCommerceRows,
+  toMediaRows,
 } from "@/lib/homeData";
 import LoginView from "@/components/auth/LoginView";
 import WelcomeView from "@/components/navigation/WelcomeView";
@@ -143,6 +146,11 @@ export default function DashboardApp() {
       } else {
         dataCache.current[CONFIG[engine].sheet] = undefined as any;
       }
+      if (engine === "sku" || engine === "commerce" || engine === "media") {
+        Object.values(HOME_MONTH_SHEETS).forEach((name) => {
+          dataCache.current[name] = undefined as any;
+        });
+      }
       if (engine === "signal") {
         dataCache.current["Media API"] = undefined as any;
         dataCache.current["Commerce"] = undefined as any;
@@ -167,16 +175,46 @@ export default function DashboardApp() {
         return [];
       };
 
-      if (engine === "commerce") {
-        const [commData, cirData] = await Promise.all([
-          fetchSheet(CONFIG.commerce.sheet),
-          fetchSheet("CIR DAILY"),
-        ]);
-        setRawData(commData);
-        setCirDailyData(cirData);
+      if (engine === "media") {
+        // Digital Media dibaca dari sheet bulanan: Meta biasa + TikTok Awareness/Consideration
+        const parts = await Promise.all(
+          Object.entries(HOME_MONTH_SHEETS).map(async ([ym, sheetName]) =>
+            toMediaRows(await fetchSheet(sheetName), ym),
+          ),
+        );
+        const mediaRows = parts.flat();
+        if (mediaRows.length === 0)
+          alert(
+            "No digital media data loaded. Check that the monthly sheet tabs exist and are shared with the service account.",
+          );
+        setRawData(mediaRows);
+      } else if (engine === "commerce") {
+        // Commerce dibaca dari sheet bulanan (Wardah Sep / Wardah Oct): CPAS Shopee & Lazada + TikTok Conversion
+        const parts = await Promise.all(
+          Object.entries(HOME_MONTH_SHEETS).map(async ([ym, sheetName]) =>
+            toCommerceRows(await fetchSheet(sheetName), ym),
+          ),
+        );
+        const commRows = parts.flat();
+        if (commRows.length === 0)
+          alert(
+            "No commerce data loaded. Check that the monthly sheet tabs exist and are shared with the service account.",
+          );
+        setRawData(commRows);
+        setCirDailyData([]); // belum ada sumber data GMV Sales untuk CIR
       } else if (engine === "sku") {
-        const commData = await fetchSheet(CONFIG.commerce.sheet);
-        setRawData(commData);
+        // PID & SKU dibaca dari sheet bulanan (Wardah Sep / Wardah Oct), bukan tab "Commerce"
+        const parts = await Promise.all(
+          Object.entries(HOME_MONTH_SHEETS).map(async ([ym, sheetName]) =>
+            toSkuRows(await fetchSheet(sheetName), ym),
+          ),
+        );
+        const skuRows = parts.flat();
+        if (skuRows.length === 0)
+          alert(
+            "No data loaded for PID & SKU. Check that the monthly sheet tabs exist and are shared with the service account.",
+          );
+        setRawData(skuRows);
       } else if (engine === "signal") {
         const [signalData, mediaApiData, commerceData] = await Promise.all([
           fetchSheet("Media Signal"),
@@ -1118,6 +1156,7 @@ export default function DashboardApp() {
       overall: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 },
       tiktok: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 },
       shopee: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 },
+      lazada: { exp: 0, gmv: 0, pExp: 0, pGmv: 0 },
     };
     const calc = (data: any[], isPrev: boolean) => {
       if (activeEngine !== "commerce" && activeEngine !== "sku") return;
@@ -1137,6 +1176,9 @@ export default function DashboardApp() {
           } else if (plat.includes("shopee")) {
             totals.shopee.pExp += e;
             totals.shopee.pGmv += g;
+          } else if (plat.includes("lazada")) {
+            totals.lazada.pExp += e;
+            totals.lazada.pGmv += g;
           }
         } else {
           totals.overall.exp += e;
@@ -1147,6 +1189,9 @@ export default function DashboardApp() {
           } else if (plat.includes("shopee")) {
             totals.shopee.exp += e;
             totals.shopee.gmv += g;
+          } else if (plat.includes("lazada")) {
+            totals.lazada.exp += e;
+            totals.lazada.gmv += g;
           }
         }
       });
@@ -1184,6 +1229,15 @@ export default function DashboardApp() {
           totals.shopee.exp > 0 ? totals.shopee.gmv / totals.shopee.exp : 0,
         pRoasNum:
           totals.shopee.pExp > 0 ? totals.shopee.pGmv / totals.shopee.pExp : 0,
+      },
+      lazada: {
+        ...totals.lazada,
+        roas: calcRoas(totals.lazada.gmv, totals.lazada.exp),
+        pRoas: calcRoas(totals.lazada.pGmv, totals.lazada.pExp),
+        roasNum:
+          totals.lazada.exp > 0 ? totals.lazada.gmv / totals.lazada.exp : 0,
+        pRoasNum:
+          totals.lazada.pExp > 0 ? totals.lazada.pGmv / totals.lazada.pExp : 0,
       },
     };
   }, [curData, prevData, activeEngine]);

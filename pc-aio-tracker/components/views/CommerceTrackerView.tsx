@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import React, {
   useRef,
   useEffect,
@@ -23,6 +24,17 @@ import {
 } from "@/lib/formatters";
 import { CONFIG } from "@/lib/config";
 import SkuPerformanceModal from "./SkuPerformanceModal";
+
+// Angka besar diringkas: 2.037.154.318 -> 2.04B, 542.840.340 -> 542.84M
+const compact = (n: number) => {
+  const v = Number(n) || 0;
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+  return String(Math.round(v));
+};
+const compactIDR = (n: number) => `Rp ${compact(n)}`;
 
 interface CommerceTrackerViewProps {
   commerceKPIs: any;
@@ -140,11 +152,15 @@ export default function CommerceTrackerView({
   }, [ctxCurData]);
 
   const enhancedKPIs = useMemo(() => {
-    const filterCir = (rows: any[], plat: "overall" | "tiktok" | "shopee") => {
+    const filterCir = (
+      rows: any[],
+      plat: "overall" | "tiktok" | "shopee" | "lazada",
+    ) => {
       if (plat === "overall") return rows;
       return rows.filter((r) => {
         const p = String(getColVal(r, "Platform") || "").toLowerCase();
         if (plat === "tiktok") return p.includes("tiktok");
+        if (plat === "lazada") return p.includes("lazada");
         return p.includes("shopee");
       });
     };
@@ -156,7 +172,7 @@ export default function CommerceTrackerView({
         0,
       );
 
-    const platforms = ["overall", "tiktok", "shopee"] as const;
+    const platforms = ["overall", "tiktok", "shopee", "lazada"] as const;
     const result: Record<string, any> = {};
 
     platforms.forEach((plat) => {
@@ -195,6 +211,88 @@ export default function CommerceTrackerView({
     return result;
   }, [commerceKPIs, cirCurData, cirPrevData]);
 
+  // GMV Sales / CIR / Ads Contribution hanya ditampilkan kalau ada data GMV Sales (sheet CIR)
+  const hasSales = enhancedKPIs.overall.gmvSales > 0;
+
+  // Pop up detail kartu: nilai lengkap + periode sebelumnya + growth
+  const [kpiPopup, setKpiPopup] = useState<{
+    title: string;
+    rows: {
+      l: string;
+      full: string;
+      prevFull: string;
+      cur: number;
+      prev: number;
+      inv: boolean;
+    }[];
+  } | null>(null);
+  useEffect(() => {
+    if (!kpiPopup) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setKpiPopup(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [kpiPopup]);
+
+  const openCardPopup = (ctx: string, plat: string, title: string) => {
+    setDashboardContext(ctx);
+    const k = enhancedKPIs[plat];
+    const rows: any[] = [
+      {
+        l: "Expense",
+        full: formatIDR(k.exp),
+        prevFull: formatIDR(k.pExp),
+        cur: k.exp,
+        prev: k.pExp,
+        inv: false,
+      },
+      {
+        l: "GMV (Ads)",
+        full: formatIDR(k.gmv),
+        prevFull: formatIDR(k.pGmv),
+        cur: k.gmv,
+        prev: k.pGmv,
+        inv: false,
+      },
+    ];
+    if (hasSales) {
+      rows.push({
+        l: "GMV Sales",
+        full: formatIDR(k.gmvSales),
+        prevFull: formatIDR(k.pGmvSales),
+        cur: k.gmvSales,
+        prev: k.pGmvSales,
+        inv: false,
+      });
+      rows.push({
+        l: "CIR %",
+        full: formatPct(k.cir),
+        prevFull: formatPct(k.pCir),
+        cur: k.cir,
+        prev: k.pCir,
+        inv: true,
+      });
+      rows.push({
+        l: "Ads Contribution",
+        full: formatPct(k.adsContrib),
+        prevFull: formatPct(k.pAdsContrib),
+        cur: k.adsContrib,
+        prev: k.pAdsContrib,
+        inv: false,
+      });
+    }
+    rows.push({
+      l: "ROAS",
+      full: String(k.roas),
+      prevFull: `${Number(k.pRoasNum || 0).toFixed(2)}x`,
+      cur: k.roasNum,
+      prev: k.pRoasNum,
+      inv: false,
+    });
+    setKpiPopup({ title, rows });
+  };
+
   useEffect(() => {
     if (!chartRef.current) return;
     if (chartInstance.current) chartInstance.current.destroy();
@@ -218,7 +316,13 @@ export default function CommerceTrackerView({
         periodStart: Date,
         periodEnd: Date,
       ) => {
-        const running = { exp: 0, gmv: 0, orders: 0 };
+        const running = {
+          exp: 0,
+          gmv: 0,
+          orders: 0,
+          impressions: 0,
+          clicks: 0,
+        };
         weeks.forEach((w) => {
           const weekNum = parseInt(w.replace("W", ""));
           const periodDate = new Date(periodStart);
@@ -230,6 +334,8 @@ export default function CommerceTrackerView({
             .forEach((row) => {
               running.exp += parseNum(row["Expense"]);
               running.gmv += parseNum(row["GMV"]);
+              running.impressions += parseNum(row["Impressions"]);
+              running.clicks += parseNum(row["Clicks"]);
               running.orders += parseNum(
                 row["Items Sold"] ||
                   row["Item sold"] ||
@@ -278,9 +384,17 @@ export default function CommerceTrackerView({
         }
 
         if (!groupedData[label])
-          groupedData[label] = { exp: 0, gmv: 0, orders: 0 };
+          groupedData[label] = {
+            exp: 0,
+            gmv: 0,
+            orders: 0,
+            impressions: 0,
+            clicks: 0,
+          };
         groupedData[label].exp += parseNum(row["Expense"]);
         groupedData[label].gmv += parseNum(row["GMV"]);
+        groupedData[label].impressions += parseNum(row["Impressions"]);
+        groupedData[label].clicks += parseNum(row["Clicks"]);
         groupedData[label].orders += parseNum(
           row["Items Sold"] ||
             row["Item sold"] ||
@@ -311,10 +425,17 @@ export default function CommerceTrackerView({
         bg: "rgba(16, 185, 129, 0.15)",
         defaultType: "line",
       },
-      orders: {
-        label: "Orders",
-        data: labels.map((l) => groupedData[l].orders),
+      impressions: {
+        label: "Impressions",
+        data: labels.map((l) => groupedData[l].impressions),
         color: "#84cc16",
+        bg: "transparent",
+        defaultType: "line",
+      },
+      clicks: {
+        label: "Clicks",
+        data: labels.map((l) => groupedData[l].clicks),
+        color: "#06b6d4",
         bg: "transparent",
         defaultType: "line",
       },
@@ -422,24 +543,26 @@ export default function CommerceTrackerView({
   const generateCommercePlatformSummaryBodyHTML = useCallback(() => {
     const filterPlatform = (
       rows: any[],
-      plat: "Overall" | "TikTok" | "Shopee",
+      plat: "Overall" | "TikTok" | "Shopee" | "Lazada",
     ) => {
       if (plat === "Overall") return rows;
       return rows.filter((r) => {
         const p = String(r[CONFIG.commerce.colPlatform] || "").toLowerCase();
         if (plat === "TikTok") return p.includes("tiktok");
+        if (plat === "Lazada") return p.includes("lazada");
         return p.includes("shopee");
       });
     };
 
     const filterCirPlatform = (
       rows: any[],
-      plat: "Overall" | "TikTok" | "Shopee",
+      plat: "Overall" | "TikTok" | "Shopee" | "Lazada",
     ) => {
       if (plat === "Overall") return rows;
       return rows.filter((r) => {
         const p = String(getColVal(r, "Platform") || "").toLowerCase();
         if (plat === "TikTok") return p.includes("tiktok");
+        if (plat === "Lazada") return p.includes("lazada");
         return p.includes("shopee");
       });
     };
@@ -447,10 +570,14 @@ export default function CommerceTrackerView({
     const calcSum = (rows: any[], cirRows: any[]) => {
       let exp = 0,
         gmv = 0,
-        orders = 0;
+        orders = 0,
+        impressions = 0,
+        clicks = 0;
       rows.forEach((r) => {
         exp += parseNum(r["Expense"]);
         gmv += parseNum(r["GMV"]);
+        impressions += parseNum(r["Impressions"]);
+        clicks += parseNum(r["Clicks"]);
         orders += parseNum(
           r["Items Sold"] || r["Item sold"] || r["items_sold"] || r["Orders"],
         );
@@ -463,6 +590,8 @@ export default function CommerceTrackerView({
       return {
         exp,
         orders,
+        impressions,
+        clicks,
         gmv,
         gmvSales,
         cir: gmvSales > 0 ? exp / gmvSales : 0,
@@ -472,23 +601,17 @@ export default function CommerceTrackerView({
       };
     };
 
-    const platforms: ("Overall" | "TikTok" | "Shopee")[] = [
+    const platforms: ("Overall" | "TikTok" | "Shopee" | "Lazada")[] = [
       "Overall",
       "TikTok",
       "Shopee",
+      "Lazada",
     ];
     const metricNames = [
       { name: "Expense", key: "exp", fmt: formatIDR, isInv: false },
-      { name: "Orders", key: "orders", fmt: formatNum, isInv: false },
+      { name: "Impressions", key: "impressions", fmt: formatNum, isInv: false },
+      { name: "Clicks", key: "clicks", fmt: formatNum, isInv: false },
       { name: "GMV (Ads)", key: "gmv", fmt: formatIDR, isInv: false },
-      { name: "GMV Sales", key: "gmvSales", fmt: formatIDR, isInv: false },
-      { name: "CIR %", key: "cir", fmt: formatPct, isInv: true },
-      {
-        name: "Ads Contribution",
-        key: "adsContrib",
-        fmt: formatPct,
-        isInv: false,
-      },
       { name: "CPA", key: "cpa", fmt: formatIDR, isInv: true },
       {
         name: "ROAS",
@@ -669,7 +792,7 @@ export default function CommerceTrackerView({
 
     const sumMetricsData = (target: any, row: any) => {
       target.exp += parseNum(row["Expense"]);
-      target.imp += parseNum(row["Impression"]);
+      target.imp += parseNum(row["Impressions"] ?? row["Impression"]);
       target.clicks += parseNum(row["Clicks"]);
       target.orders += parseNum(
         row["Items Sold"] ||
@@ -685,9 +808,15 @@ export default function CommerceTrackerView({
       const m = [
         { name: "Expense", raw: g.exp, fmt: formatIDR(g.exp), isInv: false },
         {
-          name: "Orders",
-          raw: g.orders,
-          fmt: formatNum(g.orders),
+          name: "Impressions",
+          raw: g.imp,
+          fmt: formatNum(g.imp),
+          isInv: false,
+        },
+        {
+          name: "Clicks",
+          raw: g.clicks,
+          fmt: formatNum(g.clicks),
           isInv: false,
         },
         { name: "GMV (Ads)", raw: g.gmv, fmt: formatIDR(g.gmv), isInv: false },
@@ -738,7 +867,7 @@ export default function CommerceTrackerView({
     if (granularity === "monthly") {
       thead = `<tr>
         <th class="sticky-col ${thClass}">Platform</th>
-        <th class="sticky-col-2 ${thClass}">Ad Type</th>
+        <th class="sticky-col-2 ${thClass}">Funnel</th>
         <th class="sticky-col-3 ${thClass}">Metric</th>
         <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">This Month (Click)</th>
         <th class="px-4 py-4 text-right font-bold text-slate-400 bg-[#0f172a] sticky top-0 border-b border-slate-700">Prev Month</th>
@@ -804,7 +933,7 @@ export default function CommerceTrackerView({
 
       thead = `<tr>
         <th class="sticky-col ${thClass}">Platform</th>
-        <th class="sticky-col-2 ${thClass}">Ad Type</th>
+        <th class="sticky-col-2 ${thClass}">Funnel</th>
         <th class="sticky-col-3 ${thClass}">Metric</th>`;
       weeks.forEach((w) => {
         const weekNum = parseInt(w.replace("W", ""));
@@ -923,7 +1052,7 @@ export default function CommerceTrackerView({
       const days = Array.from(daysFound).sort();
       thead = `<tr>
         <th class="sticky-col ${thClass}">Platform</th>
-        <th class="sticky-col-2 ${thClass}">Ad Type</th>
+        <th class="sticky-col-2 ${thClass}">Funnel</th>
         <th class="sticky-col-3 ${thClass}">Metric</th>`;
       days.forEach((d) => {
         const parts = d.split("-");
@@ -1018,11 +1147,13 @@ export default function CommerceTrackerView({
 
   return (
     <div className="w-full">
-      {/* 3 TOP KPI CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
+      {/* TOP KPI CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-5 mb-6">
         {/* OVERALL CARD */}
         <div
-          onClick={() => setDashboardContext("Overall")}
+          onClick={() =>
+            openCardPopup("Overall", "overall", "Overall Commerce")
+          }
           className={`[container-type:inline-size] min-w-0 bg-indigo-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === "Overall" ? "ring-4 ring-indigo-300 shadow-indigo-600/40" : ""}`}>
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-black text-indigo-100 uppercase tracking-widest">
@@ -1043,13 +1174,13 @@ export default function CommerceTrackerView({
             </div>
           </div>
           <div className="space-y-3">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-indigo-500/80 pb-2.5">
+            <div className="flex flex-col gap-1.5 border-b border-indigo-500/80 pb-2.5">
               <span className="text-xs font-bold text-indigo-200 leading-tight">
                 Expense
               </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatIDR(enhancedKPIs.overall.exp)}
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                  {compact(enhancedKPIs.overall.exp)}
                 </span>
                 {renderGR(
                   enhancedKPIs.overall.exp,
@@ -1059,13 +1190,13 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-indigo-500/80 pb-2.5">
+            <div className="flex flex-col gap-1.5 border-b border-indigo-500/80 pb-2.5">
               <span className="text-xs font-bold text-indigo-200 leading-tight">
                 GMV (Ads)
               </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatIDR(enhancedKPIs.overall.gmv)}
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                  {compact(enhancedKPIs.overall.gmv)}
                 </span>
                 {renderGR(
                   enhancedKPIs.overall.gmv,
@@ -1075,60 +1206,66 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-indigo-500/80 pb-2.5">
-              <span className="text-xs font-bold text-indigo-200 leading-tight">
-                GMV Sales
-              </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatIDR(enhancedKPIs.overall.gmvSales)}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-indigo-500/80 pb-2.5">
+                <span className="text-xs font-bold text-indigo-200 leading-tight">
+                  GMV Sales
                 </span>
-                {renderGR(
-                  enhancedKPIs.overall.gmvSales,
-                  enhancedKPIs.overall.pGmvSales,
-                  false,
-                  isDarkMode,
-                )}
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                    {compact(enhancedKPIs.overall.gmvSales)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.overall.gmvSales,
+                    enhancedKPIs.overall.pGmvSales,
+                    false,
+                    isDarkMode,
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-indigo-500/80 pb-2.5">
-              <span className="text-xs font-bold text-indigo-200 leading-tight">
-                CIR %
-              </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-amber-300 leading-none">
-                  {formatPct(enhancedKPIs.overall.cir)}
+            )}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-indigo-500/80 pb-2.5">
+                <span className="text-xs font-bold text-indigo-200 leading-tight">
+                  CIR %
                 </span>
-                {renderGR(
-                  enhancedKPIs.overall.cir,
-                  enhancedKPIs.overall.pCir,
-                  true,
-                  isDarkMode,
-                )}
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-amber-300 leading-none">
+                    {formatPct(enhancedKPIs.overall.cir)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.overall.cir,
+                    enhancedKPIs.overall.pCir,
+                    true,
+                    isDarkMode,
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-indigo-500/80 pb-2.5">
-              <span className="text-xs font-bold text-indigo-200 leading-tight">
-                Ads Contribution
-              </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatPct(enhancedKPIs.overall.adsContrib)}
+            )}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-indigo-500/80 pb-2.5">
+                <span className="text-xs font-bold text-indigo-200 leading-tight">
+                  Ads Contribution
                 </span>
-                {renderGR(
-                  enhancedKPIs.overall.adsContrib,
-                  enhancedKPIs.overall.pAdsContrib,
-                  false,
-                  isDarkMode,
-                )}
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                    {formatPct(enhancedKPIs.overall.adsContrib)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.overall.adsContrib,
+                    enhancedKPIs.overall.pAdsContrib,
+                    false,
+                    isDarkMode,
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 pt-1">
+            )}
+            <div className="flex flex-col gap-1.5 pt-1">
               <span className="text-xs font-bold text-indigo-200 leading-tight">
                 ROAS
               </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-emerald-300 leading-none">
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-emerald-300 leading-none">
                   {enhancedKPIs.overall.roas}
                 </span>
                 {renderGR(
@@ -1144,7 +1281,7 @@ export default function CommerceTrackerView({
 
         {/* TIKTOK SHOP CARD */}
         <div
-          onClick={() => setDashboardContext("TikTok")}
+          onClick={() => openCardPopup("TikTok", "tiktok", "TikTok Shop")}
           className={`[container-type:inline-size] min-w-0 bg-slate-800 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === "TikTok" ? "ring-4 ring-slate-400 shadow-slate-900/40" : ""}`}>
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-black text-slate-300 uppercase tracking-widest">
@@ -1160,13 +1297,13 @@ export default function CommerceTrackerView({
             </div>
           </div>
           <div className="space-y-3">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-600/80 pb-2.5">
+            <div className="flex flex-col gap-1.5 border-b border-slate-600/80 pb-2.5">
               <span className="text-xs font-bold text-slate-400 leading-tight">
                 Expense
               </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatIDR(enhancedKPIs.tiktok.exp)}
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                  {compact(enhancedKPIs.tiktok.exp)}
                 </span>
                 {renderGR(
                   enhancedKPIs.tiktok.exp,
@@ -1176,13 +1313,13 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-600/80 pb-2.5">
+            <div className="flex flex-col gap-1.5 border-b border-slate-600/80 pb-2.5">
               <span className="text-xs font-bold text-slate-400 leading-tight">
                 GMV (Ads)
               </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatIDR(enhancedKPIs.tiktok.gmv)}
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                  {compact(enhancedKPIs.tiktok.gmv)}
                 </span>
                 {renderGR(
                   enhancedKPIs.tiktok.gmv,
@@ -1192,60 +1329,66 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-600/80 pb-2.5">
-              <span className="text-xs font-bold text-slate-400 leading-tight">
-                GMV Sales
-              </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatIDR(enhancedKPIs.tiktok.gmvSales)}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-slate-600/80 pb-2.5">
+                <span className="text-xs font-bold text-slate-400 leading-tight">
+                  GMV Sales
                 </span>
-                {renderGR(
-                  enhancedKPIs.tiktok.gmvSales,
-                  enhancedKPIs.tiktok.pGmvSales,
-                  false,
-                  isDarkMode,
-                )}
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                    {compact(enhancedKPIs.tiktok.gmvSales)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.tiktok.gmvSales,
+                    enhancedKPIs.tiktok.pGmvSales,
+                    false,
+                    isDarkMode,
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-600/80 pb-2.5">
-              <span className="text-xs font-bold text-slate-400 leading-tight">
-                CIR %
-              </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-amber-300 leading-none">
-                  {formatPct(enhancedKPIs.tiktok.cir)}
+            )}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-slate-600/80 pb-2.5">
+                <span className="text-xs font-bold text-slate-400 leading-tight">
+                  CIR %
                 </span>
-                {renderGR(
-                  enhancedKPIs.tiktok.cir,
-                  enhancedKPIs.tiktok.pCir,
-                  true,
-                  isDarkMode,
-                )}
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-amber-300 leading-none">
+                    {formatPct(enhancedKPIs.tiktok.cir)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.tiktok.cir,
+                    enhancedKPIs.tiktok.pCir,
+                    true,
+                    isDarkMode,
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-600/80 pb-2.5">
-              <span className="text-xs font-bold text-slate-400 leading-tight">
-                Ads Contribution
-              </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatPct(enhancedKPIs.tiktok.adsContrib)}
+            )}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-slate-600/80 pb-2.5">
+                <span className="text-xs font-bold text-slate-400 leading-tight">
+                  Ads Contribution
                 </span>
-                {renderGR(
-                  enhancedKPIs.tiktok.adsContrib,
-                  enhancedKPIs.tiktok.pAdsContrib,
-                  false,
-                  isDarkMode,
-                )}
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                    {formatPct(enhancedKPIs.tiktok.adsContrib)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.tiktok.adsContrib,
+                    enhancedKPIs.tiktok.pAdsContrib,
+                    false,
+                    isDarkMode,
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 pt-1">
+            )}
+            <div className="flex flex-col gap-1.5 pt-1">
               <span className="text-xs font-bold text-slate-400 leading-tight">
                 ROAS
               </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-emerald-400 leading-none">
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-emerald-400 leading-none">
                   {enhancedKPIs.tiktok.roas}
                 </span>
                 {renderGR(
@@ -1261,7 +1404,7 @@ export default function CommerceTrackerView({
 
         {/* SHOPEE CARD */}
         <div
-          onClick={() => setDashboardContext("Shopee")}
+          onClick={() => openCardPopup("Shopee", "shopee", "Shopee")}
           className={`[container-type:inline-size] min-w-0 bg-orange-500 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === "Shopee" ? "ring-4 ring-orange-300 shadow-orange-500/40" : ""}`}>
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-sm font-black text-orange-100 uppercase tracking-widest">
@@ -1277,13 +1420,13 @@ export default function CommerceTrackerView({
             </div>
           </div>
           <div className="space-y-3">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-orange-400/80 pb-2.5">
+            <div className="flex flex-col gap-1.5 border-b border-orange-400/80 pb-2.5">
               <span className="text-xs font-bold text-orange-100 leading-tight">
                 Expense
               </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatIDR(enhancedKPIs.shopee.exp)}
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                  {compact(enhancedKPIs.shopee.exp)}
                 </span>
                 {renderGR(
                   enhancedKPIs.shopee.exp,
@@ -1293,13 +1436,13 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-orange-400/80 pb-2.5">
+            <div className="flex flex-col gap-1.5 border-b border-orange-400/80 pb-2.5">
               <span className="text-xs font-bold text-orange-100 leading-tight">
                 GMV (Ads)
               </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatIDR(enhancedKPIs.shopee.gmv)}
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                  {compact(enhancedKPIs.shopee.gmv)}
                 </span>
                 {renderGR(
                   enhancedKPIs.shopee.gmv,
@@ -1309,60 +1452,66 @@ export default function CommerceTrackerView({
                 )}
               </div>
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-orange-400/80 pb-2.5">
-              <span className="text-xs font-bold text-orange-100 leading-tight">
-                GMV Sales
-              </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatIDR(enhancedKPIs.shopee.gmvSales)}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-orange-400/80 pb-2.5">
+                <span className="text-xs font-bold text-orange-100 leading-tight">
+                  GMV Sales
                 </span>
-                {renderGR(
-                  enhancedKPIs.shopee.gmvSales,
-                  enhancedKPIs.shopee.pGmvSales,
-                  false,
-                  isDarkMode,
-                )}
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                    {compact(enhancedKPIs.shopee.gmvSales)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.shopee.gmvSales,
+                    enhancedKPIs.shopee.pGmvSales,
+                    false,
+                    isDarkMode,
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-orange-400/80 pb-2.5">
-              <span className="text-xs font-bold text-orange-100 leading-tight">
-                CIR %
-              </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-amber-200 leading-none">
-                  {formatPct(enhancedKPIs.shopee.cir)}
+            )}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-orange-400/80 pb-2.5">
+                <span className="text-xs font-bold text-orange-100 leading-tight">
+                  CIR %
                 </span>
-                {renderGR(
-                  enhancedKPIs.shopee.cir,
-                  enhancedKPIs.shopee.pCir,
-                  true,
-                  isDarkMode,
-                )}
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-amber-200 leading-none">
+                    {formatPct(enhancedKPIs.shopee.cir)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.shopee.cir,
+                    enhancedKPIs.shopee.pCir,
+                    true,
+                    isDarkMode,
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-orange-400/80 pb-2.5">
-              <span className="text-xs font-bold text-orange-100 leading-tight">
-                Ads Contribution
-              </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-white leading-none">
-                  {formatPct(enhancedKPIs.shopee.adsContrib)}
+            )}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-orange-400/80 pb-2.5">
+                <span className="text-xs font-bold text-orange-100 leading-tight">
+                  Ads Contribution
                 </span>
-                {renderGR(
-                  enhancedKPIs.shopee.adsContrib,
-                  enhancedKPIs.shopee.pAdsContrib,
-                  false,
-                  isDarkMode,
-                )}
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                    {formatPct(enhancedKPIs.shopee.adsContrib)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.shopee.adsContrib,
+                    enhancedKPIs.shopee.pAdsContrib,
+                    false,
+                    isDarkMode,
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 pt-1">
+            )}
+            <div className="flex flex-col gap-1.5 pt-1">
               <span className="text-xs font-bold text-orange-100 leading-tight">
                 ROAS
               </span>
-              <div className="flex items-center gap-2 justify-self-end min-w-0">
-                <span className="font-black text-[clamp(0.8rem,5cqw,1.25rem)] whitespace-nowrap text-emerald-200 leading-none">
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-emerald-200 leading-none">
                   {enhancedKPIs.shopee.roas}
                 </span>
                 {renderGR(
@@ -1375,7 +1524,188 @@ export default function CommerceTrackerView({
             </div>
           </div>
         </div>
+
+        {/* LAZADA CARD */}
+        <div
+          onClick={() => openCardPopup("Lazada", "lazada", "Lazada")}
+          className={`[container-type:inline-size] min-w-0 bg-blue-600 rounded-3xl p-5 lg:p-6 shadow-lg cursor-pointer transition-all hover:-translate-y-1 ${dashboardContext === "Lazada" ? "ring-4 ring-blue-300 shadow-blue-600/40" : ""}`}>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-sm font-black text-blue-100 uppercase tracking-widest">
+              Lazada
+            </h3>
+            <div className="p-2.5 bg-white/20 rounded-xl">
+              <svg
+                className="w-5 h-5 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2.5"
+                  d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+              </svg>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="flex flex-col gap-1.5 border-b border-blue-400/80 pb-2.5">
+              <span className="text-xs font-bold text-blue-100 leading-tight">
+                Expense
+              </span>
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                  {compact(enhancedKPIs.lazada.exp)}
+                </span>
+                {renderGR(
+                  enhancedKPIs.lazada.exp,
+                  enhancedKPIs.lazada.pExp,
+                  false,
+                  isDarkMode,
+                )}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5 border-b border-blue-400/80 pb-2.5">
+              <span className="text-xs font-bold text-blue-100 leading-tight">
+                GMV (Ads)
+              </span>
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                  {compact(enhancedKPIs.lazada.gmv)}
+                </span>
+                {renderGR(
+                  enhancedKPIs.lazada.gmv,
+                  enhancedKPIs.lazada.pGmv,
+                  false,
+                  isDarkMode,
+                )}
+              </div>
+            </div>
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-blue-400/80 pb-2.5">
+                <span className="text-xs font-bold text-blue-100 leading-tight">
+                  GMV Sales
+                </span>
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                    {compact(enhancedKPIs.lazada.gmvSales)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.lazada.gmvSales,
+                    enhancedKPIs.lazada.pGmvSales,
+                    false,
+                    isDarkMode,
+                  )}
+                </div>
+              </div>
+            )}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-blue-400/80 pb-2.5">
+                <span className="text-xs font-bold text-blue-100 leading-tight">
+                  CIR %
+                </span>
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-amber-200 leading-none">
+                    {formatPct(enhancedKPIs.lazada.cir)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.lazada.cir,
+                    enhancedKPIs.lazada.pCir,
+                    true,
+                    isDarkMode,
+                  )}
+                </div>
+              </div>
+            )}
+            {hasSales && (
+              <div className="flex flex-col gap-1.5 border-b border-blue-400/80 pb-2.5">
+                <span className="text-xs font-bold text-blue-100 leading-tight">
+                  Ads Contribution
+                </span>
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                  <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-white leading-none">
+                    {formatPct(enhancedKPIs.lazada.adsContrib)}
+                  </span>
+                  {renderGR(
+                    enhancedKPIs.lazada.adsContrib,
+                    enhancedKPIs.lazada.pAdsContrib,
+                    false,
+                    isDarkMode,
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-col gap-1.5 pt-1">
+              <span className="text-xs font-bold text-blue-100 leading-tight">
+                ROAS
+              </span>
+              <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                <span className="font-black text-[clamp(1rem,6cqw,1.4rem)] whitespace-nowrap text-emerald-200 leading-none">
+                  {enhancedKPIs.lazada.roas}
+                </span>
+                {renderGR(
+                  enhancedKPIs.lazada.roasNum,
+                  enhancedKPIs.lazada.pRoasNum,
+                  false,
+                  isDarkMode,
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {kpiPopup &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[300] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setKpiPopup(null)}>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`w-full max-w-md max-h-[90vh] overflow-auto rounded-3xl border shadow-2xl p-6 ${isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"}`}>
+              <div className="flex items-start justify-between gap-4">
+                <span
+                  className={`text-sm font-black uppercase tracking-widest ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                  {kpiPopup.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setKpiPopup(null)}
+                  aria-label="Close"
+                  className={`text-lg leading-none font-bold ${isDarkMode ? "text-slate-400 hover:text-white" : "text-slate-400 hover:text-slate-900"}`}>
+                  ×
+                </button>
+              </div>
+              <div className="mt-4 space-y-4">
+                {kpiPopup.rows.map((r) => (
+                  <div
+                    key={r.l}
+                    className={`border-b pb-3 last:border-b-0 last:pb-0 ${isDarkMode ? "border-slate-700" : "border-slate-100"}`}>
+                    <div
+                      className={`text-xs font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      {r.l}
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-2xl font-black break-all">
+                        {r.full}
+                      </div>
+                      {renderGR(r.cur, r.prev, r.inv, isDarkMode)}
+                    </div>
+                    <div
+                      className={`mt-2 text-xs font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      Previous period:{" "}
+                      <span
+                        className={`font-black ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
+                        {r.prevFull}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {/* HISTORICAL TREND CHART */}
       <div
@@ -1388,7 +1718,7 @@ export default function CommerceTrackerView({
             <p
               className={`text-sm font-semibold mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
               {granularity === "monthly"
-                ? "Displaying data for the past 3 months"
+                ? "Displaying data for Months"
                 : granularity === "weekly"
                   ? "MTD Comparison Analytics"
                   : "Interactive Multi-Metric Analytics"}
@@ -1415,7 +1745,8 @@ export default function CommerceTrackerView({
               {[
                 { id: "exp", l: "Expense", c: "bg-indigo-600" },
                 { id: "gmv", l: "GMV", c: "bg-emerald-500" },
-                { id: "orders", l: "Orders", c: "bg-lime-500" },
+                { id: "impressions", l: "Impressions", c: "bg-lime-500" },
+                { id: "clicks", l: "Clicks", c: "bg-cyan-500" },
                 { id: "roas", l: "ROAS", c: "bg-amber-500" },
                 { id: "cpa", l: "CPA", c: "bg-pink-500" },
               ].map((m) => {
@@ -1451,8 +1782,8 @@ export default function CommerceTrackerView({
               Platform Summary Rollup
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Core performance across platforms (Expense, Orders, GMV, GMV
-              Sales, CIR, Ads Contrib, CPA, ROAS)
+              Core performance across platforms (Expense, Impressions, Clicks,
+              GMV, CPA, ROAS)
             </p>
           </div>
         </div>
@@ -1588,11 +1919,11 @@ export default function CommerceTrackerView({
           <div>
             <h2
               className={`font-black uppercase tracking-wider text-sm ${isDarkMode ? "text-white" : "text-slate-800"}`}>
-              Platform & Ad Type Pivot
+              Platform & Funnel Pivot
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
               Click any metric cell to inspect SKUs for that specific date
-              cut-off[cite: 14, 17]
+              cut-off
             </p>
           </div>
           <div className="flex flex-wrap gap-3 w-full md:w-auto">
@@ -1600,7 +1931,7 @@ export default function CommerceTrackerView({
               value={tableColFilter1}
               onChange={(e) => setTableColFilter1(e.target.value)}
               className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? "border-slate-600 text-indigo-300 hover:border-indigo-500" : "border-slate-300 text-indigo-700 hover:border-indigo-500 bg-slate-50"}`}>
-              <option value="All">All Platforms / Ad Types</option>
+              <option value="All">All Platforms / Funnel</option>
               {tableData.uniqueDim1.map((opt: any) => (
                 <option key={opt} value={opt}>
                   {opt}
@@ -1611,7 +1942,7 @@ export default function CommerceTrackerView({
               value={tableColFilter2}
               onChange={(e) => setTableColFilter2(e.target.value)}
               className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? "border-slate-600 text-emerald-300 hover:border-emerald-500" : "border-slate-300 text-emerald-700 hover:border-emerald-500 bg-slate-50"}`}>
-              <option value="All">All Ad Types</option>
+              <option value="All">All Funnels</option>
               {tableData.uniqueDim2.map((opt: any) => (
                 <option key={opt} value={opt}>
                   {opt}

@@ -32,6 +32,8 @@ export default function GeneralOverviewView({
   setHomeMomentumType,
 }: GeneralOverviewViewProps) {
   const [isMomentumDropdownOpen, setIsMomentumDropdownOpen] = useState(false);
+  // MTD = harian, MTW = mingguan
+  const [trendMode, setTrendMode] = useState<"mtd" | "mtw">("mtw");
 
   const homeSurface = isDarkMode
     ? "bg-slate-800 border-slate-700"
@@ -60,6 +62,13 @@ export default function GeneralOverviewView({
     if (abs >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
     return String(Math.round(v));
   };
+  const axisTick = (val: number) => {
+    const abs = Math.abs(val);
+    if (abs >= 1e9) return `${+(val / 1e9).toFixed(1)}B`;
+    if (abs >= 1e6) return `${Math.round(val / 1e6)}M`;
+    if (abs >= 1e3) return `${Math.round(val / 1e3)}K`;
+    return String(val);
+  };
   const compactIDR = (n: number) => `Rp ${compact(n)}`;
 
   const platformColors = [
@@ -69,6 +78,9 @@ export default function GeneralOverviewView({
     "#06b6d4",
     "#ec4899",
   ];
+
+  const chartTrend =
+    trendMode === "mtd" ? homeSummary.dailyTrend : homeSummary.trend;
 
   const activeMetricConfigs = metricOptions.filter((m) =>
     homeMomentumMetrics.includes(m.key),
@@ -450,10 +462,13 @@ export default function GeneralOverviewView({
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
               <div>
-                <h2 className={`text-base font-black ${homeHeading}`}>MTD</h2>
+                <h2 className={`text-base font-black ${homeHeading}`}>
+                  {trendMode === "mtd" ? "MTD" : "MTW"}
+                </h2>
                 <p className={`text-xs ${homeMuted} mt-0.5`}>
-                  {homeSummary.periodLabel} · Weekly trend comparison across
-                  selected metrics
+                  {homeSummary.periodLabel} ·{" "}
+                  {trendMode === "mtd" ? "Daily" : "Weekly"} trend comparison
+                  across selected metrics
                 </p>
               </div>
 
@@ -498,6 +513,22 @@ export default function GeneralOverviewView({
                 </div>
 
                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                  {(["mtd", "mtw"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setTrendMode(mode)}
+                      title={
+                        mode === "mtd"
+                          ? "Month to date (per hari)"
+                          : "Per minggu (Week 1, 2, ...)"
+                      }
+                      className={`px-2.5 py-1 text-[10px] font-bold rounded-lg uppercase tracking-wider transition-all ${trendMode === mode ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-800 dark:hover:text-white"}`}>
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
                   {(["bar", "line", "area"] as const).map((type) => (
                     <button
                       key={type}
@@ -514,7 +545,7 @@ export default function GeneralOverviewView({
               <ResponsiveContainer width="100%" height="100%">
                 {homeMomentumType === "bar" ? (
                   <BarChart
-                    data={homeSummary.trend}
+                    data={chartTrend}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid
                       strokeDasharray="3 3"
@@ -534,13 +565,7 @@ export default function GeneralOverviewView({
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(val) =>
-                        val >= 1000000
-                          ? `${(val / 1000000).toFixed(0)}M`
-                          : val >= 1000
-                            ? `${(val / 1000).toFixed(0)}k`
-                            : val
-                      }
+                      tickFormatter={axisTick}
                     />
                     {activeMetricConfigs.length > 1 && (
                       <YAxis
@@ -550,13 +575,7 @@ export default function GeneralOverviewView({
                         fontSize={11}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(val) =>
-                          val >= 1000000
-                            ? `${(val / 1000000).toFixed(0)}M`
-                            : val >= 1000
-                              ? `${(val / 1000).toFixed(0)}k`
-                              : val
-                        }
+                        tickFormatter={axisTick}
                       />
                     )}
                     <RechartsTooltip
@@ -589,7 +608,7 @@ export default function GeneralOverviewView({
                   </BarChart>
                 ) : homeMomentumType === "line" ? (
                   <LineChart
-                    data={homeSummary.trend}
+                    data={chartTrend}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid
                       strokeDasharray="3 3"
@@ -609,13 +628,7 @@ export default function GeneralOverviewView({
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(val) =>
-                        val >= 1000000
-                          ? `${(val / 1000000).toFixed(0)}M`
-                          : val >= 1000
-                            ? `${(val / 1000).toFixed(0)}k`
-                            : val
-                      }
+                      tickFormatter={axisTick}
                     />
                     {activeMetricConfigs.length > 1 && (
                       <YAxis
@@ -625,13 +638,7 @@ export default function GeneralOverviewView({
                         fontSize={11}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(val) =>
-                          val >= 1000000
-                            ? `${(val / 1000000).toFixed(0)}M`
-                            : val >= 1000
-                              ? `${(val / 1000).toFixed(0)}k`
-                              : val
-                        }
+                        tickFormatter={axisTick}
                       />
                     )}
                     <RechartsTooltip
@@ -666,7 +673,7 @@ export default function GeneralOverviewView({
                   </LineChart>
                 ) : (
                   <AreaChart
-                    data={homeSummary.trend}
+                    data={chartTrend}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
                       {activeMetricConfigs.map((cfg) => (
@@ -708,13 +715,7 @@ export default function GeneralOverviewView({
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(val) =>
-                        val >= 1000000
-                          ? `${(val / 1000000).toFixed(0)}M`
-                          : val >= 1000
-                            ? `${(val / 1000).toFixed(0)}k`
-                            : val
-                      }
+                      tickFormatter={axisTick}
                     />
                     {activeMetricConfigs.length > 1 && (
                       <YAxis
@@ -724,13 +725,7 @@ export default function GeneralOverviewView({
                         fontSize={11}
                         tickLine={false}
                         axisLine={false}
-                        tickFormatter={(val) =>
-                          val >= 1000000
-                            ? `${(val / 1000000).toFixed(0)}M`
-                            : val >= 1000
-                              ? `${(val / 1000).toFixed(0)}k`
-                              : val
-                        }
+                        tickFormatter={axisTick}
                       />
                     )}
                     <RechartsTooltip

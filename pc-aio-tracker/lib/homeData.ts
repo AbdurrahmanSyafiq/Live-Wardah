@@ -166,6 +166,149 @@ export const normalizeSheetRows = (
   return { rows, missing };
 };
 
+// Untuk halaman PID & SKU: ubah baris sheet jadi bentuk yang dibaca halaman itu
+// (PID = ad_id, SKU Name = ad_name, Ad Type = funnel).
+const skuPairs = (
+  rawRows: any[],
+  expectedYm: string,
+): { raw: any; row: Record<string, any> }[] => {
+  if (!rawRows || rawRows.length === 0) return [];
+  const keys = Object.keys(rawRows[0]);
+  const kDate = pickKey(keys, ["date", "day", "tanggal"]);
+  if (!kDate) return [];
+  const kPlatform = pickKey(keys, ["platform"]);
+  const kBrand = pickKey(keys, ["product", "brand"]);
+  const kSpend = pickKey(keys, ["spend", "cost", "ad spend"]);
+  const kGmv = pickKey(keys, ["catalog_segment_value_omni_purchase"]);
+  const kImp = pickKey(keys, ["impressions", "impression"]);
+  const kClicks = pickKey(keys, ["clicks", "click"]);
+  const kOrders = pickKey(keys, ["results", "result", "orders", "purchases"]);
+  const kPid = pickKey(keys, ["ad_id", "pid", "product_id"]);
+  const kName = pickKey(keys, ["ad_name", "sku_name", "product_name"]);
+  const kFunnel = pickKey(keys, ["funnel"]);
+  const kCampaign = pickKey(keys, ["campaign", "campaign_name"]);
+
+  let mdy = 0;
+  let dmy = 0;
+  for (const r of rawRows) {
+    const a = parseYmd(r[kDate], "MDY");
+    const b = parseYmd(r[kDate], "DMY");
+    if (validYmd(a) && ymOf(a) === expectedYm) mdy++;
+    if (validYmd(b) && ymOf(b) === expectedYm) dmy++;
+  }
+  const fmt: DateFmt = dmy > mdy ? "DMY" : "MDY";
+
+  const out: { raw: any; row: Record<string, any> }[] = [];
+  for (const r of rawRows) {
+    const p = parseYmd(r[kDate], fmt);
+    if (!validYmd(p)) continue;
+    const funnel =
+      String(kFunnel ? (r[kFunnel] ?? "") : "").trim() ||
+      funnelFromCampaign(kCampaign ? r[kCampaign] : "");
+    out.push({
+      raw: r,
+      row: {
+        Date: `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`,
+        "Brand fx": String(kBrand ? (r[kBrand] ?? "") : "").trim(),
+        Platform: normalizePlatform(kPlatform ? r[kPlatform] : ""),
+        "Live Type": funnel,
+        "Ad Type": funnel,
+        PID: String(kPid ? (r[kPid] ?? "") : "").trim(),
+        "SKU Name": String(kName ? (r[kName] ?? "") : "").trim(),
+        Expense: kSpend ? parseNum(r[kSpend]) : 0,
+        GMV: kGmv ? parseNum(r[kGmv]) : 0,
+        Impressions: kImp ? parseNum(r[kImp]) : 0,
+        Clicks: kClicks ? parseNum(r[kClicks]) : 0,
+        "Items Sold": kOrders ? parseNum(r[kOrders]) : 0,
+      },
+    });
+  }
+  return out;
+};
+
+export const toSkuRows = (
+  rawRows: any[],
+  expectedYm: string,
+): Record<string, any>[] => skuPairs(rawRows, expectedYm).map((x) => x.row);
+
+// Untuk halaman Commerce Tracker: hanya baris "commerce"
+// = CPAS Shopee & Lazada (iklan Meta ke marketplace) + TikTok dengan funnel Conversion.
+// Meta biasa dan TikTok Awareness/Consideration masuk Digital Media.
+export const isCommerceRow = (row: Record<string, any>): boolean => {
+  const plat = String(row.Platform || "").toLowerCase();
+  if (plat === "shopee" || plat === "lazada") return true;
+  if (plat === "tiktok")
+    return String(row["Ad Type"] || "")
+      .toLowerCase()
+      .includes("conversion");
+  return false;
+};
+
+export const toCommerceRows = (
+  rawRows: any[],
+  expectedYm: string,
+): Record<string, any>[] =>
+  toSkuRows(rawRows, expectedYm).filter(isCommerceRow);
+
+// Untuk halaman Digital Media: kebalikan Commerce
+// = Meta biasa + TikTok dengan funnel Awareness/Consideration (bukan Conversion).
+// Nama kolom mengikuti yang dibaca DigitalMediaView.
+export const isDigitalRow = (row: Record<string, any>): boolean => {
+  const plat = String(row.Platform || "").toLowerCase();
+  if (plat === "meta") return true;
+  if (plat === "tiktok")
+    return !String(row.KPI || "")
+      .toLowerCase()
+      .includes("conversion");
+  return false;
+};
+
+export const toMediaRows = (
+  rawRows: any[],
+  expectedYm: string,
+): Record<string, any>[] => {
+  if (!rawRows || rawRows.length === 0) return [];
+  const keys = Object.keys(rawRows[0]);
+  const kViews15 = pickKey(keys, [
+    "video_play_15s",
+    "video_views_15s",
+    "views_15s",
+    "thruplay",
+    "video_p15",
+    "video_view_15s",
+  ]);
+  const kViews6 = pickKey(keys, [
+    "video_play_6s",
+    "video_views_6s",
+    "views_6s",
+    "video_view_6s",
+    "6s_video_views",
+    "video_views_p6s",
+  ]);
+  const kObj = pickKey(keys, ["objective"]);
+  const out: Record<string, any>[] = [];
+  for (const { raw: r, row: b } of skuPairs(rawRows, expectedYm)) {
+    const row = {
+      Date: b.Date,
+      Brand: b["Brand fx"],
+      Platform: b.Platform,
+      Funnel: b["Ad Type"],
+      KPI: b["Ad Type"],
+      Format: (kObj ? String(r[kObj] ?? "").trim() : "") || "-",
+      "Ad Spend": b.Expense,
+      Impressions: b.Impressions,
+      "Combined Clicks": b.Clicks,
+      Views: kViews15 ? parseNum(r[kViews15]) : 0,
+      "Views 6s": kViews6 ? parseNum(r[kViews6]) : 0,
+      Result: 0,
+      GMV: b.GMV,
+      "Purchases With Shared Items": b["Items Sold"],
+    };
+    if (isDigitalRow(row)) out.push(row);
+  }
+  return out;
+};
+
 type Totals = {
   spend: number;
   impressions: number;
@@ -327,6 +470,45 @@ export const buildHomeSummary = (
     }
   });
 
+  // Harian (MTD): satu titik per tanggal, dari tanggal 1 sampai tanggal data terakhir di bulan itu
+  const dayAcc = new Map<
+    string,
+    { spend: number; impressions: number; clicks: number; gmv: number }
+  >();
+  currentRows.forEach((r) => {
+    const k = `${r.ym}-${r.day}`;
+    const t = dayAcc.get(k) || { spend: 0, impressions: 0, clicks: 0, gmv: 0 };
+    t.spend += r.spend;
+    t.impressions += r.impressions;
+    t.clicks += r.clicks;
+    t.gmv += r.gmv;
+    dayAcc.set(k, t);
+  });
+  const dailyTrend: {
+    key: string;
+    label: string;
+    spend: number;
+    impressions: number;
+    clicks: number;
+    gmv: number;
+  }[] = [];
+  sortedPeriods.forEach((ym) => {
+    for (let d = 1; d <= (maxDay[ym] || 0); d++) {
+      const t = dayAcc.get(`${ym}-${d}`) || {
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        gmv: 0,
+      };
+      dailyTrend.push({
+        key: `${ym}-${d}`,
+        label:
+          sortedPeriods.length === 1 ? String(d) : `${monthShort(ym)} ${d}`,
+        ...t,
+      });
+    }
+  });
+
   // Platform mix (berdasarkan spend)
   const groupSpend = (rs: HomeRow[]) => {
     const m = new Map<string, number>();
@@ -383,6 +565,7 @@ export const buildHomeSummary = (
     previous,
     hasPrevious,
     trend,
+    dailyTrend,
     platformMix: platformMix.slice(0, 5),
     platformTrend,
     funnelMix: funnelMixAll.slice(0, 5),

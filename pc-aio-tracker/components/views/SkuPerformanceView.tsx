@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { formatIDR, formatNum } from "@/lib/formatters";
-import { aggregateSkuData } from "./SkuPerformanceModal";
+import { aggregateSkuData, type SkuItem } from "./SkuPerformanceModal";
 
 interface SkuPerformanceViewProps {
   ctxCurData: any[];
@@ -10,15 +11,26 @@ interface SkuPerformanceViewProps {
   brandOptions: string[];
 }
 
+// Angka besar diringkas: 2.456.223.866 -> 2.46B, 622.357.228 -> 622.36M
+const compact = (n: number) => {
+  const v = Number(n) || 0;
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+  return String(Math.round(v));
+};
+const compactIDR = (n: number) => `Rp ${compact(n)}`;
+
 type SortField =
   | "pid"
   | "skuName"
   | "platform"
   | "expense"
-  | "orders"
+  | "impressions"
+  | "clicks"
   | "gmv"
-  | "roas"
-  | "cpa";
+  | "roas";
 
 export default function SkuPerformanceView({
   ctxCurData,
@@ -34,8 +46,31 @@ export default function SkuPerformanceView({
   const [sortAsc, setSortAsc] = useState(false);
   const [page, setPage] = useState(1);
   const PER_PAGE = 15;
+  // Pop up: klik kartu ringkasan (kpiPopup) atau klik baris tabel (rowPopup)
+  const [kpiPopup, setKpiPopup] = useState<{ label: string; full: string; short: string } | null>(null);
+  const [rowPopup, setRowPopup] = useState<SkuItem | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setKpiPopup(null);
+        setRowPopup(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const skuList = useMemo(() => aggregateSkuData(ctxCurData), [ctxCurData]);
+
+  // Platform yang ada di data (Shopee, Lazada, Meta, TikTok, ...)
+  const platformOptions = useMemo(() => {
+    const set = new Set<string>();
+    skuList.forEach((item) => {
+      if (item.platform && item.platform.trim() !== "") set.add(item.platform.trim());
+    });
+    return Array.from(set).sort();
+  }, [skuList]);
 
   // Extract unique Ad Types available dynamically
   const adTypeOptions = useMemo(() => {
@@ -95,8 +130,12 @@ export default function SkuPerformanceView({
     () => filtered.reduce((acc, i) => acc + i.expense, 0),
     [filtered],
   );
-  const totalOrders = useMemo(
-    () => filtered.reduce((acc, i) => acc + i.orders, 0),
+  const totalImpressions = useMemo(
+    () => filtered.reduce((acc, i) => acc + i.impressions, 0),
+    [filtered],
+  );
+  const totalClicks = useMemo(
+    () => filtered.reduce((acc, i) => acc + i.clicks, 0),
     [filtered],
   );
 
@@ -125,10 +164,10 @@ export default function SkuPerformanceView({
       "SKU Name": item.skuName,
       Platform: item.platform || "-",
       Spend: item.expense,
-      Orders: item.orders,
+      Impressions: item.impressions,
+      Clicks: item.clicks,
       GMV: item.gmv,
       ROAS: Number(item.roas.toFixed(2)),
-      CPA: item.orders > 0 ? Math.round(item.cpa) : 0,
     }));
     const worksheet = XLSX.utils.json_to_sheet(exportRows);
     worksheet["!cols"] = [
@@ -137,10 +176,10 @@ export default function SkuPerformanceView({
       { wch: 40 },
       { wch: 12 },
       { wch: 16 },
+      { wch: 14 },
       { wch: 10 },
       { wch: 16 },
       { wch: 8 },
-      { wch: 14 },
     ];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "PID & SKU Performance");
@@ -201,8 +240,11 @@ export default function SkuPerformanceView({
               }}
               className={selectStyle}>
               <option value="All">All Platforms</option>
-              <option value="Shopee">Shopee</option>
-              <option value="TikTok">TikTok</option>
+              {platformOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -212,7 +254,7 @@ export default function SkuPerformanceView({
               className={`text-[10px] font-extrabold block mb-1 uppercase tracking-wider ${
                 isDarkMode ? "text-slate-400" : "text-slate-600"
               }`}>
-              Ad Type
+              Funnel
             </label>
             <select
               value={adTypeFilter}
@@ -281,27 +323,13 @@ export default function SkuPerformanceView({
         </div>
       </div>
 
-      {/* Summary KPI Cards with High Contrast */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div
-          className={`p-5 rounded-2xl border shadow-sm ${
-            isDarkMode
-              ? "bg-slate-800 border-slate-700"
-              : "bg-white border-slate-200"
-          }`}>
-          <span
-            className={`text-xs font-bold uppercase tracking-wider block mb-1 ${
-              isDarkMode ? "text-slate-400" : "text-slate-500"
-            }`}>
-            Total SKU GMV
-          </span>
-          <h3 className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
-            {formatIDR(totalGmv)}
-          </h3>
-        </div>
-
-        <div
-          className={`p-5 rounded-2xl border shadow-sm ${
+      {/* Summary KPI Cards (klik untuk lihat nilai lengkap) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <button
+          type="button"
+          onClick={() => setKpiPopup({ label: "Total Ad Spend", full: formatIDR(totalExpense), short: compactIDR(totalExpense) })}
+          title="Klik untuk lihat nilai lengkap"
+          className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
             isDarkMode
               ? "bg-slate-800 border-slate-700"
               : "bg-white border-slate-200"
@@ -312,13 +340,53 @@ export default function SkuPerformanceView({
             }`}>
             Total Ad Spend
           </span>
-          <h3 className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
-            {formatIDR(totalExpense)}
+          <h3 className={`text-2xl font-black text-indigo-600 dark:text-indigo-400`}>
+            {compactIDR(totalExpense)}
           </h3>
-        </div>
-
-        <div
-          className={`p-5 rounded-2xl border shadow-sm ${
+        </button>
+        <button
+          type="button"
+          onClick={() => setKpiPopup({ label: "Total Impressions", full: formatNum(totalImpressions), short: compact(totalImpressions) })}
+          title="Klik untuk lihat nilai lengkap"
+          className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
+            isDarkMode
+              ? "bg-slate-800 border-slate-700"
+              : "bg-white border-slate-200"
+          }`}>
+          <span
+            className={`text-xs font-bold normal-case tracking-wider block mb-1 ${
+              isDarkMode ? "text-slate-400" : "text-slate-500"
+            }`}>
+            Total Impressions
+          </span>
+          <h3 className={`text-2xl font-black ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+            {compact(totalImpressions)}
+          </h3>
+        </button>
+        <button
+          type="button"
+          onClick={() => setKpiPopup({ label: "Total Clicks", full: formatNum(totalClicks), short: compact(totalClicks) })}
+          title="Klik untuk lihat nilai lengkap"
+          className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
+            isDarkMode
+              ? "bg-slate-800 border-slate-700"
+              : "bg-white border-slate-200"
+          }`}>
+          <span
+            className={`text-xs font-bold normal-case tracking-wider block mb-1 ${
+              isDarkMode ? "text-slate-400" : "text-slate-500"
+            }`}>
+            Total Clicks
+          </span>
+          <h3 className={`text-2xl font-black ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+            {compact(totalClicks)}
+          </h3>
+        </button>
+        <button
+          type="button"
+          onClick={() => setKpiPopup({ label: "Total SKU GMV", full: formatIDR(totalGmv), short: compactIDR(totalGmv) })}
+          title="Klik untuk lihat nilai lengkap"
+          className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
             isDarkMode
               ? "bg-slate-800 border-slate-700"
               : "bg-white border-slate-200"
@@ -327,15 +395,12 @@ export default function SkuPerformanceView({
             className={`text-xs font-bold uppercase tracking-wider block mb-1 ${
               isDarkMode ? "text-slate-400" : "text-slate-500"
             }`}>
-            Total Orders
+            Total SKU GMV
           </span>
-          <h3
-            className={`text-2xl font-black ${
-              isDarkMode ? "text-white" : "text-slate-900"
-            }`}>
-            {formatNum(totalOrders)}
+          <h3 className={`text-2xl font-black text-emerald-600 dark:text-emerald-400`}>
+            {compactIDR(totalGmv)}
           </h3>
-        </div>
+        </button>
       </div>
 
       {/* Main Table */}
@@ -371,24 +436,24 @@ export default function SkuPerformanceView({
                   Spend{sortArrow("expense")}
                 </th>
                 <th
-                  onClick={() => toggleSort("orders")}
-                  className="py-4 px-4 text-right cursor-pointer hover:text-blue-400 select-none">
-                  Orders{sortArrow("orders")}
+                  onClick={() => toggleSort("impressions")}
+                  className="py-4 px-4 text-right normal-case cursor-pointer hover:text-blue-400 select-none">
+                  Impressions{sortArrow("impressions")}
+                </th>
+                <th
+                  onClick={() => toggleSort("clicks")}
+                  className="py-4 px-4 text-right normal-case cursor-pointer hover:text-blue-400 select-none">
+                  Clicks{sortArrow("clicks")}
                 </th>
                 <th
                   onClick={() => toggleSort("gmv")}
                   className="py-4 px-4 text-right cursor-pointer hover:text-blue-400 select-none">
-                  GMV (Highest){sortArrow("gmv")}
+                  GMV{sortArrow("gmv")}
                 </th>
                 <th
                   onClick={() => toggleSort("roas")}
                   className="py-4 px-4 text-right cursor-pointer hover:text-blue-400 select-none">
                   ROAS{sortArrow("roas")}
-                </th>
-                <th
-                  onClick={() => toggleSort("cpa")}
-                  className="py-4 px-4 text-right cursor-pointer hover:text-blue-400 select-none">
-                  CPA{sortArrow("cpa")}
                 </th>
               </tr>
             </thead>
@@ -399,7 +464,9 @@ export default function SkuPerformanceView({
                 .map((item, idx) => (
                   <tr
                     key={`${item.pid}-${idx}`}
-                    className={`transition-colors ${
+                    onClick={() => setRowPopup(item)}
+                    title="Klik untuk lihat detail"
+                    className={`cursor-pointer transition-colors ${
                       isDarkMode
                         ? "hover:bg-blue-900/30 text-slate-200"
                         : "hover:bg-blue-50 text-slate-800"
@@ -436,19 +503,19 @@ export default function SkuPerformanceView({
                       className={`py-3.5 px-4 text-right font-mono font-bold ${
                         isDarkMode ? "text-slate-200" : "text-slate-900"
                       }`}>
-                      {formatNum(item.orders)}
+                      {formatNum(item.impressions)}
+                    </td>
+                    <td
+                      className={`py-3.5 px-4 text-right font-mono font-bold ${
+                        isDarkMode ? "text-slate-200" : "text-slate-900"
+                      }`}>
+                      {formatNum(item.clicks)}
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">
                       {formatIDR(item.gmv)}
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono font-bold text-blue-600 dark:text-blue-400">
                       {item.roas.toFixed(2)}x
-                    </td>
-                    <td
-                      className={`py-3.5 px-4 text-right font-mono font-semibold ${
-                        isDarkMode ? "text-slate-400" : "text-slate-600"
-                      }`}>
-                      {item.orders > 0 ? formatIDR(item.cpa) : "-"}
                     </td>
                   </tr>
                 ))}
@@ -493,6 +560,110 @@ export default function SkuPerformanceView({
           </div>
         )}
       </div>
+
+      {/* Pop up nilai lengkap dari kartu ringkasan */}
+      {kpiPopup && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[300] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setKpiPopup(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-md rounded-3xl border shadow-2xl p-6 ${
+              isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
+            }`}>
+            <div className="flex items-start justify-between gap-4">
+              <span className={`text-xs font-bold tracking-wider ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                {kpiPopup.label}
+              </span>
+              <button
+                type="button"
+                onClick={() => setKpiPopup(null)}
+                aria-label="Close"
+                className={`text-lg leading-none font-bold ${isDarkMode ? "text-slate-400 hover:text-white" : "text-slate-400 hover:text-slate-900"}`}>
+                ×
+              </button>
+            </div>
+            <p className="text-3xl font-black mt-3 break-all">{kpiPopup.full}</p>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Pop up detail per baris */}
+      {rowPopup && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[300] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setRowPopup(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl p-6 ${
+              isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
+            }`}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className={`text-[11px] font-bold tracking-wider ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                  PID
+                </p>
+                <p className="font-mono font-bold text-indigo-600 dark:text-indigo-400 break-all">{rowPopup.pid}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRowPopup(null)}
+                aria-label="Close"
+                className={`text-lg leading-none font-bold ${isDarkMode ? "text-slate-400 hover:text-white" : "text-slate-400 hover:text-slate-900"}`}>
+                ×
+              </button>
+            </div>
+
+            <p className={`text-[11px] font-bold tracking-wider mt-4 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+              SKU Name
+            </p>
+            <p className="font-semibold break-words">{rowPopup.skuName}</p>
+
+            <div className="flex flex-wrap gap-2 mt-3">
+              {[rowPopup.platform, rowPopup.brand, rowPopup.adType].filter(Boolean).map((t, i) => (
+                <span
+                  key={`${t}-${i}`}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                    isDarkMode ? "bg-slate-700 text-slate-200" : "bg-slate-100 text-slate-700"
+                  }`}>
+                  {t}
+                </span>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-5">
+              {[
+                { label: "Spend", value: formatIDR(rowPopup.expense) },
+                { label: "Impressions", value: formatNum(rowPopup.impressions) },
+                { label: "Clicks", value: formatNum(rowPopup.clicks) },
+                { label: "GMV", value: formatIDR(rowPopup.gmv) },
+                { label: "ROAS", value: `${rowPopup.roas.toFixed(2)}x` },
+                {
+                  label: "CTR",
+                  value: rowPopup.impressions > 0 ? `${((rowPopup.clicks / rowPopup.impressions) * 100).toFixed(2)}%` : "-",
+                },
+                {
+                  label: "CPM",
+                  value: rowPopup.impressions > 0 ? formatIDR((rowPopup.expense / rowPopup.impressions) * 1000) : "-",
+                },
+                {
+                  label: "CPC",
+                  value: rowPopup.clicks > 0 ? formatIDR(rowPopup.expense / rowPopup.clicks) : "-",
+                },
+              ].map((m) => (
+                <div key={m.label} className={`rounded-xl p-3 ${isDarkMode ? "bg-slate-900/60" : "bg-slate-50"}`}>
+                  <span className={`text-[11px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                    {m.label}
+                  </span>
+                  <strong className="block text-base font-black mt-0.5 break-all">{m.value}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

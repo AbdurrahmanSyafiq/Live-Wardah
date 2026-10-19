@@ -59,9 +59,31 @@ export async function POST(request: Request) {
       });
 
       const sheets = google.sheets({ version: "v4", auth });
+      // Cocokkan nama tab dengan daftar tab di spreadsheet (toleran terhadap spasi ekstra / huruf besar-kecil)
+      const meta = await sheets.spreadsheets.get({
+        spreadsheetId: process.env.SPREADSHEET_ID,
+        fields: "sheets.properties.title",
+      });
+      const titles = (meta.data.sheets || []).map(
+        (sh) => sh.properties?.title || "",
+      );
+      const normTitle = (t: string) =>
+        t.replace(/\s+/g, " ").trim().toLowerCase();
+      const actualTitle =
+        titles.find((t) => t === sheetName) ??
+        titles.find((t) => normTitle(t) === normTitle(sheetName));
+      if (!actualTitle) {
+        return NextResponse.json(
+          {
+            error: `Tab "${sheetName}" not found. Tabs in spreadsheet: ${titles.map((t) => `"${t}"`).join(", ")}`,
+          },
+          { status: 404 },
+        );
+      }
+
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SPREADSHEET_ID,
-        range: `${sheetName}!A1:ZZ`, // Membaca sampai kolom ZZ agar tidak terpotong
+        range: `'${actualTitle.replace(/'/g, "''")}'!A1:ZZ`, // Membaca sampai kolom ZZ agar tidak terpotong
       });
 
       const data = response.data.values;

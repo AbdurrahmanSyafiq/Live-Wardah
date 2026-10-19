@@ -11,6 +11,8 @@ export interface SkuItem {
   expense: number;
   gmv: number;
   orders: number;
+  impressions: number;
+  clicks: number;
   roas: number;
   cpa: number;
 }
@@ -67,6 +69,8 @@ export function aggregateSkuData(rows: any[]): SkuItem[] {
         r["Orders"] ||
         r["Order"],
     );
+    const impressions = parseNum(r["Impressions"] || r["Impression"]);
+    const clicks = parseNum(r["Clicks"] || r["Click"]);
     const platform = String(r["Platform"] || "").trim();
     const brand = String(r["Brand fx"] || r["Brand"] || "").trim();
     const adType = String(r["Live Type"] || "").trim();
@@ -81,6 +85,8 @@ export function aggregateSkuData(rows: any[]): SkuItem[] {
         expense: exp,
         gmv,
         orders,
+        impressions,
+        clicks,
         roas: exp > 0 ? gmv / exp : 0,
         cpa: orders > 0 ? exp / orders : 0,
       });
@@ -89,6 +95,8 @@ export function aggregateSkuData(rows: any[]): SkuItem[] {
       item.expense += exp;
       item.gmv += gmv;
       item.orders += orders;
+      item.impressions += impressions;
+      item.clicks += clicks;
       item.roas = item.expense > 0 ? item.gmv / item.expense : 0;
       item.cpa = item.orders > 0 ? item.expense / item.orders : 0;
     }
