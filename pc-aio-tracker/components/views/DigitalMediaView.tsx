@@ -190,28 +190,28 @@ export default function DigitalMediaView({
       spend: {
         label: "Spend",
         data: labels.map((l) => groupedData[l].spend),
-        color: "#4f46e5",
-        bg: "#4f46e5",
+        color: "#4DC0BE",
+        bg: "#4DC0BE",
         defaultType: "bar",
       },
       imp: {
         label: "Impr",
         data: labels.map((l) => groupedData[l].imp),
-        color: "#10b981",
-        bg: "rgba(16, 185, 129, 0.15)",
+        color: "#F2B233",
+        bg: "rgba(224, 165, 38, 0.15)",
         defaultType: "line",
       },
       clicks: {
         label: "Clicks",
         data: labels.map((l) => groupedData[l].clicks),
-        color: "#84cc16",
+        color: "#00565F",
         bg: "transparent",
         defaultType: "line",
       },
       views: {
         label: "Views",
         data: labels.map((l) => groupedData[l].views),
-        color: "#f59e0b",
+        color: "#D6657A",
         bg: "transparent",
         defaultType: "line",
       },
@@ -222,7 +222,7 @@ export default function DigitalMediaView({
             ? (groupedData[l].clicks / groupedData[l].imp) * 100
             : 0,
         ),
-        color: "#ec4899",
+        color: "#8E7CC3",
         bg: "transparent",
         defaultType: "line",
       },
@@ -233,7 +233,7 @@ export default function DigitalMediaView({
             ? (groupedData[l].views / groupedData[l].imp) * 100
             : 0,
         ),
-        color: "#06b6d4",
+        color: "#5B7FA6",
         bg: "transparent",
         defaultType: "line",
       },
@@ -275,7 +275,7 @@ export default function DigitalMediaView({
               pointStyle: "rectRounded",
               boxWidth: 16,
               boxHeight: 6,
-              color: isDarkMode ? "#cbd5e1" : "#475569",
+              color: isDarkMode ? "#B6D0CD" : "#3F5957",
             },
           },
           tooltip: { animation: { duration: 0 } },
@@ -283,22 +283,22 @@ export default function DigitalMediaView({
         scales: {
           x: {
             grid: { display: false },
-            ticks: { color: isDarkMode ? "#94a3b8" : "#64748b" },
+            ticks: { color: isDarkMode ? "#8FB0AD" : "#5B7573" },
           },
           y: {
             type: "linear",
             display: true,
             position: "left",
-            grid: { color: isDarkMode ? "#334155" : "#e2e8f0" },
+            grid: { color: isDarkMode ? "#1F5559" : "#D5E8E6" },
             border: { dash: [4, 4] },
-            ticks: { color: isDarkMode ? "#94a3b8" : "#64748b" },
+            ticks: { color: isDarkMode ? "#8FB0AD" : "#5B7573" },
           },
           y1: {
             type: "linear",
             display: datasets.length > 1,
             position: "right",
             grid: { drawOnChartArea: false },
-            ticks: { color: isDarkMode ? "#94a3b8" : "#64748b" },
+            ticks: { color: isDarkMode ? "#8FB0AD" : "#5B7573" },
           },
         },
       },
@@ -390,7 +390,7 @@ export default function DigitalMediaView({
                 ? "bg-slate-800"
                 : "bg-white"
               : isDarkMode
-                ? "bg-[#1e293b]"
+                ? "bg-[#124246]"
                 : "bg-slate-50";
           if (i === 0) rowCls += " group-start";
           if (i === metricNames.length - 1) rowCls += " group-end";
@@ -427,7 +427,7 @@ export default function DigitalMediaView({
                 ? "bg-slate-800"
                 : "bg-white"
               : isDarkMode
-                ? "bg-[#1e293b]"
+                ? "bg-[#124246]"
                 : "bg-slate-50";
           if (i === 0) rowCls += " group-start";
           if (i === metricNames.length - 1) rowCls += " group-end";
@@ -479,7 +479,7 @@ export default function DigitalMediaView({
                 ? "bg-slate-800"
                 : "bg-white"
               : isDarkMode
-                ? "bg-[#1e293b]"
+                ? "bg-[#124246]"
                 : "bg-slate-50";
           if (i === 0) rowCls += " group-start";
           if (i === metricNames.length - 1) rowCls += " group-end";
@@ -610,16 +610,16 @@ export default function DigitalMediaView({
 
     let thead = "";
     let tbody = "";
-    const thClass = `px-4 py-4 font-bold text-slate-100 bg-[#0f172a]`;
+    const thClass = `px-4 py-4 font-bold text-slate-100 bg-[#0E3A3D]`;
 
     if (granularity === "monthly") {
       thead = `<tr>
-        <th class="sticky-col ${thClass}">Funnel</th>
+        <th class="sticky-col ${thClass}">Ad Type</th>
         <th class="sticky-col-2 ${thClass}">Format</th>
         <th class="sticky-col-3 ${thClass}">Metric</th>
-        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">This Month</th>
-        <th class="px-4 py-4 text-right font-bold text-slate-400 bg-[#0f172a] sticky top-0 border-b border-slate-700">Prev Month</th>
-        <th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700">GR%</th>
+        <th class="px-4 py-4 text-right font-bold text-white bg-[#0E3A3D] sticky top-0 border-b border-slate-700">This Month</th>
+        <th class="px-4 py-4 text-right font-bold text-slate-400 bg-[#0E3A3D] sticky top-0 border-b border-slate-700">Prev Month</th>
+        <th class="px-4 py-4 text-right font-bold text-white bg-[#0E3A3D] sticky top-0 border-b border-slate-700">GR%</th>
       </tr>`;
 
       const grouped: any = {};
@@ -654,7 +654,7 @@ export default function DigitalMediaView({
                 ? "bg-slate-800"
                 : "bg-white"
               : isDarkMode
-                ? "bg-[#1e293b]"
+                ? "bg-[#124246]"
                 : "bg-slate-50";
           if (i === 0) rowCls += " group-start";
           if (i === mCur.length - 1) rowCls += " group-end";
@@ -679,7 +679,7 @@ export default function DigitalMediaView({
         (a, b) => parseInt(a.replace("W", "")) - parseInt(b.replace("W", "")),
       );
       thead = `<tr>
-        <th class="sticky-col ${thClass}">Funnel</th>
+        <th class="sticky-col ${thClass}">Ad Type</th>
         <th class="sticky-col-2 ${thClass}">Format</th>
         <th class="sticky-col-3 ${thClass}">Metric</th>`;
       weeks.forEach((w) => {
@@ -694,13 +694,13 @@ export default function DigitalMediaView({
           prevD = new Date(globalDates.prevMtdEnd);
         const fmtStr = (d: Date) =>
           `${d.getDate()} ${d.toLocaleString("en-GB", { month: "short" })}`;
-        thead += `<th class="px-4 py-4 text-right bg-[#0f172a] border-l border-slate-700 font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(curD)}</th>
-                  <th class="px-4 py-4 text-right text-slate-400 bg-[#0f172a] font-bold sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(prevD)}</th>
-                  <th class="px-4 py-4 text-right bg-[#0f172a] font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">GR%</th>`;
+        thead += `<th class="px-4 py-4 text-right bg-[#0E3A3D] border-l border-slate-700 font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(curD)}</th>
+                  <th class="px-4 py-4 text-right text-slate-400 bg-[#0E3A3D] font-bold sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD ${fmtStr(prevD)}</th>
+                  <th class="px-4 py-4 text-right bg-[#0E3A3D] font-bold text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">GR%</th>`;
       });
-      thead += `<th class="px-4 py-4 text-right border-l border-indigo-500 text-indigo-300 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Cur</th>
-                <th class="px-4 py-4 text-right text-slate-400 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Prev</th>
-                <th class="px-4 py-4 text-right text-indigo-300 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Total GR%</th>
+      thead += `<th class="px-4 py-4 text-right border-l border-indigo-500 text-indigo-300 font-bold bg-[#072A2D] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Cur</th>
+                <th class="px-4 py-4 text-right text-slate-400 bg-[#072A2D] sticky top-0 border-b border-slate-700 whitespace-nowrap">MTD Total Prev</th>
+                <th class="px-4 py-4 text-right text-indigo-300 font-bold bg-[#072A2D] sticky top-0 border-b border-slate-700 whitespace-nowrap">Total GR%</th>
               </tr>`;
 
       const grouped: any = {};
@@ -762,7 +762,7 @@ export default function DigitalMediaView({
                 ? "bg-slate-800"
                 : "bg-white"
               : isDarkMode
-                ? "bg-[#1e293b]"
+                ? "bg-[#124246]"
                 : "bg-slate-50";
           if (i === 0) rowCls += " group-start";
           if (i === curTotM.length - 1) rowCls += " group-end";
@@ -790,7 +790,7 @@ export default function DigitalMediaView({
       ctxCurData.forEach((r) => daysFound.add(r.bucket));
       const days = Array.from(daysFound).sort();
       thead = `<tr>
-        <th class="sticky-col ${thClass}">Funnel</th>
+        <th class="sticky-col ${thClass}">Ad Type</th>
         <th class="sticky-col-2 ${thClass}">Format</th>
         <th class="sticky-col-3 ${thClass}">Metric</th>`;
       days.forEach((d) => {
@@ -800,9 +800,9 @@ export default function DigitalMediaView({
           Number(parts[1]) - 1,
           Number(parts[2]),
         );
-        thead += `<th class="px-4 py-4 text-right font-bold text-white bg-[#0f172a] sticky top-0 border-b border-slate-700 whitespace-nowrap">${dt.getDate()} ${dt.toLocaleString("en-GB", { month: "short" })}</th>`;
+        thead += `<th class="px-4 py-4 text-right font-bold text-white bg-[#0E3A3D] sticky top-0 border-b border-slate-700 whitespace-nowrap">${dt.getDate()} ${dt.toLocaleString("en-GB", { month: "short" })}</th>`;
       });
-      thead += `<th class="px-4 py-4 text-right text-indigo-300 border-l border-slate-700 font-bold bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">Period Total</th></tr>`;
+      thead += `<th class="px-4 py-4 text-right text-indigo-300 border-l border-slate-700 font-bold bg-[#072A2D] sticky top-0 border-b border-slate-700 whitespace-nowrap">Period Total</th></tr>`;
 
       const grouped: any = {};
       ctxCurData.forEach((r) => {
@@ -838,7 +838,7 @@ export default function DigitalMediaView({
                 ? "bg-slate-800"
                 : "bg-white"
               : isDarkMode
-                ? "bg-[#1e293b]"
+                ? "bg-[#124246]"
                 : "bg-slate-50";
           if (i === 0) rowCls += " group-start";
           if (i === totM.length - 1) rowCls += " group-end";
@@ -1056,7 +1056,7 @@ export default function DigitalMediaView({
             <p
               className={`text-sm font-semibold mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
               {granularity === "monthly"
-                ? "Displaying data for Months"
+                ? "Displaying data for the past 3 months"
                 : granularity === "weekly"
                   ? "MTD Comparison Analytics"
                   : "Daily Analytics"}
@@ -1076,15 +1076,15 @@ export default function DigitalMediaView({
             </div>
 
             <div
-              className={`flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-2xl border w-full xl:w-auto shadow-inner ${isDarkMode ? "bg-[#090d16] border-slate-700" : "bg-slate-50 border-slate-200"}`}>
+              className={`flex flex-wrap items-center gap-2 px-3 py-2.5 rounded-2xl border w-full xl:w-auto shadow-inner ${isDarkMode ? "bg-[#0B3236] border-slate-700" : "bg-slate-50 border-slate-200"}`}>
               <span className="text-[10px] font-black uppercase tracking-widest px-3 opacity-60">
                 Metrics
               </span>
               {[
-                { id: "spend", l: "Spend", c: "bg-indigo-600" },
-                { id: "imp", l: "Impr", c: "bg-emerald-500" },
-                { id: "clicks", l: "Clicks", c: "bg-lime-500" },
-                { id: "ctr", l: "CTR", c: "bg-pink-500" },
+                { id: "spend", l: "Spend", c: "bg-[#4DC0BE]" },
+                { id: "imp", l: "Impr", c: "bg-[#F2B233]" },
+                { id: "clicks", l: "Clicks", c: "bg-[#00565F]" },
+                { id: "ctr", l: "CTR", c: "bg-[#8E7CC3]" },
               ].map((m) => {
                 const isActive = chartMetricsMedia.includes(m.id);
                 return (
@@ -1126,20 +1126,20 @@ export default function DigitalMediaView({
           <Table className={isDarkMode ? "text-slate-200" : "text-slate-700"}>
             <TableHeader>
               {granularity === "monthly" && (
-                <TableRow className="border-b border-slate-700 bg-[#090d16]">
-                  <TableHead className="sticky-col text-slate-100 bg-[#090d16]">
+                <TableRow className="border-b border-slate-700 bg-[#0B3236]">
+                  <TableHead className="sticky-col text-slate-100 bg-[#0B3236]">
                     Platform
                   </TableHead>
-                  <TableHead className="sticky-col-2 text-slate-100 bg-[#090d16]">
+                  <TableHead className="sticky-col-2 text-slate-100 bg-[#0B3236]">
                     Metric
                   </TableHead>
-                  <TableHead className="text-right text-white bg-[#090d16] sticky top-0 border-b border-slate-700">
+                  <TableHead className="text-right text-white bg-[#0B3236] sticky top-0 border-b border-slate-700">
                     This Month
                   </TableHead>
-                  <TableHead className="text-right text-slate-400 bg-[#090d16] sticky top-0 border-b border-slate-700">
+                  <TableHead className="text-right text-slate-400 bg-[#0B3236] sticky top-0 border-b border-slate-700">
                     Prev Month
                   </TableHead>
-                  <TableHead className="text-right text-white bg-[#090d16] sticky top-0 border-b border-slate-700">
+                  <TableHead className="text-right text-white bg-[#0B3236] sticky top-0 border-b border-slate-700">
                     GR%
                   </TableHead>
                 </TableRow>
@@ -1156,11 +1156,11 @@ export default function DigitalMediaView({
                       parseInt(b.replace("W", "")),
                   );
                   return (
-                    <TableRow className="border-b border-slate-700 bg-[#090d16]">
-                      <TableHead className="sticky-col text-slate-100 bg-[#090d16]">
+                    <TableRow className="border-b border-slate-700 bg-[#0B3236]">
+                      <TableHead className="sticky-col text-slate-100 bg-[#0B3236]">
                         Platform
                       </TableHead>
-                      <TableHead className="sticky-col-2 text-slate-100 bg-[#090d16]">
+                      <TableHead className="sticky-col-2 text-slate-100 bg-[#0B3236]">
                         Metric
                       </TableHead>
                       {weeks.map((w) => {
@@ -1177,25 +1177,25 @@ export default function DigitalMediaView({
                           `${d.getDate()} ${d.toLocaleString("en-GB", { month: "short" })}`;
                         return (
                           <React.Fragment key={w}>
-                            <TableHead className="text-right bg-[#090d16] border-l border-slate-700 text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">
+                            <TableHead className="text-right bg-[#0B3236] border-l border-slate-700 text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">
                               MTD {fmtStr(curD)}
                             </TableHead>
-                            <TableHead className="text-right text-slate-400 bg-[#090d16] sticky top-0 border-b border-slate-700 whitespace-nowrap">
+                            <TableHead className="text-right text-slate-400 bg-[#0B3236] sticky top-0 border-b border-slate-700 whitespace-nowrap">
                               MTD {fmtStr(prevD)}
                             </TableHead>
-                            <TableHead className="text-right bg-[#090d16] text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">
+                            <TableHead className="text-right bg-[#0B3236] text-white sticky top-0 border-b border-slate-700 whitespace-nowrap">
                               GR%
                             </TableHead>
                           </React.Fragment>
                         );
                       })}
-                      <TableHead className="text-right border-l border-indigo-500 text-indigo-300 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">
+                      <TableHead className="text-right border-l border-indigo-500 text-indigo-300 bg-[#072A2D] sticky top-0 border-b border-slate-700 whitespace-nowrap">
                         MTD Total Cur
                       </TableHead>
-                      <TableHead className="text-right text-slate-400 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">
+                      <TableHead className="text-right text-slate-400 bg-[#072A2D] sticky top-0 border-b border-slate-700 whitespace-nowrap">
                         MTD Total Prev
                       </TableHead>
-                      <TableHead className="text-right text-indigo-300 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">
+                      <TableHead className="text-right text-indigo-300 bg-[#072A2D] sticky top-0 border-b border-slate-700 whitespace-nowrap">
                         Total GR%
                       </TableHead>
                     </TableRow>
@@ -1207,11 +1207,11 @@ export default function DigitalMediaView({
                   ctxCurData.forEach((r) => daysFound.add(r.bucket));
                   const days = Array.from(daysFound).sort();
                   return (
-                    <TableRow className="border-b border-slate-700 bg-[#090d16]">
-                      <TableHead className="sticky-col text-slate-100 bg-[#090d16]">
+                    <TableRow className="border-b border-slate-700 bg-[#0B3236]">
+                      <TableHead className="sticky-col text-slate-100 bg-[#0B3236]">
                         Platform
                       </TableHead>
-                      <TableHead className="sticky-col-2 text-slate-100 bg-[#090d16]">
+                      <TableHead className="sticky-col-2 text-slate-100 bg-[#0B3236]">
                         Metric
                       </TableHead>
                       {days.map((d) => {
@@ -1224,13 +1224,13 @@ export default function DigitalMediaView({
                         return (
                           <TableHead
                             key={d}
-                            className="text-right text-white bg-[#090d16] sticky top-0 border-b border-slate-700 whitespace-nowrap">
+                            className="text-right text-white bg-[#0B3236] sticky top-0 border-b border-slate-700 whitespace-nowrap">
                             {dt.getDate()}{" "}
                             {dt.toLocaleString("en-GB", { month: "short" })}
                           </TableHead>
                         );
                       })}
-                      <TableHead className="text-right text-indigo-300 border-l border-slate-700 bg-[#020617] sticky top-0 border-b border-slate-700 whitespace-nowrap">
+                      <TableHead className="text-right text-indigo-300 border-l border-slate-700 bg-[#072A2D] sticky top-0 border-b border-slate-700 whitespace-nowrap">
                         Period Total
                       </TableHead>
                     </TableRow>
@@ -1259,7 +1259,7 @@ export default function DigitalMediaView({
               value={tableColFilter1}
               onChange={(e) => setTableColFilter1(e.target.value)}
               className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? "border-slate-600 text-indigo-300 hover:border-indigo-500" : "border-slate-300 text-indigo-700 hover:border-indigo-500 bg-slate-50"}`}>
-              <option value="All">All Funnels / Platforms</option>
+              <option value="All">All Ad Types / Platforms</option>
               {tableData.uniqueDim1.map((opt: any) => (
                 <option key={opt} value={opt}>
                   {opt}
@@ -1270,7 +1270,7 @@ export default function DigitalMediaView({
               value={tableColFilter2}
               onChange={(e) => setTableColFilter2(e.target.value)}
               className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm transition-colors ${isDarkMode ? "border-slate-600 text-emerald-300 hover:border-emerald-500" : "border-slate-300 text-emerald-700 hover:border-emerald-500 bg-slate-50"}`}>
-              <option value="All">All Formats / Funnels</option>
+              <option value="All">All Formats / Ad Types</option>
               {tableData.uniqueDim2.map((opt: any) => (
                 <option key={opt} value={opt}>
                   {opt}

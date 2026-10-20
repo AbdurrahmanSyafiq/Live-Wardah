@@ -208,14 +208,14 @@ export default function SkuPerformanceModal({
         onClick={(e) => e.stopPropagation()}
         className={`w-full max-w-6xl max-h-[88vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden modal-animate-scale ${
           isDarkMode
-            ? "bg-[#0b1120] border-slate-700 text-slate-100"
+            ? "bg-[#0A2423] border-slate-700 text-slate-100"
             : "bg-white border-slate-300 text-slate-900 shadow-slate-400/40"
         }`}>
         {/* Modal Header */}
         <div
           className={`px-6 py-4.5 border-b flex items-center justify-between shrink-0 ${
             isDarkMode
-              ? "border-slate-800 bg-[#0f172a]"
+              ? "border-slate-800 bg-[#0E3A3D]"
               : "border-slate-200 bg-slate-50"
           }`}>
           <div>
@@ -482,7 +482,7 @@ export default function SkuPerformanceModal({
           <div
             className={`px-6 py-3 border-t flex items-center justify-between text-xs font-bold shrink-0 ${
               isDarkMode
-                ? "border-slate-800 bg-[#0f172a]"
+                ? "border-slate-800 bg-[#0E3A3D]"
                 : "border-slate-200 bg-slate-50"
             }`}>
             <span className={isDarkMode ? "text-slate-400" : "text-slate-600"}>
@@ -528,13 +528,13 @@ export default function SkuPerformanceModal({
             onClick={(e) => e.stopPropagation()}
             className={`w-full max-w-lg rounded-3xl border shadow-2xl overflow-hidden modal-animate-scale ${
               isDarkMode
-                ? "bg-[#0b1120] border-slate-700 text-slate-100"
+                ? "bg-[#0A2423] border-slate-700 text-slate-100"
                 : "bg-white border-slate-300 text-slate-900 shadow-slate-400/40"
             }`}>
             <div
               className={`px-6 py-4 border-b flex items-start justify-between gap-4 ${
                 isDarkMode
-                  ? "border-slate-800 bg-[#0f172a]"
+                  ? "border-slate-800 bg-[#0E3A3D]"
                   : "border-slate-200 bg-slate-50"
               }`}>
               <div className="min-w-0">

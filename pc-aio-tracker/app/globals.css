@@ -49,7 +49,7 @@
 }
 
 body {
-  font-family: var(--font-nunito-sans), sans-serif;
+  font-family: var(--font-montserrat), sans-serif;
 }
 
 .welcome-screen button > div:first-child {
@@ -136,4 +136,74 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* ===== WARDAH THEME =====
+   Warna brand Wardah (teal). Dipakai lewat nama warna Tailwind yang sudah ada,
+   jadi semua komponen yang memakai "indigo" dan "slate" otomatis ikut berubah.
+   Cukup ubah angka di sini kalau warna brand berubah. */
+@theme {
+  /* indigo -> teal brand */
+  --color-indigo-50: #f2faf9;
+  --color-indigo-100: #e6f4f2;
+  --color-indigo-200: #bfe6e7;
+  --color-indigo-300: #96d6d6;
+  --color-indigo-400: #67c7c6;
+  --color-indigo-500: #4dc0be;
+  --color-indigo-600: #006d77;
+  --color-indigo-700: #00565f;
+  --color-indigo-800: #00444c;
+  --color-indigo-900: #00333a;
+  --color-indigo-950: #052321;
+
+  /* slate -> netral kehijauan */
+  --color-slate-50: #f4faf9;
+  --color-slate-100: #e6f4f2;
+  --color-slate-200: #d5e8e6;
+  --color-slate-300: #b6d0cd;
+  --color-slate-400: #8fb0ad;
+  --color-slate-500: #5b7573;
+  --color-slate-600: #3f5957;
+  --color-slate-700: #1f5559;
+  --color-slate-800: #124246;
+  --color-slate-900: #0b3236;
+  --color-slate-950: #072a2d;
+}
+
+/* Warna yang ditulis langsung (hex) di komponen lama */
+.bg-\[\#090d16\] {
+  background-color: #0b3236;
+}
+.bg-\[\#111827\]:not(:hover) {
+  background-color: #124246;
+}
+.bg-\[\#1e293b\]:not(:hover) {
+  background-color: #124246;
+}
+.bg-\[\#e7e7ef\] {
+  background-color: #f4faf9;
+}
+.bg-\[\#0f172a\] {
+  background-color: #0e3a3d;
+}
+.bg-\[\#020617\] {
+  background-color: #072a2d;
+}
+.bg-\[\#0b1120\] {
+  background-color: #0a2423;
+}
+.border-\[\#1e293b\] {
+  border-color: #124246;
+}
+.border-\[\#334155\] {
+  border-color: #1f5559;
+}
+
+/* WARDAH TYPOGRAPHY: light, airy, uppercase letter-spaced headings */
+h1,
+h2,
+h3 {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 400;
 }

@@ -190,7 +190,7 @@ export default function SkuPerformanceView({
   // Shared dropdown class with full light/dark contrast
   const selectStyle = `py-2 px-3 rounded-xl text-xs font-bold outline-none border transition-all cursor-pointer ${
     isDarkMode
-      ? "bg-[#0f172a] border-slate-700 text-slate-100 hover:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+      ? "bg-[#0E3A3D] border-slate-700 text-slate-100 hover:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
       : "bg-slate-50 border-slate-300 text-slate-800 hover:border-indigo-500 focus:ring-2 focus:ring-indigo-500 shadow-sm"
   }`;
 
@@ -291,7 +291,7 @@ export default function SkuPerformanceView({
               placeholder="Search PID or Product Name..."
               className={`w-full py-2 px-3.5 rounded-xl text-xs font-semibold border outline-none transition-all shadow-sm ${
                 isDarkMode
-                  ? "bg-[#0f172a] border-slate-700 text-white placeholder-slate-500 focus:border-indigo-500"
+                  ? "bg-[#0E3A3D] border-slate-700 text-white placeholder-slate-500 focus:border-indigo-500"
                   : "bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:bg-white"
               }`}
             />
@@ -417,42 +417,42 @@ export default function SkuPerformanceView({
                 <th className="py-4 px-4 w-14 text-center">#</th>
                 <th
                   onClick={() => toggleSort("pid")}
-                  className="py-4 px-4 w-40 cursor-pointer hover:text-blue-400 select-none">
+                  className="py-4 px-4 w-40 cursor-pointer hover:text-indigo-400 select-none">
                   PID{sortArrow("pid")}
                 </th>
                 <th
                   onClick={() => toggleSort("skuName")}
-                  className="py-4 px-4 min-w-[320px] cursor-pointer hover:text-blue-400 select-none">
+                  className="py-4 px-4 min-w-[320px] cursor-pointer hover:text-indigo-400 select-none">
                   SKU Name{sortArrow("skuName")}
                 </th>
                 <th
                   onClick={() => toggleSort("platform")}
-                  className="py-4 px-4 w-28 cursor-pointer hover:text-blue-400 select-none">
+                  className="py-4 px-4 w-28 cursor-pointer hover:text-indigo-400 select-none">
                   Platform{sortArrow("platform")}
                 </th>
                 <th
                   onClick={() => toggleSort("expense")}
-                  className="py-4 px-4 text-right cursor-pointer hover:text-blue-400 select-none">
+                  className="py-4 px-4 text-right cursor-pointer hover:text-indigo-400 select-none">
                   Spend{sortArrow("expense")}
                 </th>
                 <th
                   onClick={() => toggleSort("impressions")}
-                  className="py-4 px-4 text-right normal-case cursor-pointer hover:text-blue-400 select-none">
+                  className="py-4 px-4 text-right normal-case cursor-pointer hover:text-indigo-400 select-none">
                   Impressions{sortArrow("impressions")}
                 </th>
                 <th
                   onClick={() => toggleSort("clicks")}
-                  className="py-4 px-4 text-right normal-case cursor-pointer hover:text-blue-400 select-none">
+                  className="py-4 px-4 text-right normal-case cursor-pointer hover:text-indigo-400 select-none">
                   Clicks{sortArrow("clicks")}
                 </th>
                 <th
                   onClick={() => toggleSort("gmv")}
-                  className="py-4 px-4 text-right cursor-pointer hover:text-blue-400 select-none">
+                  className="py-4 px-4 text-right cursor-pointer hover:text-indigo-400 select-none">
                   GMV{sortArrow("gmv")}
                 </th>
                 <th
                   onClick={() => toggleSort("roas")}
-                  className="py-4 px-4 text-right cursor-pointer hover:text-blue-400 select-none">
+                  className="py-4 px-4 text-right cursor-pointer hover:text-indigo-400 select-none">
                   ROAS{sortArrow("roas")}
                 </th>
               </tr>
@@ -468,8 +468,8 @@ export default function SkuPerformanceView({
                     title="Klik untuk lihat detail"
                     className={`cursor-pointer transition-colors ${
                       isDarkMode
-                        ? "hover:bg-blue-900/30 text-slate-200"
-                        : "hover:bg-blue-50 text-slate-800"
+                        ? "hover:bg-indigo-900/30 text-slate-200"
+                        : "hover:bg-indigo-50 text-slate-800"
                     }`}>
                     <td
                       className={`py-3.5 px-4 text-center font-mono ${
@@ -514,7 +514,7 @@ export default function SkuPerformanceView({
                     <td className="py-3.5 px-4 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">
                       {formatIDR(item.gmv)}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-bold text-blue-600 dark:text-blue-400">
+                    <td className="py-3.5 px-4 text-right font-mono font-bold text-indigo-600 dark:text-indigo-400">
                       {item.roas.toFixed(2)}x
                     </td>
                   </tr>

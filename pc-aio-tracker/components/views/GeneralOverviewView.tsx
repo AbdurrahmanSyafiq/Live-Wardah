@@ -42,15 +42,15 @@ export default function GeneralOverviewView({
   const homeMuted = isDarkMode ? "text-slate-400" : "text-slate-500";
 
   const metricOptions = [
-    { key: "spend", label: "Spend", color: "#6366f1", fmt: formatIDR },
-    { key: "gmv", label: "GMV", color: "#10b981", fmt: formatIDR },
+    { key: "spend", label: "Spend", color: "#4DC0BE", fmt: formatIDR },
+    { key: "gmv", label: "GMV", color: "#F2B233", fmt: formatIDR },
     {
       key: "impressions",
       label: "Impressions",
-      color: "#06b6d4",
+      color: "#5B7FA6",
       fmt: formatNum,
     },
-    { key: "clicks", label: "Clicks", color: "#f59e0b", fmt: formatNum },
+    { key: "clicks", label: "Clicks", color: "#D6657A", fmt: formatNum },
   ];
 
   // Angka besar diringkas: 5.350.185.616 -> 5.35B, 194.537.989 -> 194.54M, 6.606.702 -> 6.61M
@@ -72,11 +72,11 @@ export default function GeneralOverviewView({
   const compactIDR = (n: number) => `Rp ${compact(n)}`;
 
   const platformColors = [
-    "#6366f1",
-    "#10b981",
-    "#f59e0b",
-    "#06b6d4",
-    "#ec4899",
+    "#4DC0BE",
+    "#F2B233",
+    "#D6657A",
+    "#5B7FA6",
+    "#8E7CC3",
   ];
 
   const chartTrend =
@@ -163,8 +163,8 @@ export default function GeneralOverviewView({
                 animationDuration={0}
                 wrapperStyle={{ zIndex: 50, outline: "none" }}
                 contentStyle={{
-                  backgroundColor: isDarkMode ? "#0f172a" : "#ffffff",
-                  borderColor: isDarkMode ? "#334155" : "#e2e8f0",
+                  backgroundColor: isDarkMode ? "#0E3A3D" : "#ffffff",
+                  borderColor: isDarkMode ? "#1F5559" : "#D5E8E6",
                   borderRadius: "0.5rem",
                   fontSize: "11px",
                   padding: "4px 8px",
@@ -172,7 +172,7 @@ export default function GeneralOverviewView({
                 }}
                 formatter={(v: any) => [fmt(Number(v)), label]}
                 labelStyle={{
-                  color: isDarkMode ? "#94a3b8" : "#64748b",
+                  color: isDarkMode ? "#8FB0AD" : "#5B7573",
                   fontWeight: 600,
                 }}
               />
@@ -252,7 +252,7 @@ export default function GeneralOverviewView({
                 <div
                   className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col gap-1 p-2 rounded-lg text-[10px] font-bold shadow-xl z-30 pointer-events-none whitespace-nowrap border ${
                     isDarkMode
-                      ? "bg-[#0f172a] text-white border-slate-700"
+                      ? "bg-[#0E3A3D] text-white border-slate-700"
                       : "bg-white text-slate-800 border-slate-200"
                   }`}>
                   <span className="text-slate-400 font-extrabold border-b border-slate-200 dark:border-slate-700 pb-0.5">
@@ -333,10 +333,10 @@ export default function GeneralOverviewView({
         <div
           className="w-24 h-24 sm:w-28 sm:h-28 rounded-full shrink-0 relative flex items-center justify-center shadow-inner"
           style={{
-            background: `conic-gradient(${gradient || "#e2e8f0 0 100%"})`,
+            background: `conic-gradient(${gradient || "#D5E8E6 0 100%"})`,
           }}>
           <div
-            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full ${isDarkMode ? "bg-[#090d16]" : "bg-white"} flex items-center justify-center shadow`}>
+            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full ${isDarkMode ? "bg-[#0B3236]" : "bg-white"} flex items-center justify-center shadow`}>
             <span
               className={`text-[10px] font-black uppercase tracking-wider ${homeHeading}`}>
               {centerLabel}
@@ -404,7 +404,7 @@ export default function GeneralOverviewView({
           compactIDR(homeSummary.current.spend),
           growth(homeSummary.current.spend, homeSummary.previous.spend),
           "gradSpend",
-          "#6366f1",
+          "#4DC0BE",
           homeSummary.trend.map((item: any) => ({
             label: item.label,
             val: item.spend,
@@ -420,7 +420,7 @@ export default function GeneralOverviewView({
             homeSummary.previous.impressions,
           ),
           "gradImp",
-          "#06b6d4",
+          "#5B7FA6",
           homeSummary.trend.map((item: any) => ({
             label: item.label,
             val: item.impressions,
@@ -433,7 +433,7 @@ export default function GeneralOverviewView({
           compact(homeSummary.current.clicks),
           growth(homeSummary.current.clicks, homeSummary.previous.clicks),
           "gradClicks",
-          "#f59e0b",
+          "#D6657A",
           homeSummary.trend.map((item: any) => ({
             label: item.label,
             val: item.clicks,
@@ -446,7 +446,7 @@ export default function GeneralOverviewView({
           compactIDR(homeSummary.current.gmv),
           growth(homeSummary.current.gmv, homeSummary.previous.gmv),
           "gradGmv",
-          "#10b981",
+          "#F2B233",
           homeSummary.trend.map((item: any) => ({
             label: item.label,
             val: item.gmv,
@@ -486,7 +486,7 @@ export default function GeneralOverviewView({
 
                   {isMomentumDropdownOpen && (
                     <div
-                      className={`absolute right-0 mt-2 w-52 rounded-xl shadow-xl border p-2 z-50 ${isDarkMode ? "bg-[#0f172a] border-slate-700" : "bg-white border-slate-200"}`}>
+                      className={`absolute right-0 mt-2 w-52 rounded-xl shadow-xl border p-2 z-50 ${isDarkMode ? "bg-[#0E3A3D] border-slate-700" : "bg-white border-slate-200"}`}>
                       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-2 py-1">
                         Select up to 2
                       </p>
@@ -550,18 +550,18 @@ export default function GeneralOverviewView({
                     <CartesianGrid
                       strokeDasharray="3 3"
                       vertical={false}
-                      stroke={isDarkMode ? "#334155" : "#f1f5f9"}
+                      stroke={isDarkMode ? "#1F5559" : "#E6F4F2"}
                     />
                     <XAxis
                       dataKey="label"
-                      stroke={isDarkMode ? "#94a3b8" : "#64748b"}
+                      stroke={isDarkMode ? "#8FB0AD" : "#5B7573"}
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
                     />
                     <YAxis
                       yAxisId="left"
-                      stroke={isDarkMode ? "#94a3b8" : "#64748b"}
+                      stroke={isDarkMode ? "#8FB0AD" : "#5B7573"}
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
@@ -571,7 +571,7 @@ export default function GeneralOverviewView({
                       <YAxis
                         yAxisId="right"
                         orientation="right"
-                        stroke={isDarkMode ? "#94a3b8" : "#64748b"}
+                        stroke={isDarkMode ? "#8FB0AD" : "#5B7573"}
                         fontSize={11}
                         tickLine={false}
                         axisLine={false}
@@ -582,8 +582,8 @@ export default function GeneralOverviewView({
                       isAnimationActive={false}
                       animationDuration={0}
                       contentStyle={{
-                        backgroundColor: isDarkMode ? "#0f172a" : "#ffffff",
-                        borderColor: isDarkMode ? "#334155" : "#e2e8f0",
+                        backgroundColor: isDarkMode ? "#0E3A3D" : "#ffffff",
+                        borderColor: isDarkMode ? "#1F5559" : "#D5E8E6",
                         borderRadius: "0.75rem",
                         fontSize: "12px",
                       }}
@@ -613,18 +613,18 @@ export default function GeneralOverviewView({
                     <CartesianGrid
                       strokeDasharray="3 3"
                       vertical={false}
-                      stroke={isDarkMode ? "#334155" : "#f1f5f9"}
+                      stroke={isDarkMode ? "#1F5559" : "#E6F4F2"}
                     />
                     <XAxis
                       dataKey="label"
-                      stroke={isDarkMode ? "#94a3b8" : "#64748b"}
+                      stroke={isDarkMode ? "#8FB0AD" : "#5B7573"}
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
                     />
                     <YAxis
                       yAxisId="left"
-                      stroke={isDarkMode ? "#94a3b8" : "#64748b"}
+                      stroke={isDarkMode ? "#8FB0AD" : "#5B7573"}
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
@@ -634,7 +634,7 @@ export default function GeneralOverviewView({
                       <YAxis
                         yAxisId="right"
                         orientation="right"
-                        stroke={isDarkMode ? "#94a3b8" : "#64748b"}
+                        stroke={isDarkMode ? "#8FB0AD" : "#5B7573"}
                         fontSize={11}
                         tickLine={false}
                         axisLine={false}
@@ -645,8 +645,8 @@ export default function GeneralOverviewView({
                       isAnimationActive={false}
                       animationDuration={0}
                       contentStyle={{
-                        backgroundColor: isDarkMode ? "#0f172a" : "#ffffff",
-                        borderColor: isDarkMode ? "#334155" : "#e2e8f0",
+                        backgroundColor: isDarkMode ? "#0E3A3D" : "#ffffff",
+                        borderColor: isDarkMode ? "#1F5559" : "#D5E8E6",
                         borderRadius: "0.75rem",
                         fontSize: "12px",
                       }}
@@ -700,18 +700,18 @@ export default function GeneralOverviewView({
                     <CartesianGrid
                       strokeDasharray="3 3"
                       vertical={false}
-                      stroke={isDarkMode ? "#334155" : "#f1f5f9"}
+                      stroke={isDarkMode ? "#1F5559" : "#E6F4F2"}
                     />
                     <XAxis
                       dataKey="label"
-                      stroke={isDarkMode ? "#94a3b8" : "#64748b"}
+                      stroke={isDarkMode ? "#8FB0AD" : "#5B7573"}
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
                     />
                     <YAxis
                       yAxisId="left"
-                      stroke={isDarkMode ? "#94a3b8" : "#64748b"}
+                      stroke={isDarkMode ? "#8FB0AD" : "#5B7573"}
                       fontSize={11}
                       tickLine={false}
                       axisLine={false}
@@ -721,7 +721,7 @@ export default function GeneralOverviewView({
                       <YAxis
                         yAxisId="right"
                         orientation="right"
-                        stroke={isDarkMode ? "#94a3b8" : "#64748b"}
+                        stroke={isDarkMode ? "#8FB0AD" : "#5B7573"}
                         fontSize={11}
                         tickLine={false}
                         axisLine={false}
@@ -732,8 +732,8 @@ export default function GeneralOverviewView({
                       isAnimationActive={false}
                       animationDuration={0}
                       contentStyle={{
-                        backgroundColor: isDarkMode ? "#0f172a" : "#ffffff",
-                        borderColor: isDarkMode ? "#334155" : "#e2e8f0",
+                        backgroundColor: isDarkMode ? "#0E3A3D" : "#ffffff",
+                        borderColor: isDarkMode ? "#1F5559" : "#D5E8E6",
                         borderRadius: "0.75rem",
                         fontSize: "12px",
                       }}
@@ -801,15 +801,15 @@ export default function GeneralOverviewView({
           <p className={`text-xs ${homeMuted} mb-3`}>GMV by funnel</p>
           {mixDonut(
             homeSummary.funnelMix,
-            ["#4f46e5", "#10b981", "#f59e0b", "#06b6d4", "#ec4899"],
+            ["#4DC0BE", "#F2B233", "#D6657A", "#5B7FA6", "#8E7CC3"],
             "MIX",
           )}
           {renderStackBars(homeSummary.funnelTrend, [
-            "#4f46e5",
-            "#10b981",
-            "#f59e0b",
-            "#06b6d4",
-            "#ec4899",
+            "#4DC0BE",
+            "#F2B233",
+            "#D6657A",
+            "#5B7FA6",
+            "#8E7CC3",
           ])}
         </div>
         <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
@@ -818,10 +818,10 @@ export default function GeneralOverviewView({
           </h2>
           <p className={`text-xs ${homeMuted} mb-4`}>GMV by category</p>
           {mixBars(homeSummary.categoryMix, [
-            "bg-violet-500",
-            "bg-blue-500",
-            "bg-teal-500",
-            "bg-orange-400",
+            "bg-[#4DC0BE]",
+            "bg-[#F2B233]",
+            "bg-[#D6657A]",
+            "bg-[#5B7FA6]",
           ])}
         </div>
         <div className={`${homeSurface} border rounded-2xl p-5 shadow-sm`}>
@@ -843,7 +843,7 @@ export default function GeneralOverviewView({
             ].map((item) => (
               <div
                 key={item.label}
-                className={`${isDarkMode ? "bg-[#090d16]" : "bg-slate-50"} rounded-xl p-3`}>
+                className={`${isDarkMode ? "bg-[#0B3236]" : "bg-slate-50"} rounded-xl p-3`}>
                 <span className={`text-[10px] font-bold ${homeMuted}`}>
                   {item.label}
                 </span>

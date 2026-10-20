@@ -1,55 +1,134 @@
-import React from 'react';
+import React from "react";
+import { useTheme } from "@/lib/useTheme";
 
 interface WelcomeViewProps {
   onSelectHome: () => void;
-  onSelectEngine: (engine: 'media' | 'commerce' | 'creative' | 'signal') => void;
+  onSelectEngine: (
+    engine: "media" | "commerce" | "creative" | "signal",
+  ) => void;
 }
 
-export default function WelcomeView({ onSelectHome, onSelectEngine }: WelcomeViewProps) {
+const SunIcon = () => (
+  <svg
+    className="w-5 h-5"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+  </svg>
+);
+const MoonIcon = () => (
+  <svg
+    className="w-5 h-5"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round">
+    <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+  </svg>
+);
+
+export default function WelcomeView({
+  onSelectHome,
+  onSelectEngine,
+}: WelcomeViewProps) {
+  const { isDark, toggle } = useTheme();
+
+  const cardCls = `p-8 rounded-3xl transition-all group border hover:-translate-y-1 ${
+    isDark
+      ? "bg-[#102A2A] border-[#1D4442] hover:bg-[#163535] hover:border-[#2DB5AE]/50"
+      : "bg-white border-[#D5E8E6] hover:bg-[#F4FAF9] hover:border-[#2FA3A5]/50 shadow-sm hover:shadow-md"
+  }`;
+  const titleCls = `text-xl font-bold mb-1 ${isDark ? "text-[#E6F4F2]" : "text-[#0F2A29]"}`;
+  const descCls = `text-xs ${isDark ? "text-[#8FB0AD]" : "text-[#5B7573]"}`;
+
   return (
-    <div className="welcome-screen fixed inset-0 z-[100] bg-[#090d16] flex flex-col items-center justify-center p-6 font-sans">
-      <div className="max-w-6xl w-full text-center">
-        <h1 className="text-[clamp(2.5rem,5vw,4rem)] font-black text-white mb-4 tracking-tight">Welcome to All in One Dashboard</h1>
-        <p className="text-slate-400 mb-16 text-[clamp(1rem,1.5vw,1.25rem)] font-medium">Please select the tracker you wish to launch. You can navigate between them at any time.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
-          <button onClick={onSelectHome} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group border border-indigo-500/20">
-            <div className="w-14 h-14 mx-auto bg-indigo-600 text-white rounded-2xl flex items-center justify-center mb-6">
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12h18M3 6h18M3 18h18"></path></svg>
+    <div
+      className={`welcome-screen fixed inset-0 z-[100] flex flex-col items-center justify-center p-6 font-sans transition-colors duration-300 ${isDark ? "bg-[#0B1F1F]" : "bg-[#F4FAF9]"}`}>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+        className={`absolute top-6 right-6 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isDark ? "bg-[#102A2A] text-[#67C7C6] hover:bg-[#163535]" : "bg-[#E6F4F2] text-[#006D77] hover:bg-[#d3ece8]"}`}>
+        {isDark ? <SunIcon /> : <MoonIcon />}
+      </button>
+
+      <div className="max-w-4xl w-full text-center">
+        <img
+          src={isDark ? "/wardah-logo-white.png" : "/wardah-logo.png"}
+          alt="Wardah"
+          className="h-9 w-auto mx-auto mb-10"
+        />
+        <h1
+          className={`text-[clamp(2.5rem,5vw,4rem)] font-black mb-4 tracking-tight ${isDark ? "text-white" : "text-[#00565F]"}`}>
+          Welcome to All in One Dashboard
+        </h1>
+        <p
+          className={`mb-16 text-[clamp(1rem,1.5vw,1.25rem)] font-medium ${isDark ? "text-[#8FB0AD]" : "text-[#5B7573]"}`}>
+          Please select the tracker you wish to launch. You can navigate between
+          them at any time.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+          <button onClick={onSelectHome} className={cardCls}>
+            <div className="w-14 h-14 mx-auto bg-[#00565F] text-white rounded-2xl flex items-center justify-center mb-6">
+              <svg
+                className="w-7 h-7"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M3 12h18M3 6h18M3 18h18"></path>
+              </svg>
             </div>
-            <h2 className="text-xl font-bold text-white mb-1">General Overview</h2>
-            <p className="text-xs text-slate-400">Cross-channel performance summary.</p>
+            <h2 className={titleCls}>General Overview</h2>
+            <p className={descCls}>Cross-channel performance summary.</p>
           </button>
 
-          <button onClick={() => onSelectEngine('media')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group">
-            <div className="w-14 h-14 bg-indigo-500 text-white rounded-2xl flex items-center justify-center mb-6">
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+          <button onClick={() => onSelectEngine("media")} className={cardCls}>
+            <div className="w-14 h-14 mx-auto bg-[#006D77] text-white rounded-2xl flex items-center justify-center mb-6">
+              <svg
+                className="w-7 h-7"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+              </svg>
             </div>
-            <h2 className="text-xl font-bold text-white mb-1">Digital Media</h2>
-            <p className="text-xs text-slate-400">Full-funnel media metrics.</p>
+            <h2 className={titleCls}>Digital Media</h2>
+            <p className={descCls}>Full-funnel media metrics.</p>
           </button>
 
-          <button onClick={() => onSelectEngine('commerce')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group">
-            <div className="w-14 h-14 bg-emerald-500 text-white rounded-2xl flex items-center justify-center mb-6">
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+          <button
+            onClick={() => onSelectEngine("commerce")}
+            className={cardCls}>
+            <div className="w-14 h-14 mx-auto bg-[#2FA3A5] text-white rounded-2xl flex items-center justify-center mb-6">
+              <svg
+                className="w-7 h-7"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path>
+              </svg>
             </div>
-            <h2 className="text-xl font-bold text-white mb-1">Commerce Tracker</h2>
-            <p className="text-xs text-slate-400">Revenue and ROAS metrics.</p>
-          </button>
-
-          <button onClick={() => onSelectEngine('creative')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group">
-            <div className="w-14 h-14 bg-lime-500 text-white rounded-2xl flex items-center justify-center mb-6">
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-            </div>
-            <h2 className="text-xl font-bold text-white mb-1">Top Creative</h2>
-            <p className="text-xs text-slate-400">Winning creative assets.</p>
-          </button>
-
-          <button onClick={() => onSelectEngine('signal')} className="bg-[#111827] p-8 rounded-3xl hover:bg-[#1e293b] transition-all group border border-emerald-500/20">
-            <div className="w-14 h-14 bg-emerald-600 text-white rounded-2xl flex items-center justify-center mb-6">
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
-            </div>
-            <h2 className="text-xl font-bold text-white mb-1">Media Signal</h2>
-            <p className="text-xs text-slate-400">TikTok Actual vs Plan.</p>
+            <h2 className={titleCls}>Commerce Tracker</h2>
+            <p className={descCls}>Revenue and ROAS metrics.</p>
           </button>
         </div>
       </div>

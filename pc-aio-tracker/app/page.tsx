@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import Chart from "chart.js/auto";
 import { CONFIG, defaultFilters } from "@/lib/config";
+import { useTheme } from "@/lib/useTheme";
 import {
   parseNum,
   formatIDR,
@@ -59,7 +60,8 @@ export default function DashboardApp() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  // Mode terang/gelap dibagi dengan halaman login dan welcome (tersimpan di browser)
+  const { isDark: isDarkMode, toggle: toggleTheme } = useTheme();
 
   const dataCache = useRef<Record<string, any[]>>({});
   const [rawData, setRawData] = useState<any[]>([]);
@@ -1303,26 +1305,26 @@ export default function DashboardApp() {
 
   return (
     <div
-      className={`dashboard-shell w-full min-h-screen flex font-sans transition-colors duration-300 ${isDarkMode ? "bg-[#090d16] text-slate-100" : "bg-[#e7e7ef] text-slate-800"}`}>
+      className={`dashboard-shell w-full min-h-screen flex font-sans transition-colors duration-300 ${isDarkMode ? "bg-[#0B3236] text-slate-100" : "bg-[#F4FAF9] text-slate-800"}`}>
       <style
         dangerouslySetInnerHTML={{
           __html: `
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        ::-webkit-scrollbar-thumb { background: #8FB0AD; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #5B7573; }
         
         table { border-collapse: separate !important; border-spacing: 0 !important; }
-        thead th { position: sticky !important; top: 0 !important; z-index: 30 !important; background-color: #090d16 !important; }
-        thead th.sticky-col { position: sticky !important; top: 0 !important; left: 0px !important; z-index: 60 !important; background-color: #090d16 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid #1e293b !important; border-bottom: 2px solid #1e293b !important; }
-        thead th.sticky-col-2 { position: sticky !important; top: 0 !important; left: 180px !important; z-index: 60 !important; background-color: #090d16 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid #1e293b !important; border-bottom: 2px solid #1e293b !important; }
-        thead th.sticky-col-3 { position: sticky !important; top: 0 !important; left: 360px !important; z-index: 60 !important; background-color: #090d16 !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; border-right: 1px solid #1e293b !important; border-bottom: 2px solid #1e293b !important; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.3) !important; }
-        tbody td.sticky-col { position: sticky !important; left: 0px !important; z-index: 20 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid ${isDarkMode ? "#1e293b" : "#e2e8f0"} !important; }
-        tbody td.sticky-col-2 { position: sticky !important; left: 180px !important; z-index: 20 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid ${isDarkMode ? "#1e293b" : "#e2e8f0"} !important; }
-        tbody td.sticky-col-3 { position: sticky !important; left: 360px !important; z-index: 20 !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; border-right: 1px solid ${isDarkMode ? "#1e293b" : "#e2e8f0"} !important; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.08) !important; }
-        tr.group-start:not(:first-child) td { border-top: 2.5px solid ${isDarkMode ? "#64748b" : "#94a3b8"} !important; }
-        tr.group-start td[rowspan] { border-bottom: 2.5px solid ${isDarkMode ? "#64748b" : "#94a3b8"} !important; }
-        tr.group-end td { border-bottom: 2.5px solid ${isDarkMode ? "#64748b" : "#94a3b8"} !important; }
+        thead th { position: sticky !important; top: 0 !important; z-index: 30 !important; background-color: #0E3A3D !important; }
+        thead th.sticky-col { position: sticky !important; top: 0 !important; left: 0px !important; z-index: 60 !important; background-color: #0E3A3D !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid #124246 !important; border-bottom: 2px solid #124246 !important; }
+        thead th.sticky-col-2 { position: sticky !important; top: 0 !important; left: 180px !important; z-index: 60 !important; background-color: #0E3A3D !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid #124246 !important; border-bottom: 2px solid #124246 !important; }
+        thead th.sticky-col-3 { position: sticky !important; top: 0 !important; left: 360px !important; z-index: 60 !important; background-color: #0E3A3D !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; border-right: 1px solid #124246 !important; border-bottom: 2px solid #124246 !important; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.3) !important; }
+        tbody td.sticky-col { position: sticky !important; left: 0px !important; z-index: 20 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid ${isDarkMode ? "#124246" : "#D5E8E6"} !important; }
+        tbody td.sticky-col-2 { position: sticky !important; left: 180px !important; z-index: 20 !important; width: 180px !important; min-width: 180px !important; max-width: 180px !important; border-right: 1px solid ${isDarkMode ? "#124246" : "#D5E8E6"} !important; }
+        tbody td.sticky-col-3 { position: sticky !important; left: 360px !important; z-index: 20 !important; width: 120px !important; min-width: 120px !important; max-width: 120px !important; border-right: 1px solid ${isDarkMode ? "#124246" : "#D5E8E6"} !important; box-shadow: 4px 0 10px -3px rgba(0,0,0,0.08) !important; }
+        tr.group-start:not(:first-child) td { border-top: 2.5px solid ${isDarkMode ? "#5B7573" : "#8FB0AD"} !important; }
+        tr.group-start td[rowspan] { border-bottom: 2.5px solid ${isDarkMode ? "#5B7573" : "#8FB0AD"} !important; }
+        tr.group-end td { border-bottom: 2.5px solid ${isDarkMode ? "#5B7573" : "#8FB0AD"} !important; }
 
         .dashboard-shell .rounded-3xl { border-radius: 0.75rem !important; }
         .dashboard-shell .rounded-\[2rem\] { border-radius: 0.75rem !important; }
@@ -1349,15 +1351,15 @@ export default function DashboardApp() {
           animation: chartAppearance 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
-        .dropdown-arrow { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e"); background-position: right center; background-repeat: no-repeat; background-size: 1rem 1rem; }
-        select option { background-color: #090d16; color: #f1f5f9; padding: 10px; }
+        .dropdown-arrow { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238FB0AD'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e"); background-position: right center; background-repeat: no-repeat; background-size: 1rem 1rem; }
+        select option { background-color: #0B3236; color: #E6F4F2; padding: 10px; }
       `,
         }}
       />
 
       {isLoading && (
         <div className="fixed inset-0 z-[300] bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center">
-          <div className="w-12 h-12 border-4 border-emerald-400 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <div className="w-12 h-12 border-4 border-[#67C7C6] border-t-transparent rounded-full animate-spin mb-4"></div>
           <h3 className="font-bold text-white text-sm tracking-wide">
             Fetching Data...
           </h3>
@@ -1442,7 +1444,7 @@ export default function DashboardApp() {
             </button>
 
             <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
+              onClick={toggleTheme}
               aria-label={
                 isDarkMode ? "Switch to light mode" : "Switch to dark mode"
               }
