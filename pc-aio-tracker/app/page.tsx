@@ -18,13 +18,10 @@ import {
   getWeekBucket,
 } from "@/lib/dateUtils";
 import {
-  HOME_MONTHS,
-  HOME_MONTH_SHEETS,
-  normalizeSheetRows,
+  buildHomeRows,
   buildHomeSummary,
-  toSkuRows,
-  toCommerceRows,
-  toMediaRows,
+  toMediaApiRows,
+  toCommerceApiRows,
 } from "@/lib/homeData";
 import LoginView from "@/components/auth/LoginView";
 import WelcomeView from "@/components/navigation/WelcomeView";
@@ -70,7 +67,10 @@ export default function DashboardApp() {
     mediaApi: any[];
     commerce: any[];
   }>({ mediaApi: [], commerce: [] });
-  const [homeSheetData, setHomeSheetData] = useState<Record<string, any[]>>({});
+  const [homeSheetData, setHomeSheetData] = useState<{
+    media: any[];
+    commerce: any[];
+  }>({ media: [], commerce: [] });
 
   const [filters, setFilters] = useState(defaultFilters);
   const [selectedSignalPeriod, setSelectedSignalPeriod] = useState<string>("");
@@ -81,6 +81,7 @@ export default function DashboardApp() {
   const [dateDailyEnd, setDateDailyEnd] = useState("");
 
   const [homeBrand, setHomeBrand] = useState("All");
+  const [homeFormat, setHomeFormat] = useState("All");
   const [homePeriods, setHomePeriods] = useState<string[]>([]);
   const [homeMomentumMetrics, setHomeMomentumMetrics] = useState<string[]>([
     "spend",
@@ -130,7 +131,6 @@ export default function DashboardApp() {
     setDateWeekly(yyyy_mm_dd);
     setDateDailyStart(start_yyyy_mm_dd);
     setDateDailyEnd(yyyy_mm_dd);
-    setHomePeriods([HOME_MONTHS.includes(yyyy_mm) ? yyyy_mm : HOME_MONTHS[0]]);
   }, []);
 
   const loadData = async (
@@ -140,22 +140,20 @@ export default function DashboardApp() {
     setDashboardContext("Overall");
     setTableColFilter1("All");
     setTableColFilter2("All");
+    setFilters((prev) => ({ ...prev, format: "All" }));
 
     if (forceSync) {
-      if (engine === "sku" || engine === "commerce") {
+      if (engine === "media") {
+        dataCache.current[CONFIG.media.sheet] = undefined as any;
+      } else if (engine === "sku" || engine === "commerce") {
         dataCache.current[CONFIG.commerce.sheet] = undefined as any;
         dataCache.current["CIR DAILY"] = undefined as any;
-      } else {
-        dataCache.current[CONFIG[engine].sheet] = undefined as any;
-      }
-      if (engine === "sku" || engine === "commerce" || engine === "media") {
-        Object.values(HOME_MONTH_SHEETS).forEach((name) => {
-          dataCache.current[name] = undefined as any;
-        });
-      }
-      if (engine === "signal") {
+      } else if (engine === "signal") {
+        dataCache.current["Media Signal"] = undefined as any;
         dataCache.current["Media API"] = undefined as any;
         dataCache.current["Commerce"] = undefined as any;
+      } else {
+        dataCache.current[CONFIG[engine].sheet] = undefined as any;
       }
     }
 
@@ -178,43 +176,32 @@ export default function DashboardApp() {
       };
 
       if (engine === "media") {
-        // Digital Media dibaca dari sheet bulanan: Meta biasa + TikTok Awareness/Consideration
-        const parts = await Promise.all(
-          Object.entries(HOME_MONTH_SHEETS).map(async ([ym, sheetName]) =>
-            toMediaRows(await fetchSheet(sheetName), ym),
-          ),
-        );
-        const mediaRows = parts.flat();
+        // Digital Media dibaca dari tab "Media API"
+        const mediaRows = toMediaApiRows(await fetchSheet(CONFIG.media.sheet));
         if (mediaRows.length === 0)
           alert(
-            "No digital media data loaded. Check that the monthly sheet tabs exist and are shared with the service account.",
+            'No digital media data loaded. Check that the "Media API" tab exists, has data, and is shared with the service account.',
           );
         setRawData(mediaRows);
       } else if (engine === "commerce") {
-        // Commerce dibaca dari sheet bulanan (Wardah Sep / Wardah Oct): CPAS Shopee & Lazada + TikTok Conversion
-        const parts = await Promise.all(
-          Object.entries(HOME_MONTH_SHEETS).map(async ([ym, sheetName]) =>
-            toCommerceRows(await fetchSheet(sheetName), ym),
-          ),
+        // Commerce dibaca dari tab "Commerce"
+        const commRows = toCommerceApiRows(
+          await fetchSheet(CONFIG.commerce.sheet),
         );
-        const commRows = parts.flat();
         if (commRows.length === 0)
           alert(
-            "No commerce data loaded. Check that the monthly sheet tabs exist and are shared with the service account.",
+            'No commerce data loaded. Check that the "Commerce" tab exists, has data, and is shared with the service account.',
           );
         setRawData(commRows);
         setCirDailyData([]); // belum ada sumber data GMV Sales untuk CIR
       } else if (engine === "sku") {
-        // PID & SKU dibaca dari sheet bulanan (Wardah Sep / Wardah Oct), bukan tab "Commerce"
-        const parts = await Promise.all(
-          Object.entries(HOME_MONTH_SHEETS).map(async ([ym, sheetName]) =>
-            toSkuRows(await fetchSheet(sheetName), ym),
-          ),
+        // PID & SKU juga dibaca dari tab "Commerce"
+        const skuRows = toCommerceApiRows(
+          await fetchSheet(CONFIG.commerce.sheet),
         );
-        const skuRows = parts.flat();
         if (skuRows.length === 0)
           alert(
-            "No data loaded for PID & SKU. Check that the monthly sheet tabs exist and are shared with the service account.",
+            'No data loaded for PID & SKU. Check that the "Commerce" tab exists, has data, and is shared with the service account.',
           );
         setRawData(skuRows);
       } else if (engine === "signal") {
@@ -247,10 +234,11 @@ export default function DashboardApp() {
   const loadHomeData = async (forceSync = false) => {
     setIsLoading(true);
     try {
-      const entries = Object.entries(HOME_MONTH_SHEETS); // [["2026-10","Wardah Oct"], ...]
+      // General Overview = gabungan tab "Media API" + "Commerce"
+      const names = [CONFIG.media.sheet, CONFIG.commerce.sheet];
       if (forceSync) {
-        entries.forEach(([, sheetName]) => {
-          dataCache.current[sheetName] = undefined as any;
+        names.forEach((name) => {
+          dataCache.current[name] = undefined as any;
         });
       }
 
@@ -272,14 +260,8 @@ export default function DashboardApp() {
         return [];
       };
 
-      const results = await Promise.all(
-        entries.map(([, sheetName]) => fetchSheet(sheetName)),
-      );
-      const next: Record<string, any[]> = {};
-      entries.forEach(([ym], i) => {
-        next[ym] = results[i];
-      });
-      setHomeSheetData(next);
+      const [media, commerce] = await Promise.all(names.map(fetchSheet));
+      setHomeSheetData({ media, commerce });
       if (errors.length)
         alert(`Failed to load Home data:\n${errors.join("\n")}`);
     } catch {
@@ -300,6 +282,7 @@ export default function DashboardApp() {
 
   const resetFilters = () => {
     setFilters(defaultFilters);
+    setHomeFormat("All");
     setTableColFilter1("All");
     setTableColFilter2("All");
   };
@@ -839,6 +822,14 @@ export default function DashboardApp() {
         )
           return false;
         if (
+          (activeEngine === "media" ||
+            activeEngine === "commerce" ||
+            activeEngine === "sku") &&
+          filters.format !== "All" &&
+          String(row["Format"] ?? "").trim() !== filters.format
+        )
+          return false;
+        if (
           activeEngine === "media" &&
           filters.funnel !== "All" &&
           String(row[cfg.colFunnel]) !== filters.funnel
@@ -1081,11 +1072,11 @@ export default function DashboardApp() {
       ).toLowerCase();
       if (match === "meta")
         return (
-          p.includes("meta") ||
-          p.includes("facebook") ||
-          p.includes("ig") ||
-          p.includes("instagram")
+          !p.includes("instagram") &&
+          p !== "ig" &&
+          (p.includes("meta") || p.includes("facebook"))
         );
+      if (match === "instagram") return p.includes("instagram") || p === "ig";
       return p.includes(match);
     };
     return {
@@ -1106,6 +1097,14 @@ export default function DashboardApp() {
         pEngage: 0,
       },
       meta: { spend: 0, impr: 0, engage: 0, pSpend: 0, pImpr: 0, pEngage: 0 },
+      instagram: {
+        spend: 0,
+        impr: 0,
+        engage: 0,
+        pSpend: 0,
+        pImpr: 0,
+        pEngage: 0,
+      },
       tiktok: { spend: 0, impr: 0, engage: 0, pSpend: 0, pImpr: 0, pEngage: 0 },
     };
     const calc = (data: any[], isPrev: boolean) => {
@@ -1123,7 +1122,11 @@ export default function DashboardApp() {
           totals.overall.pSpend += s;
           totals.overall.pImpr += i;
           totals.overall.pEngage += e;
-          if (plat.includes("meta") || plat.includes("ig")) {
+          if (plat.includes("instagram") || plat === "ig") {
+            totals.instagram.pSpend += s;
+            totals.instagram.pImpr += i;
+            totals.instagram.pEngage += e;
+          } else if (plat.includes("meta") || plat.includes("facebook")) {
             totals.meta.pSpend += s;
             totals.meta.pImpr += i;
             totals.meta.pEngage += e;
@@ -1136,7 +1139,11 @@ export default function DashboardApp() {
           totals.overall.spend += s;
           totals.overall.impr += i;
           totals.overall.engage += e;
-          if (plat.includes("meta") || plat.includes("ig")) {
+          if (plat.includes("instagram") || plat === "ig") {
+            totals.instagram.spend += s;
+            totals.instagram.impr += i;
+            totals.instagram.engage += e;
+          } else if (plat.includes("meta") || plat.includes("facebook")) {
             totals.meta.spend += s;
             totals.meta.impr += i;
             totals.meta.engage += e;
@@ -1244,19 +1251,11 @@ export default function DashboardApp() {
     };
   }, [curData, prevData, activeEngine]);
 
-  // Data Home: baris dari semua sheet bulanan dirapikan jadi satu format
-  const homeNormalized = useMemo(() => {
-    const rows: ReturnType<typeof normalizeSheetRows>["rows"] = [];
-    const missing = new Set<string>();
-    Object.entries(homeSheetData as Record<string, any[]>).forEach(
-      ([ym, raw]) => {
-        const r = normalizeSheetRows(raw, ym);
-        r.rows.forEach((row) => rows.push(row));
-        r.missing.forEach((m) => missing.add(m));
-      },
-    );
-    return { rows, missing: Array.from(missing) };
-  }, [homeSheetData]);
+  // Data Home: Media API + Commerce digabung jadi satu format
+  const homeNormalized = useMemo(
+    () => buildHomeRows(homeSheetData.media, homeSheetData.commerce),
+    [homeSheetData],
+  );
 
   const homeBrandOptions = useMemo(() => {
     const brands = new Set<string>();
@@ -1266,8 +1265,25 @@ export default function DashboardApp() {
     return ["All", ...Array.from(brands).sort()];
   }, [homeNormalized]);
 
-  // Filter bulan: fixed sesuai sheet yang tersedia (lihat HOME_MONTH_SHEETS di lib/homeData.ts)
-  const availableHomeMonths = HOME_MONTHS;
+  // Filter bulan: otomatis dari bulan yang ada di data (terbaru di atas)
+  const availableHomeMonths = useMemo(
+    () =>
+      Array.from(new Set(homeNormalized.rows.map((r) => r.ym))).sort((a, b) =>
+        b.localeCompare(a),
+      ),
+    [homeNormalized],
+  );
+
+  useEffect(() => {
+    if (availableHomeMonths.length === 0) return;
+    setHomePeriods((prev) => {
+      const valid = prev.filter((m) => availableHomeMonths.includes(m));
+      if (valid.length > 0) return valid.length === prev.length ? prev : valid;
+      const now = new Date();
+      const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      return [availableHomeMonths.includes(cur) ? cur : availableHomeMonths[0]];
+    });
+  }, [availableHomeMonths]);
 
   const handleToggleHomeMonth = (month: string) => {
     setHomePeriods((prev) => {
@@ -1287,8 +1303,35 @@ export default function DashboardApp() {
       homePeriods,
       homeBrand,
       homeNormalized.missing,
+      homeFormat,
     );
-  }, [homeNormalized, homeBrand, homePeriods]);
+  }, [homeNormalized, homeBrand, homePeriods, homeFormat]);
+
+  // Pilihan filter Format (dipakai semua halaman)
+  const formatOptions = useMemo(() => {
+    const set = new Set<string>();
+    if (currentView === "home") {
+      homeNormalized.rows.forEach((r) => {
+        if (r.format) set.add(r.format);
+      });
+    } else {
+      rawData.forEach((r) => {
+        const v = String(r["Format"] ?? "").trim();
+        if (v) set.add(v);
+      });
+    }
+    return ["All", ...Array.from(set).sort()];
+  }, [currentView, homeNormalized, rawData]);
+  const showFormatFilter =
+    currentView === "home" ||
+    activeEngine === "media" ||
+    activeEngine === "commerce" ||
+    activeEngine === "sku";
+  const formatValue = currentView === "home" ? homeFormat : filters.format;
+  const handleFormatChange = (value: string) => {
+    if (currentView === "home") setHomeFormat(value);
+    else handleFilterChange("format", value);
+  };
 
   if (currentView === "login") {
     return <LoginView onLoginSuccess={() => setCurrentView("welcome")} />;
@@ -1421,6 +1464,24 @@ export default function DashboardApp() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
+            {showFormatFilter && (
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-[10px] font-black uppercase tracking-widest ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                  Format
+                </span>
+                <select
+                  value={formatValue}
+                  onChange={(e) => handleFormatChange(e.target.value)}
+                  className={`dropdown-arrow bg-transparent border text-xs font-bold py-2.5 px-4 rounded-full outline-none pr-10 shadow-sm max-w-[200px] transition-colors ${isDarkMode ? "border-slate-600 text-slate-100 hover:border-indigo-500" : "border-slate-300 text-slate-700 hover:border-indigo-500 bg-white"}`}>
+                  {formatOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt === "All" ? "All Formats" : opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button
               onClick={toggleFullscreen}
               aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}

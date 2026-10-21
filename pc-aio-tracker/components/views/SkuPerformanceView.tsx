@@ -47,7 +47,11 @@ export default function SkuPerformanceView({
   const [page, setPage] = useState(1);
   const PER_PAGE = 15;
   // Pop up: klik kartu ringkasan (kpiPopup) atau klik baris tabel (rowPopup)
-  const [kpiPopup, setKpiPopup] = useState<{ label: string; full: string; short: string } | null>(null);
+  const [kpiPopup, setKpiPopup] = useState<{
+    label: string;
+    full: string;
+    short: string;
+  } | null>(null);
   const [rowPopup, setRowPopup] = useState<SkuItem | null>(null);
 
   useEffect(() => {
@@ -67,7 +71,8 @@ export default function SkuPerformanceView({
   const platformOptions = useMemo(() => {
     const set = new Set<string>();
     skuList.forEach((item) => {
-      if (item.platform && item.platform.trim() !== "") set.add(item.platform.trim());
+      if (item.platform && item.platform.trim() !== "")
+        set.add(item.platform.trim());
     });
     return Array.from(set).sort();
   }, [skuList]);
@@ -327,7 +332,13 @@ export default function SkuPerformanceView({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <button
           type="button"
-          onClick={() => setKpiPopup({ label: "Total Ad Spend", full: formatIDR(totalExpense), short: compactIDR(totalExpense) })}
+          onClick={() =>
+            setKpiPopup({
+              label: "Total Ad Spend",
+              full: formatIDR(totalExpense),
+              short: compactIDR(totalExpense),
+            })
+          }
           title="Klik untuk lihat nilai lengkap"
           className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
             isDarkMode
@@ -340,13 +351,20 @@ export default function SkuPerformanceView({
             }`}>
             Total Ad Spend
           </span>
-          <h3 className={`text-2xl font-black text-indigo-600 dark:text-indigo-400`}>
+          <h3
+            className={`text-2xl font-black text-indigo-600 dark:text-indigo-400`}>
             {compactIDR(totalExpense)}
           </h3>
         </button>
         <button
           type="button"
-          onClick={() => setKpiPopup({ label: "Total Impressions", full: formatNum(totalImpressions), short: compact(totalImpressions) })}
+          onClick={() =>
+            setKpiPopup({
+              label: "Total Impressions",
+              full: formatNum(totalImpressions),
+              short: compact(totalImpressions),
+            })
+          }
           title="Klik untuk lihat nilai lengkap"
           className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
             isDarkMode
@@ -359,13 +377,20 @@ export default function SkuPerformanceView({
             }`}>
             Total Impressions
           </span>
-          <h3 className={`text-2xl font-black ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+          <h3
+            className={`text-2xl font-black ${isDarkMode ? "text-white" : "text-slate-900"}`}>
             {compact(totalImpressions)}
           </h3>
         </button>
         <button
           type="button"
-          onClick={() => setKpiPopup({ label: "Total Clicks", full: formatNum(totalClicks), short: compact(totalClicks) })}
+          onClick={() =>
+            setKpiPopup({
+              label: "Total Clicks",
+              full: formatNum(totalClicks),
+              short: compact(totalClicks),
+            })
+          }
           title="Klik untuk lihat nilai lengkap"
           className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
             isDarkMode
@@ -378,13 +403,20 @@ export default function SkuPerformanceView({
             }`}>
             Total Clicks
           </span>
-          <h3 className={`text-2xl font-black ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+          <h3
+            className={`text-2xl font-black ${isDarkMode ? "text-white" : "text-slate-900"}`}>
             {compact(totalClicks)}
           </h3>
         </button>
         <button
           type="button"
-          onClick={() => setKpiPopup({ label: "Total SKU GMV", full: formatIDR(totalGmv), short: compactIDR(totalGmv) })}
+          onClick={() =>
+            setKpiPopup({
+              label: "Total SKU GMV",
+              full: formatIDR(totalGmv),
+              short: compactIDR(totalGmv),
+            })
+          }
           title="Klik untuk lihat nilai lengkap"
           className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
             isDarkMode
@@ -397,7 +429,8 @@ export default function SkuPerformanceView({
             }`}>
             Total SKU GMV
           </span>
-          <h3 className={`text-2xl font-black text-emerald-600 dark:text-emerald-400`}>
+          <h3
+            className={`text-2xl font-black text-emerald-600 dark:text-emerald-400`}>
             {compactIDR(totalGmv)}
           </h3>
         </button>
@@ -562,108 +595,146 @@ export default function SkuPerformanceView({
       </div>
 
       {/* Pop up nilai lengkap dari kartu ringkasan */}
-      {kpiPopup && typeof document !== "undefined" && createPortal(
-        <div
-          className="fixed inset-0 z-[300] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setKpiPopup(null)}>
+      {kpiPopup &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
-            onClick={(e) => e.stopPropagation()}
-            className={`w-full max-w-md rounded-3xl border shadow-2xl p-6 ${
-              isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
-            }`}>
-            <div className="flex items-start justify-between gap-4">
-              <span className={`text-xs font-bold tracking-wider ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                {kpiPopup.label}
-              </span>
-              <button
-                type="button"
-                onClick={() => setKpiPopup(null)}
-                aria-label="Close"
-                className={`text-lg leading-none font-bold ${isDarkMode ? "text-slate-400 hover:text-white" : "text-slate-400 hover:text-slate-900"}`}>
-                ×
-              </button>
+            className="fixed inset-0 z-[300] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setKpiPopup(null)}>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`w-full max-w-md rounded-3xl border shadow-2xl p-6 ${
+                isDarkMode
+                  ? "bg-slate-800 border-slate-700 text-white"
+                  : "bg-white border-slate-200 text-slate-900"
+              }`}>
+              <div className="flex items-start justify-between gap-4">
+                <span
+                  className={`text-xs font-bold tracking-wider ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                  {kpiPopup.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setKpiPopup(null)}
+                  aria-label="Close"
+                  className={`shrink-0 w-10 h-10 -mt-1 -mr-1 flex items-center justify-center rounded-full text-3xl leading-none font-bold transition-colors ${isDarkMode ? "text-slate-300 hover:text-white hover:bg-slate-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-100"}`}>
+                  ×
+                </button>
+              </div>
+              <p className="text-3xl font-black mt-3 break-all">
+                {kpiPopup.full}
+              </p>
             </div>
-            <p className="text-3xl font-black mt-3 break-all">{kpiPopup.full}</p>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body,
+        )}
 
       {/* Pop up detail per baris */}
-      {rowPopup && typeof document !== "undefined" && createPortal(
-        <div
-          className="fixed inset-0 z-[300] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setRowPopup(null)}>
+      {rowPopup &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
-            onClick={(e) => e.stopPropagation()}
-            className={`w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl p-6 ${
-              isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"
-            }`}>
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className={`text-[11px] font-bold tracking-wider ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                  PID
-                </p>
-                <p className="font-mono font-bold text-indigo-600 dark:text-indigo-400 break-all">{rowPopup.pid}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRowPopup(null)}
-                aria-label="Close"
-                className={`text-lg leading-none font-bold ${isDarkMode ? "text-slate-400 hover:text-white" : "text-slate-400 hover:text-slate-900"}`}>
-                ×
-              </button>
-            </div>
-
-            <p className={`text-[11px] font-bold tracking-wider mt-4 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-              SKU Name
-            </p>
-            <p className="font-semibold break-words">{rowPopup.skuName}</p>
-
-            <div className="flex flex-wrap gap-2 mt-3">
-              {[rowPopup.platform, rowPopup.brand, rowPopup.adType].filter(Boolean).map((t, i) => (
-                <span
-                  key={`${t}-${i}`}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${
-                    isDarkMode ? "bg-slate-700 text-slate-200" : "bg-slate-100 text-slate-700"
-                  }`}>
-                  {t}
-                </span>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mt-5">
-              {[
-                { label: "Spend", value: formatIDR(rowPopup.expense) },
-                { label: "Impressions", value: formatNum(rowPopup.impressions) },
-                { label: "Clicks", value: formatNum(rowPopup.clicks) },
-                { label: "GMV", value: formatIDR(rowPopup.gmv) },
-                { label: "ROAS", value: `${rowPopup.roas.toFixed(2)}x` },
-                {
-                  label: "CTR",
-                  value: rowPopup.impressions > 0 ? `${((rowPopup.clicks / rowPopup.impressions) * 100).toFixed(2)}%` : "-",
-                },
-                {
-                  label: "CPM",
-                  value: rowPopup.impressions > 0 ? formatIDR((rowPopup.expense / rowPopup.impressions) * 1000) : "-",
-                },
-                {
-                  label: "CPC",
-                  value: rowPopup.clicks > 0 ? formatIDR(rowPopup.expense / rowPopup.clicks) : "-",
-                },
-              ].map((m) => (
-                <div key={m.label} className={`rounded-xl p-3 ${isDarkMode ? "bg-slate-900/60" : "bg-slate-50"}`}>
-                  <span className={`text-[11px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    {m.label}
-                  </span>
-                  <strong className="block text-base font-black mt-0.5 break-all">{m.value}</strong>
+            className="fixed inset-0 z-[300] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setRowPopup(null)}>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl border shadow-2xl p-6 ${
+                isDarkMode
+                  ? "bg-slate-800 border-slate-700 text-white"
+                  : "bg-white border-slate-200 text-slate-900"
+              }`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p
+                    className={`text-[11px] font-bold tracking-wider ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                    PID
+                  </p>
+                  <p className="font-mono font-bold text-indigo-600 dark:text-indigo-400 break-all">
+                    {rowPopup.pid}
+                  </p>
                 </div>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setRowPopup(null)}
+                  aria-label="Close"
+                  className={`shrink-0 w-10 h-10 -mt-1 -mr-1 flex items-center justify-center rounded-full text-3xl leading-none font-bold transition-colors ${isDarkMode ? "text-slate-300 hover:text-white hover:bg-slate-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-100"}`}>
+                  ×
+                </button>
+              </div>
+
+              <p
+                className={`text-[11px] font-bold tracking-wider mt-4 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                SKU Name
+              </p>
+              <p className="font-semibold break-words">{rowPopup.skuName}</p>
+
+              <div className="flex flex-wrap gap-2 mt-3">
+                {[rowPopup.platform, rowPopup.brand, rowPopup.adType]
+                  .filter(Boolean)
+                  .map((t, i) => (
+                    <span
+                      key={`${t}-${i}`}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                        isDarkMode
+                          ? "bg-slate-700 text-slate-200"
+                          : "bg-slate-100 text-slate-700"
+                      }`}>
+                      {t}
+                    </span>
+                  ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-5">
+                {[
+                  { label: "Spend", value: formatIDR(rowPopup.expense) },
+                  {
+                    label: "Impressions",
+                    value: formatNum(rowPopup.impressions),
+                  },
+                  { label: "Clicks", value: formatNum(rowPopup.clicks) },
+                  { label: "GMV", value: formatIDR(rowPopup.gmv) },
+                  { label: "ROAS", value: `${rowPopup.roas.toFixed(2)}x` },
+                  {
+                    label: "CTR",
+                    value:
+                      rowPopup.impressions > 0
+                        ? `${((rowPopup.clicks / rowPopup.impressions) * 100).toFixed(2)}%`
+                        : "-",
+                  },
+                  {
+                    label: "CPM",
+                    value:
+                      rowPopup.impressions > 0
+                        ? formatIDR(
+                            (rowPopup.expense / rowPopup.impressions) * 1000,
+                          )
+                        : "-",
+                  },
+                  {
+                    label: "CPC",
+                    value:
+                      rowPopup.clicks > 0
+                        ? formatIDR(rowPopup.expense / rowPopup.clicks)
+                        : "-",
+                  },
+                ].map((m) => (
+                  <div
+                    key={m.label}
+                    className={`rounded-xl p-3 ${isDarkMode ? "bg-slate-900/60" : "bg-slate-50"}`}>
+                    <span
+                      className={`text-[11px] font-bold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                      {m.label}
+                    </span>
+                    <strong className="block text-base font-black mt-0.5 break-all">
+                      {m.value}
+                    </strong>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

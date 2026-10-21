@@ -401,19 +401,34 @@ export default function Sidebar(props: SidebarProps) {
                   </select>
                 </div>
               )}
-              {(activeEngine === "commerce" || activeEngine === "creative") && (
+              {activeEngine === "commerce" && (
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1.5">
                     Funnel
+                  </label>
+                  <select
+                    value={filters.funnel}
+                    onChange={(e) => onFilterChange("funnel", e.target.value)}
+                    className={selectClass}>
+                    {getDependentOptions("Funnel", "funnel").map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {activeEngine === "creative" && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                    Ad Type
                   </label>
                   <select
                     value={filters.adType}
                     onChange={(e) => onFilterChange("adType", e.target.value)}
                     className={selectClass}>
                     {getDependentOptions(
-                      CONFIG[
-                        activeEngine === "commerce" ? "commerce" : "creative"
-                      ].colAdType,
+                      CONFIG.creative.colAdType,
                       "adType",
                     ).map((o) => (
                       <option key={o} value={o}>

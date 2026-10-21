@@ -1,25 +1,24 @@
-// Data layer untuk halaman General Overview (Home).
-// Sumber data: sheet per bulan ("Wardah Sep", "Wardah Oct", ...).
-// Kolom yang dipakai: platform, product, date, spend, impressions, clicks, catalog_segment_value_omni_purchase (tampil sebagai GMV).
+// Data layer: merapikan baris dari tab "Media API" dan "Commerce" untuk semua halaman.
 
 import { parseNum } from "@/lib/formatters";
 
-// Bulan yang tersedia di filter -> nama sheet-nya. Tambah baris baru di sini kalau ada bulan baru.
-export const HOME_MONTH_SHEETS: Record<string, string> = {
-  "2026-10": "Wardah Oct",
-  "2026-09": "Wardah Sep",
-};
+// Nama tab di Google Sheets.
+// Digital Media membaca "Media API", Commerce Tracker membaca "Commerce", General Overview membaca keduanya.
+export const MEDIA_SHEET = "Media API";
+export const COMMERCE_SHEET = "Commerce";
 
-// Urutan di filter: terbaru di atas
-export const HOME_MONTHS: string[] = Object.keys(HOME_MONTH_SHEETS).sort(
-  (a, b) => b.localeCompare(a),
-);
+// Daftar tab yang boleh dibaca. Dipakai juga oleh app/api/sheets/route.ts sebagai daftar tab yang diizinkan.
+export const HOME_MONTH_SHEETS: Record<string, string> = {
+  media: MEDIA_SHEET,
+  commerce: COMMERCE_SHEET,
+};
 
 export type HomeRow = {
   ym: string; // "2026-10"
   day: number; // 1..31
   platform: string; // sudah dinormalisasi: Shopee, Lazada, Meta, TikTok
   brand: string; // dari kolom "product"
+  format: string; // kolom Format (Media API) / New Format (Commerce)
   funnel: string; // kolom "funnel" (atau diekstrak dari campaign)
   category: string; // kolom "category" (atau diekstrak dari campaign)
   spend: number;
@@ -97,216 +96,168 @@ const validYmd = (p: Ymd | null): p is Ymd =>
 
 const ymOf = (p: Ymd) => `${p.y}-${String(p.m).padStart(2, "0")}`;
 
-// Ubah baris mentah dari satu sheet jadi baris standar.
-// Format tanggal (bulan/hari vs hari/bulan) dideteksi otomatis dari bulan yang diharapkan untuk sheet itu.
-export const normalizeSheetRows = (
-  rawRows: any[],
-  expectedYm: string,
-): { rows: HomeRow[]; missing: string[] } => {
-  if (!rawRows || rawRows.length === 0) return { rows: [], missing: [] };
-
-  const keys = Object.keys(rawRows[0]);
-  const kDate = pickKey(keys, ["date", "day", "tanggal"]);
-  const kPlatform = pickKey(keys, ["platform"]);
-  const kBrand = pickKey(keys, ["product", "brand"]);
-  const kSpend = pickKey(keys, ["spend", "cost", "ad spend"]);
-  const kImp = pickKey(keys, ["impressions", "impression"]);
-  const kClicks = pickKey(keys, ["clicks", "click"]);
-  // GMV di dashboard diambil dari kolom catalog_segment_value_omni_purchase
-  const kFunnel = pickKey(keys, ["funnel"]);
-  const kCategory = pickKey(keys, ["category"]);
-  const kCampaign = pickKey(keys, ["campaign", "campaign_name"]);
-  const kGmv = pickKey(keys, ["catalog_segment_value_omni_purchase"]);
-
-  const missing: string[] = [];
-  if (!kDate) missing.push("date");
-  if (!kSpend) missing.push("spend");
-  if (!kImp) missing.push("impressions");
-  if (!kClicks) missing.push("clicks");
-  if (!kGmv) missing.push("catalog_segment_value_omni_purchase");
-  if (!kPlatform) missing.push("platform");
-  if (!kFunnel && !kCampaign) missing.push("funnel");
-  if (!kCategory && !kCampaign) missing.push("category");
-  if (!kDate) return { rows: [], missing };
-
-  // Deteksi format tanggal
+// Format tanggal di sheet bisa hari/bulan (01/04/2026 = 1 April) atau bulan/hari.
+// Dideteksi otomatis: kalau ada angka > 12 di posisi pertama berarti hari/bulan, di posisi kedua berarti bulan/hari.
+// Kalau tidak bisa dipastikan, dianggap hari/bulan.
+const detectDateFmt = (rawRows: any[], kDate: string): DateFmt => {
   let mdy = 0;
   let dmy = 0;
   for (const r of rawRows) {
-    const a = parseYmd(r[kDate], "MDY");
-    const b = parseYmd(r[kDate], "DMY");
-    if (validYmd(a) && ymOf(a) === expectedYm) mdy++;
-    if (validYmd(b) && ymOf(b) === expectedYm) dmy++;
+    const m = String(r[kDate] ?? "")
+      .trim()
+      .match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+    if (!m) continue;
+    if (+m[1] > 12) dmy++;
+    else if (+m[2] > 12) mdy++;
   }
-  const fmt: DateFmt = dmy > mdy ? "DMY" : "MDY";
+  return mdy > dmy ? "MDY" : "DMY";
+};
 
-  const rows: HomeRow[] = [];
+const isoOf = (p: Ymd) =>
+  `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
+
+// Tab "Media API" -> baris untuk halaman Digital Media.
+// Kolom sheet: Date, Brand, Category, Format, Funnel, Platform, Ad Type, Ad Spend, Impressions,
+// Purchases With Shared Items, Link Clicks, Anchor Clicks, ...
+// Tanggal diubah jadi YYYY-MM-DD; "Combined Clicks" = Link Clicks + Anchor Clicks (kalau kolom Combined Clicks tidak ada).
+export const toMediaApiRows = (rawRows: any[]): Record<string, any>[] => {
+  if (!rawRows || rawRows.length === 0) return [];
+  const keys = Object.keys(rawRows[0]);
+  const kDate = pickKey(keys, ["date", "tanggal"]);
+  if (!kDate) return [];
+  const kSpend = pickKey(keys, ["ad spend", "spend", "expense", "cost"]);
+  const kImp = pickKey(keys, ["impressions", "impression"]);
+  const kCombined = pickKey(keys, ["combined clicks"]);
+  const kLink = pickKey(keys, ["link clicks", "link click"]);
+  const kAnchor = pickKey(keys, ["anchor clicks", "anchor click"]);
+  const kKpi = pickKey(keys, ["kpi"]);
+  const kAdType = pickKey(keys, ["ad type"]);
+  const kFunnel = pickKey(keys, ["funnel"]);
+  const kBrand = pickKey(keys, ["brand"]);
+  const fmt = detectDateFmt(rawRows, kDate);
+
+  const out: Record<string, any>[] = [];
   for (const r of rawRows) {
     const p = parseYmd(r[kDate], fmt);
     if (!validYmd(p)) continue;
-    rows.push({
-      ym: ymOf(p),
-      day: p.d,
-      platform: normalizePlatform(kPlatform ? r[kPlatform] : ""),
-      brand: String(kBrand ? (r[kBrand] ?? "") : "").trim(),
-      funnel:
+    out.push({
+      ...r,
+      Date: isoOf(p),
+      Brand: String(kBrand ? (r[kBrand] ?? "") : "").trim(),
+      "Ad Spend": kSpend ? parseNum(r[kSpend]) : 0,
+      Impressions: kImp ? parseNum(r[kImp]) : 0,
+      "Combined Clicks": kCombined
+        ? parseNum(r[kCombined])
+        : (kLink ? parseNum(r[kLink]) : 0) +
+          (kAnchor ? parseNum(r[kAnchor]) : 0),
+      KPI: kKpi ? r[kKpi] : kAdType ? r[kAdType] : kFunnel ? r[kFunnel] : "",
+    });
+  }
+  return out;
+};
+
+// Tab "Commerce" -> baris untuk halaman Commerce Tracker dan PID & SKU.
+// Kolom sheet: Platform, Placement, Ad Type, Date, PID / CID, Ad Name, Product Name, Bidding Method,
+// Impression, Clicks, Orders, Direct Order, Items Sold, Direct Items, GMV, Direct GMV, Expense, Live Views, Brand, ..., Brand fx.
+export const toCommerceApiRows = (rawRows: any[]): Record<string, any>[] => {
+  if (!rawRows || rawRows.length === 0) return [];
+  const keys = Object.keys(rawRows[0]);
+  const kDate = pickKey(keys, ["date", "tanggal"]);
+  if (!kDate) return [];
+  const kImp = pickKey(keys, ["impressions", "impression"]);
+  const kPid = pickKey(keys, ["pid / cid", "pid", "cid"]);
+  const kName = pickKey(keys, ["product name", "sku name", "ad name"]);
+  const kAdType = pickKey(keys, ["ad type"]);
+  const kBrandFx = pickKey(keys, ["brand fx"]);
+  const kBrand = pickKey(keys, ["brand"]);
+  const kFormat = pickKey(keys, ["new format", "format"]);
+  const kFunnel = pickKey(keys, ["funnel"]);
+  const fmt = detectDateFmt(rawRows, kDate);
+
+  const out: Record<string, any>[] = [];
+  for (const r of rawRows) {
+    const p = parseYmd(r[kDate], fmt);
+    if (!validYmd(p)) continue;
+    const brand = String(
+      (kBrandFx ? r[kBrandFx] : "") || (kBrand ? r[kBrand] : "") || "",
+    ).trim();
+    out.push({
+      ...r,
+      Date: isoOf(p),
+      "Brand fx": brand,
+      Format: String(kFormat ? (r[kFormat] ?? "") : "").trim(),
+      Impressions: kImp ? parseNum(r[kImp]) : 0,
+      PID: String(kPid ? (r[kPid] ?? "") : "").trim(),
+      "SKU Name": String(kName ? (r[kName] ?? "") : "").trim(),
+      Funnel: String(kFunnel ? (r[kFunnel] ?? "") : "").trim(),
+      "Live Type":
         String(kFunnel ? (r[kFunnel] ?? "") : "").trim() ||
-        funnelFromCampaign(kCampaign ? r[kCampaign] : "") ||
-        "Unspecified",
+        (kAdType ? r[kAdType] : ""),
+    });
+  }
+  return out;
+};
+
+// General Overview = gabungan Media API + Commerce jadi satu format.
+// Media API: spend = Ad Spend. Commerce: spend = Expense, GMV = GMV, funnel = "Conversion".
+export const buildHomeRows = (
+  mediaRaw: any[],
+  commerceRaw: any[],
+): { rows: HomeRow[]; missing: string[] } => {
+  const rows: HomeRow[] = [];
+  const missing: string[] = [];
+  const ymd = (iso: string) => {
+    const [y, m, d] = iso.split("-").map(Number);
+    return { ym: `${y}-${String(m).padStart(2, "0")}`, day: d };
+  };
+
+  const media = toMediaApiRows(mediaRaw);
+  if (mediaRaw && mediaRaw.length > 0) {
+    const keys = Object.keys(mediaRaw[0]);
+    if (!pickKey(keys, ["date"])) missing.push("Media API: Date");
+    if (!pickKey(keys, ["ad spend", "spend"]))
+      missing.push("Media API: Ad Spend");
+    if (!pickKey(keys, ["impressions", "impression"]))
+      missing.push("Media API: Impressions");
+  }
+  for (const r of media) {
+    rows.push({
+      ...ymd(r.Date),
+      platform: normalizePlatform(r.Platform),
+      brand: String(r.Brand || "").trim(),
+      format: String(r.Format || "").trim(),
+      funnel: String(r.Funnel || "").trim() || "Unspecified",
+      category: String(r.Category || "").trim() || "Unspecified",
+      spend: r["Ad Spend"],
+      impressions: r.Impressions,
+      clicks: r["Combined Clicks"],
+      gmv: 0, // GMV hanya dari tab Commerce (hindari hitungan ganda)
+    });
+  }
+
+  const commerce = toCommerceApiRows(commerceRaw);
+  if (commerceRaw && commerceRaw.length > 0) {
+    const keys = Object.keys(commerceRaw[0]);
+    if (!pickKey(keys, ["date"])) missing.push("Commerce: Date");
+    if (!pickKey(keys, ["expense"])) missing.push("Commerce: Expense");
+    if (!pickKey(keys, ["gmv"])) missing.push("Commerce: GMV");
+  }
+  for (const r of commerce) {
+    rows.push({
+      ...ymd(r.Date),
+      platform: normalizePlatform(r.Platform),
+      brand: String(r["Brand fx"] || "").trim(),
+      format: String(r.Format || "").trim(),
+      funnel: String(r.Funnel || "").trim() || "Conversion",
       category:
-        String(kCategory ? (r[kCategory] ?? "") : "").trim() ||
-        categoryFromCampaign(kCampaign ? r[kCampaign] : "") ||
-        "Unspecified",
-      spend: kSpend ? parseNum(r[kSpend]) : 0,
-      impressions: kImp ? parseNum(r[kImp]) : 0,
-      clicks: kClicks ? parseNum(r[kClicks]) : 0,
-      gmv: kGmv ? parseNum(r[kGmv]) : 0,
+        String(r["New Category"] || r.Category || "").trim() || "Unspecified",
+      spend: parseNum(r.Expense),
+      impressions: r.Impressions,
+      clicks: parseNum(r.Clicks),
+      gmv: parseNum(r.GMV),
     });
   }
   return { rows, missing };
-};
-
-// Untuk halaman PID & SKU: ubah baris sheet jadi bentuk yang dibaca halaman itu
-// (PID = ad_id, SKU Name = ad_name, Ad Type = funnel).
-const skuPairs = (
-  rawRows: any[],
-  expectedYm: string,
-): { raw: any; row: Record<string, any> }[] => {
-  if (!rawRows || rawRows.length === 0) return [];
-  const keys = Object.keys(rawRows[0]);
-  const kDate = pickKey(keys, ["date", "day", "tanggal"]);
-  if (!kDate) return [];
-  const kPlatform = pickKey(keys, ["platform"]);
-  const kBrand = pickKey(keys, ["product", "brand"]);
-  const kSpend = pickKey(keys, ["spend", "cost", "ad spend"]);
-  const kGmv = pickKey(keys, ["catalog_segment_value_omni_purchase"]);
-  const kImp = pickKey(keys, ["impressions", "impression"]);
-  const kClicks = pickKey(keys, ["clicks", "click"]);
-  const kOrders = pickKey(keys, ["results", "result", "orders", "purchases"]);
-  const kPid = pickKey(keys, ["ad_id", "pid", "product_id"]);
-  const kName = pickKey(keys, ["ad_name", "sku_name", "product_name"]);
-  const kFunnel = pickKey(keys, ["funnel"]);
-  const kCampaign = pickKey(keys, ["campaign", "campaign_name"]);
-
-  let mdy = 0;
-  let dmy = 0;
-  for (const r of rawRows) {
-    const a = parseYmd(r[kDate], "MDY");
-    const b = parseYmd(r[kDate], "DMY");
-    if (validYmd(a) && ymOf(a) === expectedYm) mdy++;
-    if (validYmd(b) && ymOf(b) === expectedYm) dmy++;
-  }
-  const fmt: DateFmt = dmy > mdy ? "DMY" : "MDY";
-
-  const out: { raw: any; row: Record<string, any> }[] = [];
-  for (const r of rawRows) {
-    const p = parseYmd(r[kDate], fmt);
-    if (!validYmd(p)) continue;
-    const funnel =
-      String(kFunnel ? (r[kFunnel] ?? "") : "").trim() ||
-      funnelFromCampaign(kCampaign ? r[kCampaign] : "");
-    out.push({
-      raw: r,
-      row: {
-        Date: `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`,
-        "Brand fx": String(kBrand ? (r[kBrand] ?? "") : "").trim(),
-        Platform: normalizePlatform(kPlatform ? r[kPlatform] : ""),
-        "Live Type": funnel,
-        "Ad Type": funnel,
-        PID: String(kPid ? (r[kPid] ?? "") : "").trim(),
-        "SKU Name": String(kName ? (r[kName] ?? "") : "").trim(),
-        Expense: kSpend ? parseNum(r[kSpend]) : 0,
-        GMV: kGmv ? parseNum(r[kGmv]) : 0,
-        Impressions: kImp ? parseNum(r[kImp]) : 0,
-        Clicks: kClicks ? parseNum(r[kClicks]) : 0,
-        "Items Sold": kOrders ? parseNum(r[kOrders]) : 0,
-      },
-    });
-  }
-  return out;
-};
-
-export const toSkuRows = (
-  rawRows: any[],
-  expectedYm: string,
-): Record<string, any>[] => skuPairs(rawRows, expectedYm).map((x) => x.row);
-
-// Untuk halaman Commerce Tracker: hanya baris "commerce"
-// = CPAS Shopee & Lazada (iklan Meta ke marketplace) + TikTok dengan funnel Conversion.
-// Meta biasa dan TikTok Awareness/Consideration masuk Digital Media.
-export const isCommerceRow = (row: Record<string, any>): boolean => {
-  const plat = String(row.Platform || "").toLowerCase();
-  if (plat === "shopee" || plat === "lazada") return true;
-  if (plat === "tiktok")
-    return String(row["Ad Type"] || "")
-      .toLowerCase()
-      .includes("conversion");
-  return false;
-};
-
-export const toCommerceRows = (
-  rawRows: any[],
-  expectedYm: string,
-): Record<string, any>[] =>
-  toSkuRows(rawRows, expectedYm).filter(isCommerceRow);
-
-// Untuk halaman Digital Media: kebalikan Commerce
-// = Meta biasa + TikTok dengan funnel Awareness/Consideration (bukan Conversion).
-// Nama kolom mengikuti yang dibaca DigitalMediaView.
-export const isDigitalRow = (row: Record<string, any>): boolean => {
-  const plat = String(row.Platform || "").toLowerCase();
-  if (plat === "meta") return true;
-  if (plat === "tiktok")
-    return !String(row.KPI || "")
-      .toLowerCase()
-      .includes("conversion");
-  return false;
-};
-
-export const toMediaRows = (
-  rawRows: any[],
-  expectedYm: string,
-): Record<string, any>[] => {
-  if (!rawRows || rawRows.length === 0) return [];
-  const keys = Object.keys(rawRows[0]);
-  const kViews15 = pickKey(keys, [
-    "video_play_15s",
-    "video_views_15s",
-    "views_15s",
-    "thruplay",
-    "video_p15",
-    "video_view_15s",
-  ]);
-  const kViews6 = pickKey(keys, [
-    "video_play_6s",
-    "video_views_6s",
-    "views_6s",
-    "video_view_6s",
-    "6s_video_views",
-    "video_views_p6s",
-  ]);
-  const kObj = pickKey(keys, ["objective"]);
-  const out: Record<string, any>[] = [];
-  for (const { raw: r, row: b } of skuPairs(rawRows, expectedYm)) {
-    const row = {
-      Date: b.Date,
-      Brand: b["Brand fx"],
-      Platform: b.Platform,
-      Funnel: b["Ad Type"],
-      KPI: b["Ad Type"],
-      Format: (kObj ? String(r[kObj] ?? "").trim() : "") || "-",
-      "Ad Spend": b.Expense,
-      Impressions: b.Impressions,
-      "Combined Clicks": b.Clicks,
-      Views: kViews15 ? parseNum(r[kViews15]) : 0,
-      "Views 6s": kViews6 ? parseNum(r[kViews6]) : 0,
-      Result: 0,
-      GMV: b.GMV,
-      "Purchases With Shared Items": b["Items Sold"],
-    };
-    if (isDigitalRow(row)) out.push(row);
-  }
-  return out;
 };
 
 type Totals = {
@@ -408,6 +359,7 @@ export const buildHomeSummary = (
   periods: string[],
   brand: string,
   missing: string[] = [],
+  format: string = "All",
 ) => {
   const sortedPeriods = [...periods].sort();
 
@@ -422,8 +374,11 @@ export const buildHomeSummary = (
   const inProgress = (ym: string) =>
     ym === latestDataYm && maxDay[ym] < daysInMonth(ym);
 
-  const rows =
-    brand === "All" ? allRows : allRows.filter((r) => r.brand === brand);
+  const rows = allRows.filter(
+    (r) =>
+      (brand === "All" || r.brand === brand) &&
+      (format === "All" || r.format === format),
+  );
 
   const currentRows = rows.filter((r) => sortedPeriods.includes(r.ym));
   // Pembanding = bulan sebelumnya. Kalau bulan terpilih masih berjalan, dipotong di tanggal yang sama (like-for-like).

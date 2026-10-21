@@ -321,18 +321,15 @@ export default function DigitalMediaView({
   const generatePlatformSummaryBodyHTML = useCallback(() => {
     const filterPlatform = (
       rows: any[],
-      plat: "Overall" | "Meta" | "TikTok",
+      plat: "Overall" | "Meta" | "Instagram" | "TikTok",
     ) => {
       if (plat === "Overall") return rows;
       return rows.filter((r) => {
         const p = String(r[CONFIG.media.colPlatform] || "").toLowerCase();
+        const isIg = p.includes("instagram") || p === "ig";
+        if (plat === "Instagram") return isIg;
         if (plat === "Meta")
-          return (
-            p.includes("meta") ||
-            p.includes("facebook") ||
-            p.includes("ig") ||
-            p.includes("instagram")
-          );
+          return !isIg && (p.includes("meta") || p.includes("facebook"));
         return p.includes("tiktok");
       });
     };
@@ -361,9 +358,10 @@ export default function DigitalMediaView({
       };
     };
 
-    const platforms: ("Overall" | "Meta" | "TikTok")[] = [
+    const platforms: ("Overall" | "Meta" | "Instagram" | "TikTok")[] = [
       "Overall",
       "Meta",
+      "Instagram",
       "TikTok",
     ];
     const metricNames = [
@@ -876,7 +874,7 @@ export default function DigitalMediaView({
 
   return (
     <div className="w-full space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-5 mb-6">
         {(
           [
             {
@@ -913,6 +911,26 @@ export default function DigitalMediaView({
                   strokeWidth="2.5"
                   d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
                 />
+              ),
+            },
+            {
+              ctx: "Instagram",
+              title: "Instagram",
+              k: mediaKPIs.instagram,
+              box: "bg-[#D6657A]",
+              ring: "ring-rose-300 shadow-rose-500/40",
+              head: "text-rose-50",
+              lbl: "text-rose-50",
+              line: "border-rose-300",
+              icon: (
+                <g
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2.2">
+                  <path d="M3 8a2 2 0 012-2h2l1.5-2h7L17 6h2a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+                  <circle cx="12" cy="13" r="3.5" />
+                </g>
               ),
             },
             {

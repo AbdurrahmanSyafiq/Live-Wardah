@@ -1672,7 +1672,7 @@ export default function CommerceTrackerView({
                   type="button"
                   onClick={() => setKpiPopup(null)}
                   aria-label="Close"
-                  className={`text-lg leading-none font-bold ${isDarkMode ? "text-slate-400 hover:text-white" : "text-slate-400 hover:text-slate-900"}`}>
+                  className={`shrink-0 w-10 h-10 -mt-1 -mr-1 flex items-center justify-center rounded-full text-3xl leading-none font-bold transition-colors ${isDarkMode ? "text-slate-300 hover:text-white hover:bg-slate-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-100"}`}>
                   ×
                 </button>
               </div>
