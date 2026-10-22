@@ -140,7 +140,7 @@ export default function DashboardApp() {
     setDashboardContext("Overall");
     setTableColFilter1("All");
     setTableColFilter2("All");
-    setFilters((prev) => ({ ...prev, format: "All" }));
+    setFilters((prev) => ({ ...prev, format: "All", funnel: "All" }));
 
     if (forceSync) {
       if (engine === "media") {
@@ -172,6 +172,9 @@ export default function DashboardApp() {
           dataCache.current[sheetName] = result.data;
           return result.data;
         }
+        alert(
+          `Failed to load tab "${sheetName}": ${result.error || "unknown error"}`,
+        );
         return [];
       };
 
@@ -306,10 +309,11 @@ export default function DashboardApp() {
       filtered = filtered.filter(
         (r) => String(r[cfg.colBrand]) === filters.brand,
       );
-    if (activeEngine === "media") {
+    if (activeEngine === "media" || activeEngine === "commerce") {
+      const funnelCol = cfg.colFunnel ?? "Funnel";
       if (filterKeyToExclude !== "funnel" && filters.funnel !== "All")
         filtered = filtered.filter(
-          (r) => String(r[cfg.colFunnel]) === filters.funnel,
+          (r) => String(r[funnelCol]) === filters.funnel,
         );
     }
     if (activeEngine === "commerce" || activeEngine === "creative") {
@@ -830,9 +834,9 @@ export default function DashboardApp() {
         )
           return false;
         if (
-          activeEngine === "media" &&
+          (activeEngine === "media" || activeEngine === "commerce") &&
           filters.funnel !== "All" &&
-          String(row[cfg.colFunnel]) !== filters.funnel
+          String(row[(cfg as any).colFunnel ?? "Funnel"]) !== filters.funnel
         )
           return false;
         if (
