@@ -133,7 +133,8 @@ export const toMediaApiRows = (rawRows: any[]): Record<string, any>[] => {
   const kKpi = pickKey(keys, ["kpi"]);
   const kAdType = pickKey(keys, ["ad type"]);
   const kFunnel = pickKey(keys, ["funnel"]);
-  const kBrand = pickKey(keys, ["brand"]);
+  // Brand diambil dari kolom Brand_2 (kalau kolomnya tidak ada, pakai kolom Brand)
+  const kBrand = pickKey(keys, ["Brand_2", "brand"]);
   const fmt = detectDateFmt(rawRows, kDate);
 
   const out: Record<string, any>[] = [];
@@ -168,6 +169,8 @@ export const toCommerceApiRows = (rawRows: any[]): Record<string, any>[] => {
   const kPid = pickKey(keys, ["pid / cid", "pid", "cid"]);
   const kName = pickKey(keys, ["product name", "sku name", "ad name"]);
   const kAdType = pickKey(keys, ["ad type"]);
+  // Brand diambil dari kolom Brand_2 (kalau kolomnya tidak ada, pakai Brand fx / Brand)
+  const kBrand2 = pickKey(keys, ["Brand_2"]);
   const kBrandFx = pickKey(keys, ["brand fx"]);
   const kBrand = pickKey(keys, ["brand"]);
   const kFormat = pickKey(keys, ["new format", "format"]);
@@ -179,7 +182,9 @@ export const toCommerceApiRows = (rawRows: any[]): Record<string, any>[] => {
     const p = parseYmd(r[kDate], fmt);
     if (!validYmd(p)) continue;
     const brand = String(
-      (kBrandFx ? r[kBrandFx] : "") || (kBrand ? r[kBrand] : "") || "",
+      kBrand2
+        ? (r[kBrand2] ?? "")
+        : (kBrandFx ? r[kBrandFx] : "") || (kBrand ? r[kBrand] : "") || "",
     ).trim();
     out.push({
       ...r,
@@ -215,8 +220,7 @@ export const buildHomeRows = (
   if (mediaRaw && mediaRaw.length > 0) {
     const keys = Object.keys(mediaRaw[0]);
     if (!pickKey(keys, ["date"])) missing.push("Media API: Date");
-    if (!pickKey(keys, ["ad spend", "spend"]))
-      missing.push("Media API: Ad Spend");
+    if (!pickKey(keys, ["ad spend", "spend"])) missing.push("Media API: Ad Spend");
     if (!pickKey(keys, ["impressions", "impression"]))
       missing.push("Media API: Impressions");
   }
