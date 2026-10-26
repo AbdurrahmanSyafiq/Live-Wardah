@@ -5,10 +5,17 @@ interface SidebarProps {
   isSidebarOpen: boolean;
   setIsSidebarOpen: (v: boolean) => void;
   currentView: "login" | "welcome" | "home" | "dashboard";
-  activeEngine: "media" | "commerce" | "creative" | "signal" | "sku" | null;
+  activeEngine:
+    | "media"
+    | "commerce"
+    | "creative"
+    | "signal"
+    | "sku"
+    | "competitor"
+    | null;
   onSelectHome: () => void;
   onSelectEngine: (
-    engine: "media" | "commerce" | "creative" | "signal" | "sku",
+    engine: "media" | "commerce" | "creative" | "signal" | "sku" | "competitor",
   ) => void;
   isDarkMode: boolean;
   granularity: string;
@@ -213,6 +220,24 @@ export default function Sidebar(props: SidebarProps) {
           )}
         </button>
 
+        <button
+          onClick={() => onSelectEngine("competitor")}
+          title="Competitor"
+          className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? "px-3.5 py-3 gap-3" : "justify-center p-3"} ${activeEngine === "competitor" ? "bg-indigo-600 text-white shadow-md" : "hover:bg-[#124246] text-slate-400"}`}>
+          <svg
+            className="w-5 h-5 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+          </svg>
+          {isSidebarOpen && <span className="truncate">Competitor</span>}
+        </button>
+
         {/* <button onClick={() => onSelectEngine('creative')} title="Top Creative" className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? 'px-3.5 py-3 gap-3' : 'justify-center p-3'} ${activeEngine === 'creative' ? 'bg-indigo-600 text-white shadow-md' : 'hover:bg-[#124246] text-slate-400'}`}>
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
           {isSidebarOpen && <span className="truncate">Top Creative</span>}
@@ -224,7 +249,15 @@ export default function Sidebar(props: SidebarProps) {
         </button> */}
       </div>
 
-      {isSidebarOpen && (
+      {isSidebarOpen && activeEngine === "competitor" && (
+        <div className="p-4 flex-1">
+          <p className="px-1 text-[11px] leading-relaxed text-slate-500">
+            Filter halaman Competitor ada di atas chart.
+          </p>
+        </div>
+      )}
+
+      {isSidebarOpen && activeEngine !== "competitor" && (
         <div className="p-4 space-y-4 flex-1">
           <p className="px-1 text-[10px] font-black text-slate-500 uppercase tracking-widest">
             Filters

@@ -18,6 +18,8 @@ import {
   getWeekBucket,
 } from "@/lib/dateUtils";
 import {
+  MEDIA_SHEET,
+  COMPETITOR_SHEET,
   buildHomeRows,
   buildHomeSummary,
   toMediaApiRows,
@@ -30,6 +32,7 @@ import GeneralOverviewView from "@/components/views/GeneralOverviewView";
 import DigitalMediaView from "@/components/views/DigitalMediaView";
 import CommerceTrackerView from "@/components/views/CommerceTrackerView";
 import SkuPerformanceView from "@/components/views/SkuPerformanceView";
+import CompetitorView from "@/components/views/CompetitorView";
 import TopCreativeView from "@/components/views/TopCreativeView";
 import MediaSignalView from "@/components/views/MediaSignalView";
 
@@ -52,7 +55,7 @@ export default function DashboardApp() {
     "login" | "welcome" | "home" | "dashboard"
   >("login");
   const [activeEngine, setActiveEngine] = useState<
-    "media" | "commerce" | "creative" | "signal" | "sku" | null
+    "media" | "commerce" | "creative" | "signal" | "sku" | "competitor" | null
   >(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -134,7 +137,7 @@ export default function DashboardApp() {
   }, []);
 
   const loadData = async (
-    engine: "media" | "commerce" | "creative" | "signal" | "sku",
+    engine: "media" | "commerce" | "creative" | "signal" | "sku" | "competitor",
     forceSync = false,
   ) => {
     setDashboardContext("Overall");
@@ -144,10 +147,13 @@ export default function DashboardApp() {
 
     if (forceSync) {
       if (engine === "media") {
-        dataCache.current[CONFIG.media.sheet] = undefined as any;
+        dataCache.current[MEDIA_SHEET] = undefined as any;
       } else if (engine === "sku" || engine === "commerce") {
         dataCache.current[CONFIG.commerce.sheet] = undefined as any;
         dataCache.current["CIR DAILY"] = undefined as any;
+      } else if (engine === "competitor") {
+        dataCache.current[COMPETITOR_SHEET] = undefined as any;
+        dataCache.current[MEDIA_SHEET] = undefined as any;
       } else if (engine === "signal") {
         dataCache.current["Media Signal"] = undefined as any;
         dataCache.current["Media API"] = undefined as any;
@@ -180,7 +186,7 @@ export default function DashboardApp() {
 
       if (engine === "media") {
         // Digital Media dibaca dari tab "Media API"
-        const mediaRows = toMediaApiRows(await fetchSheet(CONFIG.media.sheet));
+        const mediaRows = toMediaApiRows(await fetchSheet(MEDIA_SHEET));
         if (mediaRows.length === 0)
           alert(
             'No digital media data loaded. Check that the "Media API" tab exists, has data, and is shared with the service account.',
@@ -207,6 +213,15 @@ export default function DashboardApp() {
             'No data loaded for PID & SKU. Check that the "Commerce" tab exists, has data, and is shared with the service account.',
           );
         setRawData(skuRows);
+      } else if (engine === "competitor") {
+        // Competitor: akun competitor dari tab "Competitor_sosmed_sinkron",
+        // brand kita dari tab "Media API (Filtered)"
+        const [competitorRows, ownRows] = await Promise.all([
+          fetchSheet(COMPETITOR_SHEET),
+          fetchSheet(MEDIA_SHEET),
+        ]);
+        setRawData(competitorRows);
+        setExtraSheetsData({ mediaApi: ownRows, commerce: [] });
       } else if (engine === "signal") {
         const [signalData, mediaApiData, commerceData] = await Promise.all([
           fetchSheet("Media Signal"),
@@ -227,7 +242,7 @@ export default function DashboardApp() {
   };
 
   const selectEngine = (
-    engine: "media" | "commerce" | "creative" | "signal" | "sku",
+    engine: "media" | "commerce" | "creative" | "signal" | "sku" | "competitor",
   ) => {
     setActiveEngine(engine);
     setCurrentView("dashboard");
@@ -238,7 +253,7 @@ export default function DashboardApp() {
     setIsLoading(true);
     try {
       // General Overview = gabungan tab "Media API" + "Commerce"
-      const names = [CONFIG.media.sheet, CONFIG.commerce.sheet];
+      const names = [MEDIA_SHEET, CONFIG.commerce.sheet];
       if (forceSync) {
         names.forEach((name) => {
           dataCache.current[name] = undefined as any;
@@ -299,7 +314,8 @@ export default function DashboardApp() {
   };
 
   const getDependentOptions = (colName: string, filterKeyToExclude: string) => {
-    if (!rawData || rawData.length === 0) return ["All"];
+    if (!rawData || rawData.length === 0 || activeEngine === "competitor")
+      return ["All"];
     const activeCfgKey =
       activeEngine === "sku" ? "commerce" : activeEngine || "media";
     const cfg = CONFIG[activeCfgKey] as any;
@@ -808,7 +824,12 @@ export default function DashboardApp() {
 
   const { curData, prevData, chartData, creativeData, globalDates } =
     useMemo(() => {
-      if (!activeEngine || activeEngine === "signal" || rawData.length === 0)
+      if (
+        !activeEngine ||
+        activeEngine === "signal" ||
+        activeEngine === "competitor" ||
+        rawData.length === 0
+      )
         return {
           curData: [],
           prevData: [],
@@ -1061,6 +1082,7 @@ export default function DashboardApp() {
       dashboardContext === "Overall" ||
       activeEngine === "creative" ||
       activeEngine === "signal" ||
+      activeEngine === "competitor" ||
       activeEngine === "sku"
     ) {
       return {
@@ -1463,7 +1485,9 @@ export default function DashboardApp() {
                       ? "Commerce Tracker"
                       : activeEngine === "sku"
                         ? "PID & SKU Performance"
-                        : "Top Creative"}
+                        : activeEngine === "competitor"
+                          ? "Competitor"
+                          : "Top Creative"}
             </h1>
           </div>
 
@@ -1622,6 +1646,14 @@ export default function DashboardApp() {
                 CONFIG.commerce.colBrand,
                 "brand",
               )}
+            />
+          )}
+
+          {activeEngine === "competitor" && (
+            <CompetitorView
+              rawData={rawData}
+              ownData={extraSheetsData.mediaApi}
+              isDarkMode={isDarkMode}
             />
           )}
 

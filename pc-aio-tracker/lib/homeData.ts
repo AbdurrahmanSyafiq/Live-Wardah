@@ -4,13 +4,15 @@ import { parseNum } from "@/lib/formatters";
 
 // Nama tab di Google Sheets.
 // Digital Media membaca "Media API", Commerce Tracker membaca "Commerce", General Overview membaca keduanya.
-export const MEDIA_SHEET = "Media API";
+export const MEDIA_SHEET = "Media API (Filtered)";
 export const COMMERCE_SHEET = "Commerce";
+export const COMPETITOR_SHEET = "Competitor_sosmed_sinkron";
 
 // Daftar tab yang boleh dibaca. Dipakai juga oleh app/api/sheets/route.ts sebagai daftar tab yang diizinkan.
 export const HOME_MONTH_SHEETS: Record<string, string> = {
   media: MEDIA_SHEET,
   commerce: COMMERCE_SHEET,
+  competitor: COMPETITOR_SHEET,
 };
 
 export type HomeRow = {
@@ -123,6 +125,8 @@ const isoOf = (p: Ymd) =>
 export const toMediaApiRows = (rawRows: any[]): Record<string, any>[] => {
   if (!rawRows || rawRows.length === 0) return [];
   const keys = Object.keys(rawRows[0]);
+  // Nama kolom dicocokkan tanpa peduli huruf besar/kecil, spasi, atau underscore
+  // (mis. "link_clicks" = "Link Clicks", "brand_2" = "Brand 2").
   const kDate = pickKey(keys, ["date", "tanggal"]);
   if (!kDate) return [];
   const kSpend = pickKey(keys, ["ad spend", "spend", "expense", "cost"]);
@@ -135,23 +139,64 @@ export const toMediaApiRows = (rawRows: any[]): Record<string, any>[] => {
   const kFunnel = pickKey(keys, ["funnel"]);
   // Brand diambil dari kolom brand_2 (kalau kolomnya tidak ada, pakai kolom Brand)
   const kBrand = pickKey(keys, ["brand_2", "brand"]);
+  const kPlatform = pickKey(keys, ["platform"]);
+  const kFormat = pickKey(keys, ["format"]);
+  const kCategory = pickKey(keys, ["category"]);
+  const kCampaign = pickKey(keys, ["campaign", "campaign_name"]);
+  const kGmv = pickKey(keys, [
+    "gmv",
+    "catalog_segment_value_omni_purchase",
+    "purchase value",
+  ]);
+  const kPurch = pickKey(keys, [
+    "purchases with shared items",
+    "purchases",
+    "purchase",
+  ]);
+  const kViews = pickKey(keys, [
+    "views",
+    "video_play_15s",
+    "video views 15s",
+    "thruplay",
+  ]);
+  const kViews6 = pickKey(keys, [
+    "views 6s",
+    "video_play_6s",
+    "video views 6s",
+  ]);
+  const kResult = pickKey(keys, ["result", "results"]);
   const fmt = detectDateFmt(rawRows, kDate);
 
   const out: Record<string, any>[] = [];
   for (const r of rawRows) {
     const p = parseYmd(r[kDate], fmt);
     if (!validYmd(p)) continue;
+    const funnel =
+      String(kFunnel ? (r[kFunnel] ?? "") : "").trim() ||
+      funnelFromCampaign(kCampaign ? r[kCampaign] : "");
+    const category =
+      String(kCategory ? (r[kCategory] ?? "") : "").trim() ||
+      categoryFromCampaign(kCampaign ? r[kCampaign] : "");
     out.push({
       ...r,
       Date: isoOf(p),
       Brand: String(kBrand ? (r[kBrand] ?? "") : "").trim(),
+      Platform: String(kPlatform ? (r[kPlatform] ?? "") : "").trim(),
+      Funnel: funnel,
+      Category: category,
+      Format: String(kFormat ? (r[kFormat] ?? "") : "").trim(),
       "Ad Spend": kSpend ? parseNum(r[kSpend]) : 0,
       Impressions: kImp ? parseNum(r[kImp]) : 0,
       "Combined Clicks": kCombined
         ? parseNum(r[kCombined])
         : (kLink ? parseNum(r[kLink]) : 0) +
           (kAnchor ? parseNum(r[kAnchor]) : 0),
-      KPI: kKpi ? r[kKpi] : kAdType ? r[kAdType] : kFunnel ? r[kFunnel] : "",
+      GMV: kGmv ? parseNum(r[kGmv]) : 0,
+      "Purchases With Shared Items": kPurch ? parseNum(r[kPurch]) : 0,
+      Views: kViews ? parseNum(r[kViews]) : 0,
+      "Views 6s": kViews6 ? parseNum(r[kViews6]) : 0,
+      Result: kResult ? parseNum(r[kResult]) : 0,
+      KPI: kKpi ? r[kKpi] : kAdType ? r[kAdType] : funnel,
     });
   }
   return out;
