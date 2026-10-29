@@ -1533,18 +1533,13 @@ export default function CommerceTrackerView({
             <h3 className="text-sm font-black text-blue-100 uppercase tracking-widest">
               Lazada
             </h3>
-            <div className="p-2.5 bg-white/20 rounded-xl">
-              <svg
-                className="w-5 h-5 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2.5"
-                  d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
-              </svg>
+            <div className="w-11 h-11 bg-white rounded-xl p-1 flex items-center justify-center shadow-sm">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logos/lazada-logo.jpg"
+                alt="Lazada"
+                className="max-w-full max-h-full object-contain"
+              />
             </div>
           </div>
           <div className="space-y-3">

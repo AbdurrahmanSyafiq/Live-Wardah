@@ -6,6 +6,7 @@ import { parseNum } from "@/lib/formatters";
 // Digital Media membaca "Media API", Commerce Tracker membaca "Commerce", General Overview membaca keduanya.
 export const MEDIA_SHEET = "Media API (Filtered)";
 export const COMMERCE_SHEET = "Commerce";
+export const CREATIVE_REPORT_SHEET = "Creative Report";
 export const COMPETITOR_SHEET = "Competitor_sosmed_sinkron";
 
 // Daftar tab yang boleh dibaca. Dipakai juga oleh app/api/sheets/route.ts sebagai daftar tab yang diizinkan.
@@ -13,6 +14,7 @@ export const HOME_MONTH_SHEETS: Record<string, string> = {
   media: MEDIA_SHEET,
   commerce: COMMERCE_SHEET,
   competitor: COMPETITOR_SHEET,
+  creativeReport: CREATIVE_REPORT_SHEET,
 };
 
 export type HomeRow = {
@@ -139,7 +141,8 @@ export const toMediaApiRows = (rawRows: any[]): Record<string, any>[] => {
   const kFunnel = pickKey(keys, ["funnel"]);
   // Brand diambil dari kolom brand_2 (kalau kolomnya tidak ada, pakai kolom Brand)
   const kBrand = pickKey(keys, ["brand_2", "brand"]);
-  const kPlatform = pickKey(keys, ["platform"]);
+  // Platform is read from the platform_2 column (falls back to platform)
+  const kPlatform = pickKey(keys, ["platform_2", "platform"]);
   const kFormat = pickKey(keys, ["format"]);
   const kCategory = pickKey(keys, ["category"]);
   const kCampaign = pickKey(keys, ["campaign", "campaign_name"]);
@@ -290,7 +293,7 @@ export const buildHomeRows = (
     const keys = Object.keys(commerceRaw[0]);
     if (!pickKey(keys, ["date"]) || !pickKey(keys, ["expense"]))
       missing.push(
-        `Commerce (kolom yang terbaca: ${keys.slice(0, 8).join(" | ")} ...)`,
+        `Commerce (columns found: ${keys.slice(0, 8).join(" | ")} ...)`,
       );
     if (!pickKey(keys, ["date"])) missing.push("Commerce: Date");
     if (!pickKey(keys, ["expense"])) missing.push("Commerce: Expense");

@@ -19,6 +19,10 @@ export type CompetitorPost = {
   ym: string; // "2026-10"
   day: number; // 1..31
   metrics: Record<string, number>;
+  campaign: string; // brand kita: Campaign Name (Media API)
+  postId: string; // competitor: id postingan (dari kolom id, atau dari url)
+  url: string;
+  caption: string;
 };
 
 const norm = (s: string) =>
@@ -78,6 +82,10 @@ type Source = {
   platform: string[];
   comp: string[];
   date: string[];
+  campaign: string[];
+  id: string[];
+  url: string[];
+  caption: string[];
   metrics: Record<string, string[]>;
 };
 
@@ -86,6 +94,10 @@ const COMPETITOR_SRC: Source = {
   platform: ["platform"],
   comp: ["competitor", "compared brand", "own brand", "brand kita"],
   date: ["published_at", "published at", "published date", "published", "date"],
+  campaign: [],
+  id: ["id", "post id", "video id"],
+  url: ["url", "link"],
+  caption: ["caption", "description"],
   metrics: {
     views: ["views", "view"],
     likes: ["likes", "like"],
@@ -96,9 +108,13 @@ const COMPETITOR_SRC: Source = {
 
 const OWN_SRC: Source = {
   brand: ["brand_2", "brand"],
-  platform: ["platform"],
+  platform: ["platform_2", "platform"],
   comp: [],
   date: ["date", "tanggal"],
+  campaign: ["campaign name", "campaign", "campaign_name"],
+  id: [],
+  url: [],
+  caption: [],
   metrics: {
     views: ["focused_view_15s"],
     likes: ["likes", "post reactions", "reactions", "post_reactions"],
@@ -113,30 +129,34 @@ type Normalized = {
   hasCompetitorCol: boolean;
 };
 
-const normalizeWith = (
-  rawRows: any[],
-  src: Source,
-  label: string,
-): Normalized => {
+// Large ids can arrive in scientific notation ("7.69E+18"); then take the id from the post url
+const resolvePostId = (id: string, url: string): string => {
+  if (id && !/e\+/i.test(id)) return id;
+  const m = url.match(/(\d{10,})/);
+  return m ? m[1] : id;
+};
+
+const normalizeWith = (rawRows: any[], src: Source, label: string): Normalized => {
   if (!rawRows || rawRows.length === 0)
     return { posts: [], missing: [], hasCompetitorCol: false };
   const keys = Object.keys(rawRows[0]);
   const kPlatform = pickKey(keys, src.platform);
   const kBrand = pickKey(keys, src.brand);
   const kComp = src.comp.length ? pickKey(keys, src.comp) : undefined;
+  const kCampaign = src.campaign.length ? pickKey(keys, src.campaign) : undefined;
+  const kId = src.id.length ? pickKey(keys, src.id) : undefined;
+  const kUrl = src.url.length ? pickKey(keys, src.url) : undefined;
+  const kCaption = src.caption.length ? pickKey(keys, src.caption) : undefined;
   const kDate =
-    pickKey(keys, src.date) ||
-    keys.find((k) => norm(k).startsWith("published"));
+    pickKey(keys, src.date) || keys.find((k) => norm(k).startsWith("published"));
   const mKeys: Record<string, string | undefined> = {};
-  Object.keys(src.metrics).forEach(
-    (m) => (mKeys[m] = pickKey(keys, src.metrics[m])),
-  );
+  Object.keys(src.metrics).forEach((m) => (mKeys[m] = pickKey(keys, src.metrics[m])));
 
   const missing: string[] = [];
   if (!kBrand) missing.push(`${label}: ${src.brand[0]}`);
   if (!kDate) missing.push(`${label}: ${src.date[0]}`);
   Object.keys(mKeys).forEach((m) => {
-    if (!mKeys[m]) missing.push(`${label}: ${m} (dihitung 0)`);
+    if (!mKeys[m]) missing.push(`${label}: ${m} (counted as 0)`);
   });
   if (!kBrand || !kDate) return { posts: [], missing, hasCompetitorCol: false };
 
@@ -151,7 +171,8 @@ const normalizeWith = (
       const col = mKeys[m];
       metrics[m] = col ? parseNum(r[col]) : 0;
     });
-    metrics.engagement = metrics.likes + metrics.comments + metrics.shares;
+    metrics.engagement =
+      metrics.likes + metrics.comments + metrics.shares;
     posts.push({
       platform: String(kPlatform ? (r[kPlatform] ?? "") : "").trim(),
       brand,
@@ -159,6 +180,13 @@ const normalizeWith = (
       ym: dt.ym,
       day: dt.day,
       metrics,
+      campaign: String(kCampaign ? (r[kCampaign] ?? "") : "").trim(),
+      postId: resolvePostId(
+        String(kId ? (r[kId] ?? "") : "").trim(),
+        String(kUrl ? (r[kUrl] ?? "") : "").trim(),
+      ),
+      url: String(kUrl ? (r[kUrl] ?? "") : "").trim(),
+      caption: String(kCaption ? (r[kCaption] ?? "") : "").trim(),
     });
   }
   return { posts, missing, hasCompetitorCol: !!kComp };
@@ -175,10 +203,7 @@ export const normalizeCompetitorSources = (
 } => {
   const own = normalizeWith(ownRaw, OWN_SRC, "Media API");
   const comp = normalizeWith(competitorRaw, COMPETITOR_SRC, "Competitor");
-  const missing = [
-    ...own.missing,
-    ...comp.missing.filter((m) => !m.includes("Competitor: competitor")),
-  ];
+  const missing = [...own.missing, ...comp.missing.filter((m) => !m.includes("Competitor: competitor"))];
   return {
     own: own.posts,
     competitors: comp.posts,

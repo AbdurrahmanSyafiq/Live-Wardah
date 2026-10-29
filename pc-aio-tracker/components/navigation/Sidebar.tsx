@@ -12,10 +12,18 @@ interface SidebarProps {
     | "signal"
     | "sku"
     | "competitor"
+    | "creativeReport"
     | null;
   onSelectHome: () => void;
   onSelectEngine: (
-    engine: "media" | "commerce" | "creative" | "signal" | "sku" | "competitor",
+    engine:
+      | "media"
+      | "commerce"
+      | "creative"
+      | "signal"
+      | "sku"
+      | "competitor"
+      | "creativeReport",
   ) => void;
   isDarkMode: boolean;
   granularity: string;
@@ -221,6 +229,24 @@ export default function Sidebar(props: SidebarProps) {
         </button>
 
         <button
+          onClick={() => onSelectEngine("creativeReport")}
+          title="Creative Report"
+          className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? "px-3.5 py-3 gap-3" : "justify-center p-3"} ${activeEngine === "creativeReport" ? "bg-indigo-600 text-white shadow-md" : "hover:bg-[#124246] text-slate-400"}`}>
+          <svg
+            className="w-5 h-5 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+          {isSidebarOpen && <span className="truncate">Creative Report</span>}
+        </button>
+
+        <button
           onClick={() => onSelectEngine("competitor")}
           title="Competitor"
           className={`w-full rounded-xl text-sm flex items-center font-semibold transition-all ${isSidebarOpen ? "px-3.5 py-3 gap-3" : "justify-center p-3"} ${activeEngine === "competitor" ? "bg-indigo-600 text-white shadow-md" : "hover:bg-[#124246] text-slate-400"}`}>
@@ -249,54 +275,36 @@ export default function Sidebar(props: SidebarProps) {
         </button> */}
       </div>
 
-      {isSidebarOpen && activeEngine === "competitor" && (
-        <div className="p-4 flex-1">
-          <p className="px-1 text-[11px] leading-relaxed text-slate-500">
-            Filter halaman Competitor ada di atas chart.
-          </p>
-        </div>
-      )}
+      {isSidebarOpen &&
+        (activeEngine === "competitor" ||
+          activeEngine === "creativeReport") && (
+          <div className="p-4 space-y-4 flex-1">
+            <p className="px-1 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+              Filters
+            </p>
 
-      {isSidebarOpen && activeEngine !== "competitor" && (
-        <div className="p-4 space-y-4 flex-1">
-          <p className="px-1 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-            Filters
-          </p>
-
-          {currentView !== "home" &&
-            activeEngine !== "creative" &&
-            activeEngine !== "signal" && (
+            {activeEngine === "creativeReport" && (
               <div className="bg-[#124246] p-3 rounded-2xl border border-slate-800 space-y-2.5 shadow-inner">
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs font-bold text-slate-400">
-                    Date Range
+                    Date
                   </label>
                   <select
-                    value={granularity}
+                    value={granularity === "daily" ? "daily" : "monthly"}
                     onChange={(e) => setGranularity(e.target.value)}
                     className="bg-transparent text-indigo-400 text-xs font-bold outline-none cursor-pointer appearance-none pr-6 text-right dropdown-arrow bg-[length:10px_10px] bg-[position:right_center]">
-                    <option value="monthly">Monthly</option>
-                    <option value="weekly">Weekly MTD</option>
-                    <option value="daily">Daily</option>
+                    <option value="monthly">By Month</option>
+                    <option value="daily">Date Range</option>
                   </select>
                 </div>
-                {granularity === "monthly" && (
+                {granularity !== "daily" ? (
                   <input
                     type="month"
                     value={dateMonth}
                     onChange={(e) => setDateMonth(e.target.value)}
                     className={isDarkMode ? dateClassDark : dateClass}
                   />
-                )}
-                {granularity === "weekly" && (
-                  <input
-                    type="date"
-                    value={dateWeekly}
-                    onChange={(e) => setDateWeekly(e.target.value)}
-                    className={isDarkMode ? dateClassDark : dateClass}
-                  />
-                )}
-                {granularity === "daily" && (
+                ) : (
                   <div className="grid grid-cols-[1fr_auto_1fr] gap-1 items-center w-full">
                     <input
                       type="date"
@@ -318,151 +326,167 @@ export default function Sidebar(props: SidebarProps) {
               </div>
             )}
 
-          {currentView === "home" && (
-            <div className="bg-[#124246] p-3.5 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
-              <label className="block text-xs font-bold text-slate-400">
-                Home Filters
-              </label>
-              <div>
-                <span className="text-[11px] text-slate-400 block mb-1">
-                  Brand
-                </span>
-                <select
-                  value={homeBrand}
-                  onChange={(e) => setHomeBrand(e.target.value)}
-                  className={selectClass}>
-                  {homeBrandOptions.map((brand) => (
-                    <option key={brand} value={brand}>
-                      {brand}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <p className="px-1 text-[11px] leading-relaxed text-slate-500">
+              {activeEngine === "creativeReport"
+                ? "Platform and Funnel filters are at the top of the page."
+                : "Filters for this page are at the top."}
+            </p>
+          </div>
+        )}
 
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[11px] text-slate-400 font-bold">
-                    Select Months
-                  </span>
-                  <span className="text-[10px] text-indigo-400 font-semibold">
-                    {homePeriods.length} selected
-                  </span>
-                </div>
-                <div className="max-h-36 overflow-y-auto space-y-1 pr-1 bg-[#0B3236] p-2 rounded-xl border border-slate-800">
-                  {availableHomeMonths.map((m) => {
-                    const isSelected = homePeriods.includes(m);
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => onToggleHomeMonth(m)}
-                        className={`w-full text-left px-2 py-1 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
-                          isSelected
-                            ? "bg-indigo-600 text-white shadow-sm"
-                            : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-                        }`}>
-                        <span>{m}</span>
-                        {isSelected && <span>✓</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
+      {isSidebarOpen &&
+        activeEngine !== "competitor" &&
+        activeEngine !== "creativeReport" && (
+          <div className="p-4 space-y-4 flex-1">
+            <p className="px-1 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+              Filters
+            </p>
 
-          {activeEngine === "signal" && (
-            <div className="space-y-3 px-1">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">
-                  Period Range
-                </label>
-                <select
-                  value={selectedSignalPeriod}
-                  onChange={(e) => setSelectedSignalPeriod(e.target.value)}
-                  className={selectClass}>
-                  {signalPeriods.map((p) => (
-                    <option key={p.key} value={p.key}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-
-          {currentView !== "home" && (
-            <div className="space-y-3 px-1">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">
-                  Brand
-                </label>
-                <select
-                  value={filters.brand}
-                  onChange={(e) => onFilterChange("brand", e.target.value)}
-                  className={selectClass}>
-                  {getDependentOptions(
-                    CONFIG[
-                      activeEngine === "sku"
-                        ? "commerce"
-                        : activeEngine || "media"
-                    ].colBrand,
-                    "brand",
-                  ).map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {activeEngine === "media" && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">
-                    Funnel
-                  </label>
-                  <select
-                    value={filters.funnel}
-                    onChange={(e) => onFilterChange("funnel", e.target.value)}
-                    className={selectClass}>
-                    {getDependentOptions(CONFIG.media.colFunnel, "funnel").map(
-                      (o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ),
-                    )}
-                  </select>
+            {currentView !== "home" &&
+              activeEngine !== "creative" &&
+              activeEngine !== "signal" && (
+                <div className="bg-[#124246] p-3 rounded-2xl border border-slate-800 space-y-2.5 shadow-inner">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-400">
+                      Date Range
+                    </label>
+                    <select
+                      value={granularity}
+                      onChange={(e) => setGranularity(e.target.value)}
+                      className="bg-transparent text-indigo-400 text-xs font-bold outline-none cursor-pointer appearance-none pr-6 text-right dropdown-arrow bg-[length:10px_10px] bg-[position:right_center]">
+                      <option value="monthly">Monthly</option>
+                      <option value="weekly">Weekly MTD</option>
+                      <option value="daily">Daily</option>
+                    </select>
+                  </div>
+                  {granularity === "monthly" && (
+                    <input
+                      type="month"
+                      value={dateMonth}
+                      onChange={(e) => setDateMonth(e.target.value)}
+                      className={isDarkMode ? dateClassDark : dateClass}
+                    />
+                  )}
+                  {granularity === "weekly" && (
+                    <input
+                      type="date"
+                      value={dateWeekly}
+                      onChange={(e) => setDateWeekly(e.target.value)}
+                      className={isDarkMode ? dateClassDark : dateClass}
+                    />
+                  )}
+                  {granularity === "daily" && (
+                    <div className="grid grid-cols-[1fr_auto_1fr] gap-1 items-center w-full">
+                      <input
+                        type="date"
+                        value={dateDailyStart}
+                        onChange={(e) => setDateDailyStart(e.target.value)}
+                        className={`${isDarkMode ? dateClassDark : dateClass} !px-1 !text-xs w-full min-w-0`}
+                      />
+                      <span className="text-slate-500 font-bold text-center">
+                        -
+                      </span>
+                      <input
+                        type="date"
+                        value={dateDailyEnd}
+                        onChange={(e) => setDateDailyEnd(e.target.value)}
+                        className={`${isDarkMode ? dateClassDark : dateClass} !px-1 !text-xs w-full min-w-0`}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
-              {activeEngine === "commerce" && (
+
+            {currentView === "home" && (
+              <div className="bg-[#124246] p-3.5 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
+                <label className="block text-xs font-bold text-slate-400">
+                  Home Filters
+                </label>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 mb-1.5">
-                    Funnel
-                  </label>
+                  <span className="text-[11px] text-slate-400 block mb-1">
+                    Brand
+                  </span>
                   <select
-                    value={filters.funnel}
-                    onChange={(e) => onFilterChange("funnel", e.target.value)}
+                    value={homeBrand}
+                    onChange={(e) => setHomeBrand(e.target.value)}
                     className={selectClass}>
-                    {getDependentOptions("Funnel", "funnel").map((o) => (
-                      <option key={o} value={o}>
-                        {o}
+                    {homeBrandOptions.map((brand) => (
+                      <option key={brand} value={brand}>
+                        {brand}
                       </option>
                     ))}
                   </select>
                 </div>
-              )}
-              {activeEngine === "creative" && (
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[11px] text-slate-400 font-bold">
+                      Select Months
+                    </span>
+                    <span className="text-[10px] text-indigo-400 font-semibold">
+                      {homePeriods.length} selected
+                    </span>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto space-y-1 pr-1 bg-[#0B3236] p-2 rounded-xl border border-slate-800">
+                    {availableHomeMonths.map((m) => {
+                      const isSelected = homePeriods.includes(m);
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => onToggleHomeMonth(m)}
+                          className={`w-full text-left px-2 py-1 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors ${
+                            isSelected
+                              ? "bg-indigo-600 text-white shadow-sm"
+                              : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                          }`}>
+                          <span>{m}</span>
+                          {isSelected && <span>✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeEngine === "signal" && (
+              <div className="space-y-3 px-1">
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1.5">
-                    Ad Type
+                    Period Range
                   </label>
                   <select
-                    value={filters.adType}
-                    onChange={(e) => onFilterChange("adType", e.target.value)}
+                    value={selectedSignalPeriod}
+                    onChange={(e) => setSelectedSignalPeriod(e.target.value)}
+                    className={selectClass}>
+                    {signalPeriods.map((p) => (
+                      <option key={p.key} value={p.key}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {currentView !== "home" && (
+              <div className="space-y-3 px-1">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                    Brand
+                  </label>
+                  <select
+                    value={filters.brand}
+                    onChange={(e) => onFilterChange("brand", e.target.value)}
                     className={selectClass}>
                     {getDependentOptions(
-                      CONFIG.creative.colAdType,
-                      "adType",
+                      CONFIG[
+                        activeEngine === "sku"
+                          ? "commerce"
+                          : activeEngine || "media"
+                      ].colBrand,
+                      "brand",
                     ).map((o) => (
                       <option key={o} value={o}>
                         {o}
@@ -470,20 +494,18 @@ export default function Sidebar(props: SidebarProps) {
                     ))}
                   </select>
                 </div>
-              )}
-              {activeEngine === "creative" && (
-                <>
+                {activeEngine === "media" && (
                   <div>
                     <label className="block text-xs font-bold text-slate-400 mb-1.5">
-                      Period
+                      Funnel
                     </label>
                     <select
-                      value={filters.period}
-                      onChange={(e) => onFilterChange("period", e.target.value)}
+                      value={filters.funnel}
+                      onChange={(e) => onFilterChange("funnel", e.target.value)}
                       className={selectClass}>
                       {getDependentOptions(
-                        CONFIG.creative.colPeriod,
-                        "period",
+                        CONFIG.media.colFunnel,
+                        "funnel",
                       ).map((o) => (
                         <option key={o} value={o}>
                           {o}
@@ -491,19 +513,36 @@ export default function Sidebar(props: SidebarProps) {
                       ))}
                     </select>
                   </div>
+                )}
+                {activeEngine === "commerce" && (
                   <div>
                     <label className="block text-xs font-bold text-slate-400 mb-1.5">
-                      Platform
+                      Funnel
                     </label>
                     <select
-                      value={filters.platform}
-                      onChange={(e) =>
-                        onFilterChange("platform", e.target.value)
-                      }
+                      value={filters.funnel}
+                      onChange={(e) => onFilterChange("funnel", e.target.value)}
+                      className={selectClass}>
+                      {getDependentOptions("Funnel", "funnel").map((o) => (
+                        <option key={o} value={o}>
+                          {o}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {activeEngine === "creative" && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                      Ad Type
+                    </label>
+                    <select
+                      value={filters.adType}
+                      onChange={(e) => onFilterChange("adType", e.target.value)}
                       className={selectClass}>
                       {getDependentOptions(
-                        CONFIG.creative.colPlatform,
-                        "platform",
+                        CONFIG.creative.colAdType,
+                        "adType",
                       ).map((o) => (
                         <option key={o} value={o}>
                           {o}
@@ -511,35 +550,80 @@ export default function Sidebar(props: SidebarProps) {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1.5">
-                      Format
-                    </label>
-                    <select
-                      value={filters.format}
-                      onChange={(e) => onFilterChange("format", e.target.value)}
-                      className={selectClass}>
-                      {getDependentOptions(
-                        CONFIG.creative.colFormat,
-                        "format",
-                      ).map((o) => (
-                        <option key={o} value={o}>
-                          {o}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-              <button
-                onClick={onResetFilters}
-                className="w-full border border-slate-600 text-slate-300 hover:border-indigo-500 hover:bg-indigo-600 hover:text-white font-bold py-2 rounded-xl transition-all text-xs">
-                Reset Filters
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+                )}
+                {activeEngine === "creative" && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                        Period
+                      </label>
+                      <select
+                        value={filters.period}
+                        onChange={(e) =>
+                          onFilterChange("period", e.target.value)
+                        }
+                        className={selectClass}>
+                        {getDependentOptions(
+                          CONFIG.creative.colPeriod,
+                          "period",
+                        ).map((o) => (
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                        Platform
+                      </label>
+                      <select
+                        value={filters.platform}
+                        onChange={(e) =>
+                          onFilterChange("platform", e.target.value)
+                        }
+                        className={selectClass}>
+                        {getDependentOptions(
+                          CONFIG.creative.colPlatform,
+                          "platform",
+                        ).map((o) => (
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                        Format
+                      </label>
+                      <select
+                        value={filters.format}
+                        onChange={(e) =>
+                          onFilterChange("format", e.target.value)
+                        }
+                        className={selectClass}>
+                        {getDependentOptions(
+                          CONFIG.creative.colFormat,
+                          "format",
+                        ).map((o) => (
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+                <button
+                  onClick={onResetFilters}
+                  className="w-full border border-slate-600 text-slate-300 hover:border-indigo-500 hover:bg-indigo-600 hover:text-white font-bold py-2 rounded-xl transition-all text-xs">
+                  Reset Filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
       {isSidebarOpen && (
         <div className="p-4 bg-[#0B3236] border-t border-slate-800/80 mt-auto">

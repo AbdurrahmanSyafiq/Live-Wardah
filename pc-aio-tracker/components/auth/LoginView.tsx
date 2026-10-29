@@ -1,32 +1,10 @@
 import React, { useState } from "react";
 import { useTheme } from "@/lib/useTheme";
+import LoginCarousel from "@/components/auth/LoginCarousel";
 
 interface LoginViewProps {
   onLoginSuccess: () => void;
 }
-
-// Pola daun tipis di atas gradien (hampir tidak terlihat, hanya memberi nuansa "beauty")
-const LeafPattern = () => (
-  <svg
-    className="absolute inset-0 w-full h-full opacity-[0.09] pointer-events-none"
-    xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <pattern
-        id="wardah-leaf"
-        width="120"
-        height="120"
-        patternUnits="userSpaceOnUse">
-        <g fill="none" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round">
-          <path d="M20 70 C28 38, 58 28, 78 32 C74 58, 50 78, 20 70 Z" />
-          <path d="M20 70 C38 58, 54 46, 70 36" />
-          <path d="M84 104 C88 90, 100 82, 112 82 C112 96, 100 106, 84 104 Z" />
-          <path d="M84 104 C94 98, 102 92, 108 86" />
-        </g>
-      </pattern>
-    </defs>
-    <rect width="100%" height="100%" fill="url(#wardah-leaf)" />
-  </svg>
-);
 
 const SunIcon = () => (
   <svg
@@ -120,53 +98,9 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
         }}
       />
 
-      {/* Panel gambar: gradien warna Wardah */}
-      <div className="hidden md:block w-[60%] h-full relative overflow-hidden">
-        <div
-          className="absolute inset-0 transition-opacity duration-300"
-          style={{
-            background: isDark
-              ? "linear-gradient(135deg, #072A2D 0%, #0B2F2E 50%, #0A2423 100%)"
-              : "linear-gradient(135deg, #00565F 0%, #006D77 50%, #4DC0BE 100%)",
-          }}
-        />
-        <div
-          className="fluid-blob-1 absolute -top-24 -left-24 w-[520px] h-[520px] rounded-full opacity-90 mix-blend-screen pointer-events-none"
-          style={{
-            background: isDark
-              ? "radial-gradient(circle, #2DB5AE 0%, #006D77 45%, transparent 70%)"
-              : "radial-gradient(circle, #7FE3D8 0%, #3CC1B8 45%, transparent 70%)",
-            filter: "blur(75px)",
-          }}
-        />
-        <div
-          className="fluid-blob-2 absolute -bottom-32 -right-20 w-[600px] h-[600px] rounded-full opacity-90 mix-blend-screen pointer-events-none"
-          style={{
-            background: isDark
-              ? "radial-gradient(circle, #00565F 0%, #0B3B39 50%, transparent 75%)"
-              : "radial-gradient(circle, #00565F 0%, #0B4A47 50%, transparent 75%)",
-            filter: "blur(80px)",
-          }}
-        />
-        <div
-          className="fluid-blob-3 absolute top-1/3 left-1/4 w-[480px] h-[480px] rounded-full opacity-60 mix-blend-screen pointer-events-none"
-          style={{
-            background: isDark
-              ? "radial-gradient(circle, #8FD9CF 0%, #1D6F6B 55%, transparent 75%)"
-              : "radial-gradient(circle, #CFF3EE 0%, #6FCFC6 55%, transparent 75%)",
-            filter: "blur(90px)",
-          }}
-        />
-        {/* sorotan emas sangat halus, sebagai sentuhan hangat */}
-        <div
-          className="absolute bottom-10 left-10 w-[260px] h-[260px] rounded-full opacity-25 mix-blend-screen pointer-events-none"
-          style={{
-            background: "radial-gradient(circle, #F2B233 0%, transparent 70%)",
-            filter: "blur(70px)",
-          }}
-        />
-        <LeafPattern />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-black/15 pointer-events-none" />
+      {/* Image panel: auto-sliding carousel */}
+      <div className="hidden md:block w-[60%] h-full relative overflow-hidden bg-[#00565F]">
+        <LoginCarousel />
 
         <div className="absolute top-10 left-12 z-10">
           <img

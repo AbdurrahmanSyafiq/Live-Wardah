@@ -339,7 +339,7 @@ export default function SkuPerformanceView({
               short: compactIDR(totalExpense),
             })
           }
-          title="Klik untuk lihat nilai lengkap"
+          title="Click to see full value"
           className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
             isDarkMode
               ? "bg-slate-800 border-slate-700"
@@ -365,7 +365,7 @@ export default function SkuPerformanceView({
               short: compact(totalImpressions),
             })
           }
-          title="Klik untuk lihat nilai lengkap"
+          title="Click to see full value"
           className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
             isDarkMode
               ? "bg-slate-800 border-slate-700"
@@ -391,7 +391,7 @@ export default function SkuPerformanceView({
               short: compact(totalClicks),
             })
           }
-          title="Klik untuk lihat nilai lengkap"
+          title="Click to see full value"
           className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
             isDarkMode
               ? "bg-slate-800 border-slate-700"
@@ -417,7 +417,7 @@ export default function SkuPerformanceView({
               short: compactIDR(totalGmv),
             })
           }
-          title="Klik untuk lihat nilai lengkap"
+          title="Click to see full value"
           className={`p-5 rounded-2xl border shadow-sm text-left cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
             isDarkMode
               ? "bg-slate-800 border-slate-700"
@@ -498,7 +498,7 @@ export default function SkuPerformanceView({
                   <tr
                     key={`${item.pid}-${idx}`}
                     onClick={() => setRowPopup(item)}
-                    title="Klik untuk lihat detail"
+                    title="Click to see details"
                     className={`cursor-pointer transition-colors ${
                       isDarkMode
                         ? "hover:bg-indigo-900/30 text-slate-200"

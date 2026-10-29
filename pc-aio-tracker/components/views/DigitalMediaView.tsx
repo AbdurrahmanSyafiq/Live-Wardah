@@ -321,15 +321,18 @@ export default function DigitalMediaView({
   const generatePlatformSummaryBodyHTML = useCallback(() => {
     const filterPlatform = (
       rows: any[],
-      plat: "Overall" | "Meta" | "Instagram" | "TikTok",
+      plat: "Overall" | "Meta" | "TikTok",
     ) => {
       if (plat === "Overall") return rows;
       return rows.filter((r) => {
         const p = String(r[CONFIG.media.colPlatform] || "").toLowerCase();
-        const isIg = p.includes("instagram") || p === "ig";
-        if (plat === "Instagram") return isIg;
         if (plat === "Meta")
-          return !isIg && (p.includes("meta") || p.includes("facebook"));
+          return (
+            p.includes("meta") ||
+            p.includes("facebook") ||
+            p.includes("instagram") ||
+            p === "ig"
+          );
         return p.includes("tiktok");
       });
     };
@@ -358,10 +361,9 @@ export default function DigitalMediaView({
       };
     };
 
-    const platforms: ("Overall" | "Meta" | "Instagram" | "TikTok")[] = [
+    const platforms: ("Overall" | "Meta" | "TikTok")[] = [
       "Overall",
       "Meta",
-      "Instagram",
       "TikTok",
     ];
     const metricNames = [
@@ -874,7 +876,7 @@ export default function DigitalMediaView({
 
   return (
     <div className="w-full space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-5 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5 mb-6">
         {(
           [
             {
@@ -899,6 +901,7 @@ export default function DigitalMediaView({
               ctx: "Meta",
               title: "Meta",
               k: mediaKPIs.meta,
+              logo: "/logos/meta-logo.png",
               box: "bg-blue-500",
               ring: "ring-blue-300 shadow-blue-500/40",
               head: "text-blue-100",
@@ -911,26 +914,6 @@ export default function DigitalMediaView({
                   strokeWidth="2.5"
                   d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
                 />
-              ),
-            },
-            {
-              ctx: "Instagram",
-              title: "Instagram",
-              k: mediaKPIs.instagram,
-              box: "bg-[#D6657A]",
-              ring: "ring-rose-300 shadow-rose-500/40",
-              head: "text-rose-50",
-              lbl: "text-rose-50",
-              line: "border-rose-300",
-              icon: (
-                <g
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2.2">
-                  <path d="M3 8a2 2 0 012-2h2l1.5-2h7L17 6h2a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
-                  <circle cx="12" cy="13" r="3.5" />
-                </g>
               ),
             },
             {
@@ -981,15 +964,26 @@ export default function DigitalMediaView({
                   className={`text-sm font-black ${c.head} uppercase tracking-widest`}>
                   {c.title}
                 </h3>
-                <div className="p-2.5 bg-white/20 rounded-xl">
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    {c.icon}
-                  </svg>
-                </div>
+                {c.logo ? (
+                  <div className="w-11 h-11 bg-white rounded-xl p-1.5 flex items-center justify-center shadow-sm">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={c.logo}
+                      alt={c.title}
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-white/20 rounded-xl">
+                    <svg
+                      className="w-5 h-5 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor">
+                      {c.icon}
+                    </svg>
+                  </div>
+                )}
               </div>
               <div className="space-y-4">
                 {rows.map((r, idx) => (
@@ -1029,7 +1023,7 @@ export default function DigitalMediaView({
                   type="button"
                   onClick={() => setKpiPopup(null)}
                   aria-label="Close"
-                  className={`text-lg leading-none font-bold ${isDarkMode ? "text-slate-400 hover:text-white" : "text-slate-400 hover:text-slate-900"}`}>
+                  className={`shrink-0 w-10 h-10 -mt-1 -mr-1 flex items-center justify-center rounded-full text-3xl leading-none font-bold transition-colors ${isDarkMode ? "text-slate-300 hover:text-white hover:bg-slate-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-100"}`}>
                   ×
                 </button>
               </div>

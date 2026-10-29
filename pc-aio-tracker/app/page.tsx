@@ -20,6 +20,7 @@ import {
 import {
   MEDIA_SHEET,
   COMPETITOR_SHEET,
+  CREATIVE_REPORT_SHEET,
   buildHomeRows,
   buildHomeSummary,
   toMediaApiRows,
@@ -33,6 +34,7 @@ import DigitalMediaView from "@/components/views/DigitalMediaView";
 import CommerceTrackerView from "@/components/views/CommerceTrackerView";
 import SkuPerformanceView from "@/components/views/SkuPerformanceView";
 import CompetitorView from "@/components/views/CompetitorView";
+import CreativeReportView from "@/components/views/CreativeReportView";
 import TopCreativeView from "@/components/views/TopCreativeView";
 import MediaSignalView from "@/components/views/MediaSignalView";
 
@@ -55,7 +57,14 @@ export default function DashboardApp() {
     "login" | "welcome" | "home" | "dashboard"
   >("login");
   const [activeEngine, setActiveEngine] = useState<
-    "media" | "commerce" | "creative" | "signal" | "sku" | "competitor" | null
+    | "media"
+    | "commerce"
+    | "creative"
+    | "signal"
+    | "sku"
+    | "competitor"
+    | "creativeReport"
+    | null
   >(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -137,7 +146,14 @@ export default function DashboardApp() {
   }, []);
 
   const loadData = async (
-    engine: "media" | "commerce" | "creative" | "signal" | "sku" | "competitor",
+    engine:
+      | "media"
+      | "commerce"
+      | "creative"
+      | "signal"
+      | "sku"
+      | "competitor"
+      | "creativeReport",
     forceSync = false,
   ) => {
     setDashboardContext("Overall");
@@ -151,6 +167,8 @@ export default function DashboardApp() {
       } else if (engine === "sku" || engine === "commerce") {
         dataCache.current[CONFIG.commerce.sheet] = undefined as any;
         dataCache.current["CIR DAILY"] = undefined as any;
+      } else if (engine === "creativeReport") {
+        dataCache.current[CREATIVE_REPORT_SHEET] = undefined as any;
       } else if (engine === "competitor") {
         dataCache.current[COMPETITOR_SHEET] = undefined as any;
         dataCache.current[MEDIA_SHEET] = undefined as any;
@@ -213,6 +231,9 @@ export default function DashboardApp() {
             'No data loaded for PID & SKU. Check that the "Commerce" tab exists, has data, and is shared with the service account.',
           );
         setRawData(skuRows);
+      } else if (engine === "creativeReport") {
+        // Creative Report is read from the "Creative Report" tab
+        setRawData(await fetchSheet(CREATIVE_REPORT_SHEET));
       } else if (engine === "competitor") {
         // Competitor: akun competitor dari tab "Competitor_sosmed_sinkron",
         // brand kita dari tab "Media API (Filtered)"
@@ -242,9 +263,19 @@ export default function DashboardApp() {
   };
 
   const selectEngine = (
-    engine: "media" | "commerce" | "creative" | "signal" | "sku" | "competitor",
+    engine:
+      | "media"
+      | "commerce"
+      | "creative"
+      | "signal"
+      | "sku"
+      | "competitor"
+      | "creativeReport",
   ) => {
     setActiveEngine(engine);
+    // Creative Report only offers "By Month" and "Date Range"
+    if (engine === "creativeReport" && granularity === "weekly")
+      setGranularity("monthly");
     setCurrentView("dashboard");
     loadData(engine);
   };
@@ -314,7 +345,12 @@ export default function DashboardApp() {
   };
 
   const getDependentOptions = (colName: string, filterKeyToExclude: string) => {
-    if (!rawData || rawData.length === 0 || activeEngine === "competitor")
+    if (
+      !rawData ||
+      rawData.length === 0 ||
+      activeEngine === "competitor" ||
+      activeEngine === "creativeReport"
+    )
       return ["All"];
     const activeCfgKey =
       activeEngine === "sku" ? "commerce" : activeEngine || "media";
@@ -828,6 +864,7 @@ export default function DashboardApp() {
         !activeEngine ||
         activeEngine === "signal" ||
         activeEngine === "competitor" ||
+        activeEngine === "creativeReport" ||
         rawData.length === 0
       )
         return {
@@ -1083,6 +1120,7 @@ export default function DashboardApp() {
       activeEngine === "creative" ||
       activeEngine === "signal" ||
       activeEngine === "competitor" ||
+      activeEngine === "creativeReport" ||
       activeEngine === "sku"
     ) {
       return {
@@ -1098,11 +1136,11 @@ export default function DashboardApp() {
       ).toLowerCase();
       if (match === "meta")
         return (
-          !p.includes("instagram") &&
-          p !== "ig" &&
-          (p.includes("meta") || p.includes("facebook"))
+          p.includes("meta") ||
+          p.includes("facebook") ||
+          p.includes("instagram") ||
+          p === "ig"
         );
-      if (match === "instagram") return p.includes("instagram") || p === "ig";
       return p.includes(match);
     };
     return {
@@ -1123,14 +1161,6 @@ export default function DashboardApp() {
         pEngage: 0,
       },
       meta: { spend: 0, impr: 0, engage: 0, pSpend: 0, pImpr: 0, pEngage: 0 },
-      instagram: {
-        spend: 0,
-        impr: 0,
-        engage: 0,
-        pSpend: 0,
-        pImpr: 0,
-        pEngage: 0,
-      },
       tiktok: { spend: 0, impr: 0, engage: 0, pSpend: 0, pImpr: 0, pEngage: 0 },
     };
     const calc = (data: any[], isPrev: boolean) => {
@@ -1148,11 +1178,12 @@ export default function DashboardApp() {
           totals.overall.pSpend += s;
           totals.overall.pImpr += i;
           totals.overall.pEngage += e;
-          if (plat.includes("instagram") || plat === "ig") {
-            totals.instagram.pSpend += s;
-            totals.instagram.pImpr += i;
-            totals.instagram.pEngage += e;
-          } else if (plat.includes("meta") || plat.includes("facebook")) {
+          if (
+            plat.includes("meta") ||
+            plat.includes("facebook") ||
+            plat.includes("instagram") ||
+            plat === "ig"
+          ) {
             totals.meta.pSpend += s;
             totals.meta.pImpr += i;
             totals.meta.pEngage += e;
@@ -1165,11 +1196,12 @@ export default function DashboardApp() {
           totals.overall.spend += s;
           totals.overall.impr += i;
           totals.overall.engage += e;
-          if (plat.includes("instagram") || plat === "ig") {
-            totals.instagram.spend += s;
-            totals.instagram.impr += i;
-            totals.instagram.engage += e;
-          } else if (plat.includes("meta") || plat.includes("facebook")) {
+          if (
+            plat.includes("meta") ||
+            plat.includes("facebook") ||
+            plat.includes("instagram") ||
+            plat === "ig"
+          ) {
             totals.meta.spend += s;
             totals.meta.impr += i;
             totals.meta.engage += e;
@@ -1487,7 +1519,9 @@ export default function DashboardApp() {
                         ? "PID & SKU Performance"
                         : activeEngine === "competitor"
                           ? "Competitor"
-                          : "Top Creative"}
+                          : activeEngine === "creativeReport"
+                            ? "Creative Report"
+                            : "Top Creative"}
             </h1>
           </div>
 
@@ -1646,6 +1680,17 @@ export default function DashboardApp() {
                 CONFIG.commerce.colBrand,
                 "brand",
               )}
+            />
+          )}
+
+          {activeEngine === "creativeReport" && (
+            <CreativeReportView
+              rawData={rawData}
+              isDarkMode={isDarkMode}
+              granularity={granularity}
+              dateMonth={dateMonth}
+              dateDailyStart={dateDailyStart}
+              dateDailyEnd={dateDailyEnd}
             />
           )}
 
